@@ -1,0 +1,6 @@
+{
+  "name": "A.Cândido Grupo",
+  "description": "Sistema de avaliação e auditoria de almoxarifados para o Grupo A.Cândido.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
