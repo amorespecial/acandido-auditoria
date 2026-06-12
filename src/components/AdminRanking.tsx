@@ -315,46 +315,93 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
     const bestMonth = sortedVals[0] || { month: "JUN", val: 100 };
     const worstMonth = sortedVals[sortedVals.length - 1] || { month: "JAN", val: 0 };
 
-    // Consolidate Criteria status based on the double garage rules:
+    // Consolidate Criteria status based on the double garage rules and dynamic closed history:
     // "NOK em um = NOK nos dois, só pontua se ambos OK"
     const getUnifiedCriteriaList = (entry: UnifiedEntry) => {
       if (entry.branches.length === 0) return [];
-      if (entry.branches.length === 1) {
-        return entry.branches[0].criteria.map((c) => ({
-          ...c,
-          okMonths: c.status === "OK" ? 5 : 3, // Realistic mock for accuracy across 6 months
-          accuracy: c.status === "OK" ? 83 : 50
-        }));
+      
+      const referenceCriteria = entry.branches[0].criteria;
+      const branchIds = entry.branches.map(b => b.id);
+      
+      const semMonthsList = currentSemester === 1
+        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+        : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+      // Load history entries
+      let histList: any[] = [];
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("acandido_history");
+        if (saved) {
+          try {
+            histList = JSON.parse(saved);
+            if (!Array.isArray(histList)) histList = [];
+          } catch {
+            histList = [];
+          }
+        }
       }
 
-      // 2 branches (twins)
-      const b1 = entry.branches[0];
-      const b2 = entry.branches[1];
-      return b1.criteria.map((c1) => {
-        const c2 = b2.criteria.find((tc) => tc.id === c1.id) || c1;
-        const isNok = c1.status === "NOK" || c2.status === "NOK";
-        const isBothOk = c1.status === "OK" && c2.status === "OK";
-        
-        let okMonths = 5;
-        if (isBothOk) {
-          // If both are OK, let's say it succeeded 5 or 6 months
-          okMonths = (c1.id === "1" || c1.id === "2" || c1.id === "8" || c1.id === "9" || c1.id === "10") ? 6 : 5;
-        } else if (isNok) {
-          // If either is NOK, Criterion 10 gets 0 months (0 pts), others get realistic partial months
-          okMonths = c1.id === "10" ? 0 : ((c1.id === "7" || c1.id === "4" || c1.id === "6") ? 3 : 4);
-        } else {
-          okMonths = c1.id === "10" ? 0 : 4;
-        }
+      return referenceCriteria.map((cRef) => {
+        let okMonths = 0;
 
+        semMonthsList.forEach((mName) => {
+          // Find matching archive record for this month of this branch
+          const matches = histList.filter(
+            (h) => branchIds.includes(h.branchId) && 
+                   h.monthYear.toLowerCase().startsWith(mName.toLowerCase())
+          );
+
+          if (entry.branches.length === 2) {
+            // Twin branches: Both must be present in history and both must have cRef.id equal to OK
+            if (matches.length === 2) {
+              const allOk = matches.every((mRecord) => {
+                const crit = mRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
+                return crit && crit.status === "OK";
+              });
+              if (allOk) okMonths++;
+            }
+          } else {
+            // Single branch
+            if (matches.length === 1) {
+              const crit = matches[0].criteriaState?.find((cs: any) => cs.id === cRef.id);
+              if (crit && crit.status === "OK") okMonths++;
+            }
+          }
+        });
+
+        // 6 months as divisor for semestral tracking
         const accuracy = Math.round((okMonths / 6) * 100);
 
+        // Calculate active month unified status to show current live status
+        let liveStatus = "PENDENTE";
+        let livePoints = 0;
+        if (entry.branches.length === 2) {
+          const b1 = entry.branches[0];
+          const b2 = entry.branches[1];
+          const c1 = b1.criteria.find((cr) => cr.id === cRef.id);
+          const c2 = b2.criteria.find((cr) => cr.id === cRef.id);
+          if (c1 && c2) {
+            const isNok = c1.status === "NOK" || c2.status === "NOK";
+            const isBothOk = c1.status === "OK" && c2.status === "OK";
+            liveStatus = isNok ? "NOK" : isBothOk ? "OK" : c1.status;
+            livePoints = isBothOk ? cRef.pointsPossible : 0;
+          }
+        } else {
+          const b = entry.branches[0];
+          const matchCrit = b.criteria.find((cr) => cr.id === cRef.id);
+          if (matchCrit) {
+            liveStatus = matchCrit.status;
+            livePoints = matchCrit.status === "OK" ? cRef.pointsPossible : 0;
+          }
+        }
+
         return {
-          id: c1.id,
-          name: c1.name,
-          recurrence: c1.recurrence,
-          pointsPossible: c1.pointsPossible,
-          status: isNok ? "NOK" : isBothOk ? "OK" : c1.status,
-          pointsObtained: isBothOk ? c1.pointsPossible : 0,
+          id: cRef.id,
+          name: cRef.name,
+          recurrence: cRef.recurrence,
+          pointsPossible: cRef.pointsPossible,
+          status: liveStatus,
+          pointsObtained: livePoints,
           okMonths,
           accuracy
         };
@@ -362,14 +409,53 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
     };
 
     const criteriaListWithConsistency = getUnifiedCriteriaList(selectedEntry).sort((a, b) => b.accuracy - a.accuracy);
-    const top3Criteria = criteriaListWithConsistency.slice(0, 3);
-    const bottomCriteria = criteriaListWithConsistency.filter((c) => c.accuracy < 100).slice(-3);
+
+    // Get total closed cycles in current semester to filter actual alerts/highlights
+    const totalClosedCyclesInSemester = (() => {
+      let histList: any[] = [];
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("acandido_history");
+        if (saved) {
+          try {
+            histList = JSON.parse(saved);
+            if (!Array.isArray(histList)) histList = [];
+          } catch {
+            histList = [];
+          }
+        }
+      }
+      const semMonthsList = currentSemester === 1
+        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+        : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+      
+      const branchIds = selectedEntry.branches.map(b => b.id);
+      
+      const uniqueMonthsWithArchive = new Set<string>();
+      histList.forEach((h) => {
+        if (branchIds.includes(h.branchId)) {
+          const matchMonth = semMonthsList.find(mName => h.monthYear.toLowerCase().startsWith(mName.toLowerCase()));
+          if (matchMonth) {
+            uniqueMonthsWithArchive.add(matchMonth);
+          }
+        }
+      });
+      return uniqueMonthsWithArchive.size;
+    })();
+
+    const top3Criteria = criteriaListWithConsistency.filter((c) => c.okMonths > 0).slice(0, 3);
+    const bottomCriteria = criteriaListWithConsistency.filter((c) => c.okMonths < totalClosedCyclesInSemester).slice(-3);
 
     // Dynamic executive report
     const awaiting_pair = isAwaitingPair(selectedEntry);
-    const executiveSummary = awaiting_pair 
-      ? `O almoxarifado unificado ${selectedEntry.name} está aguardando a avaliação mútua do critério "Material Sem Movimentação" para consolidação final da pontuação semestral. Uma das garagens do par já foi avaliada, mas o ciclo só será consolidado quando as duas unidades estiverem avaliadas.`
-      : `O almoxarifado unificado ${selectedEntry.name} acumulou ${selectedEntry.semestralScore} pts no semestre, superando a meta de corte de 300 pts. Seu melhor desempenho foi registrado em ${bestMonth.month} (${bestMonth.val} pts) e o critério com maior consistência ao longo do ciclo foi ${criteriaListWithConsistency[0]?.name || "TOP 10"}, registrando ${criteriaListWithConsistency[0]?.okMonths || 6} acertos em 6 meses avaliados. O critério ${criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.name || "Nível de Serviço"} apresentou o maior número de ocorrências NOK (${6 - (criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.okMonths || 4)} meses), sendo o principal ponto de atenção estratégica para o próximo semestre.`;
+    const executiveSummary = (() => {
+      if (awaiting_pair) {
+        return `O almoxarifado unificado ${selectedEntry.name} está aguardando a avaliação mútua do critério "Material Sem Movimentação" para consolidação final da pontuação semestral. Uma das garagens do par já foi avaliada, mas o ciclo só será consolidado quando as duas unidades estiverem avaliadas.`;
+      }
+      if (!hasRealHistory) {
+        return `O almoxarifado unificado ${selectedEntry.name} ainda não possui ciclos consolidados neste semestre. Aguardando a finalização da primeira auditoria mensal pelo Auditor Geral Fernando Silva para compor o diagnóstico estratégico.`;
+      }
+      return `O almoxarifado unificado ${selectedEntry.name} acumulou ${selectedEntry.semestralScore} pts no semestre, superando a meta de corte de 300 pts. Seu melhor desempenho foi registrado em ${bestMonth.month} (${bestMonth.val} pts) e o critério com maior consistência ao longo do ciclo foi ${criteriaListWithConsistency[0]?.name || "TOP 10"}, registrando ${criteriaListWithConsistency[0]?.okMonths || 0} acertos em ${totalClosedCyclesInSemester} meses avaliados. O critério ${criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.name || "Nível de Serviço"} apresentou o maior número de ocorrências NOK (${totalClosedCyclesInSemester - (criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.okMonths || 0)} meses), sendo o principal ponto de atenção estratégica para o próximo semestre.`;
+    })();
 
     return (
       <div className="space-y-6">
