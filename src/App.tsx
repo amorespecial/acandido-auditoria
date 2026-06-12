@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady } from "./supabaseService";
 
 // View components
 import Login from "./components/Login";
@@ -161,10 +162,166 @@ export default function App() {
   // Active branch context for the logged-in Almoxarife
   const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
 
+  // Database and LocalStorage Migration States
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+
+  useEffect(() => {
+    // Database seeding
+    seedDatabaseIfEmpty();
+
+    // Check for existing local storage data
+    const hasLegacyData = localStorage.getItem("acandido_branches") || localStorage.getItem("acandido_cycle_state_manual");
+    const wasCleared = localStorage.getItem("acandido_localstorage_cleared") === "true";
+    
+    if (user && user.role === "ADMIN" && hasLegacyData && !wasCleared) {
+      setShowMigrationModal(true);
+    }
+  }, [user]);
+
+  const handleClearLegacyLocalStorage = () => {
+    const savedUser = localStorage.getItem("acandido_app_user");
+    localStorage.clear();
+    if (savedUser) {
+      localStorage.setItem("acandido_app_user", savedUser);
+    }
+    localStorage.setItem("acandido_localstorage_cleared", "true");
+    setShowMigrationModal(false);
+    alert("Dados locais removidos com sucesso! Todo novo dado agora é salvo diretamente no Supabase.");
+    window.location.reload();
+  };
+
+  // Dynamic Supabase ratings loader for current month & year
+  useEffect(() => {
+    const fetchEvaluationsFromSupabase = async () => {
+      if (!isSupabaseReady()) return;
+      try {
+        const updatedBranches = await Promise.all(
+          branches.map(async (branch) => {
+            const dbEvaluations = await dbFetchEvaluations(branch.name, activeMonth, activeYear);
+            if (Object.keys(dbEvaluations).length === 0) {
+              return branch; // No rows for this month yet
+            }
+
+            // Merge items
+            const mergedCriteria = branch.criteria.map((crt) => {
+              const matchedDb = dbEvaluations[crt.id];
+              if (matchedDb) {
+                return {
+                  ...crt,
+                  status: matchedDb.status || crt.status,
+                  pointsObtained: matchedDb.pointsObtained !== undefined ? matchedDb.pointsObtained : crt.pointsObtained,
+                  notes: matchedDb.notes || crt.notes,
+                  evidenceNotes: matchedDb.evidenceNotes || crt.evidenceNotes,
+                  nokEvidenceLinks: matchedDb.nokEvidenceLinks || crt.nokEvidenceLinks
+                };
+              }
+              return crt;
+            });
+
+            const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
+
+            return {
+              ...branch,
+              criteria: mergedCriteria,
+              currentScore: score,
+              status,
+              scoreCategory
+            };
+          })
+        );
+
+        // Simple checker to prevent loops
+        const currentJson = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        const updatedJson = JSON.stringify(updatedBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        
+        if (currentJson !== updatedJson) {
+          setBranches(updatedBranches);
+        }
+      } catch (err) {
+        console.error("Failed to fetch evaluations from Supabase:", err);
+      }
+    };
+
+    fetchEvaluationsFromSupabase();
+  }, [activeMonth, activeYear]);
+
   // Sync branches to local storage
   useEffect(() => {
     localStorage.setItem("acandido_branches", JSON.stringify(branches));
   }, [branches]);
+
+  // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
+  useEffect(() => {
+    const handleSync = () => {
+      // 1. Sync branches
+      const storedBranches = localStorage.getItem("acandido_branches");
+      if (storedBranches) {
+        try {
+          const parsed = JSON.parse(storedBranches);
+          if (JSON.stringify(parsed) !== JSON.stringify(branches)) {
+            setBranches(parsed);
+          }
+        } catch (e) {}
+      }
+
+      // 2. Sync cycleState
+      const storedCycle = localStorage.getItem("acandido_cycle_state_manual");
+      if (storedCycle) {
+        try {
+          const parsed = JSON.parse(storedCycle);
+          if (JSON.stringify(parsed) !== JSON.stringify(cycleState)) {
+            setCycleState(parsed);
+          }
+        } catch (e) {}
+      }
+
+      // 3. Sync cycleConfigs
+      const storedConfigs = localStorage.getItem("acandido_cycle_configs3");
+      if (storedConfigs) {
+        try {
+          const parsed = JSON.parse(storedConfigs);
+          if (JSON.stringify(parsed) !== JSON.stringify(cycleConfigs)) {
+            setCycleConfigs(parsed);
+          }
+        } catch (e) {}
+      }
+
+      // 4. Sync current user if changed/suspended/deleted
+      const storedUser = localStorage.getItem("acandido_app_user");
+      const storedUsersList = localStorage.getItem("acandido_users");
+      if (storedUser && storedUsersList) {
+        try {
+          const currentUser = JSON.parse(storedUser);
+          const usersList = JSON.parse(storedUsersList);
+          const matched = usersList.find((u: any) => u.email.toLowerCase() === currentUser.email.toLowerCase());
+          if (matched) {
+            if (matched.status === "SUSPENSO") {
+              setUser(null);
+              localStorage.removeItem("acandido_app_user");
+              alert("Sua conta foi suspensa temporariamente pelo Auditor Geral Fernando Silva.");
+            } else if (JSON.stringify(matched) !== JSON.stringify(currentUser)) {
+              setUser(matched);
+              localStorage.setItem("acandido_app_user", JSON.stringify(matched));
+            }
+          } else {
+            // Deleted
+            if (currentUser.email !== "estoque01jp@gmail.com") {
+              setUser(null);
+              localStorage.removeItem("acandido_app_user");
+              alert("Sua conta foi desativada ou removida pelo Auditor Geral.");
+            }
+          }
+        } catch (e) {}
+      }
+    };
+
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("focus", handleSync);
+    return () => {
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("focus", handleSync);
+    };
+  }, [branches, cycleState, cycleConfigs]);
 
   // Sync cycle state to local storage
   useEffect(() => {
@@ -359,46 +516,75 @@ export default function App() {
       const evaluatedInventories = branchCalendar.filter(item => item.status === "OK" || item.status === "NOK");
       const isAnyInventarioEvaluated = evaluatedInventories.length > 0;
 
-      let invPointsPossible = isInventarioScheduledThisMonth ? 20 : 0;
+      let invPointsPossible = 20;
       let invPointsObtained = 0;
       let invStatus: any = "PENDENTE";
       let invNotes = "";
       let isAguardandoRealizacao = false;
+
+      // Extract scheduled months to determine if active month is prior to scheduled
+      const scheduledMonths = branchCalendar
+        .map(item => {
+          if (!item.data_agendada) return null;
+          const pts = item.data_agendada.split("-");
+          return pts.length >= 2 ? parseInt(pts[1]) : null;
+        })
+        .filter((m): m is number => m !== null);
+      const minScheduledMonth = scheduledMonths.length > 0 ? Math.min(...scheduledMonths) : null;
+
+      // Formatting helper for scheduled dates
+      const datesText = branchCalendar
+        .map(item => {
+          if (!item.data_agendada) return "";
+          const pts = item.data_agendada.split("-");
+          return pts.length >= 3 ? `${pts[2]}/${pts[1]}` : "";
+        })
+        .filter(Boolean)
+        .join(", ");
 
       if (branchCalendar.length === 0) {
         invPointsPossible = 0;
         invPointsObtained = 0;
         invStatus = "PENDENTE";
         invNotes = "Sem inventários agendados para este semestre.";
-      } else if (!isAnyInventarioEvaluated) {
-        invPointsObtained = 0;
+      } else if (isAnyInventarioEvaluated) {
+        // Semestral Rule: If any is NOK, whole semester is NOK (0 pts). Else if evaluated OK, whole semester is OK (20 pts).
+        const hasNok = evaluatedInventories.some(it => it.status === "NOK");
+        const allOk = evaluatedInventories.length > 0 && evaluatedInventories.every(it => it.status === "OK");
+
+        if (hasNok) {
+          invPointsPossible = 20;
+          invPointsObtained = 0;
+          invStatus = "NOK";
+          invNotes = "Inventário realizado: não conforme (NOK).";
+        } else if (allOk) {
+          invPointsPossible = 20;
+          invPointsObtained = 20;
+          invStatus = "OK";
+          invNotes = "Inventário realizado conforme!";
+        } else {
+          // Mixed
+          invPointsPossible = 20;
+          invPointsObtained = 10;
+          invStatus = "PENDENTE";
+          invNotes = "Inventário parcial de semestre.";
+        }
+      } else {
+        // Not evaluated yet
         invStatus = "PENDENTE";
         isAguardandoRealizacao = true;
         
-        // Pick all dates for current semester
-        const datesText = branchCalendar
-          .map(item => {
-            if (!item.data_agendada) return "";
-            const pts = item.data_agendada.split("-");
-            if (pts.length < 3) return "";
-            return `${pts[2]}/${pts[1]}`;
-          })
-          .filter(Boolean)
-          .join(", ");
-        
-        invNotes = datesText ? `Aguardando realização (data: ${datesText})` : "Aguardando realização";
-      } else {
-        const okCount = branchCalendar.filter(item => item.status === "OK").length;
-        const totalCount = branchCalendar.length;
-        invPointsObtained = Math.round(((okCount / totalCount) * 20) / 5) * 5;
-        if (okCount === totalCount) {
-          invStatus = "OK";
-        } else if (okCount === 0) {
-          invStatus = "NOK";
+        // If selected month M is strictly LESS than the first scheduled month, it is an "Aguardando realização" month (0 pts possible, 0 obtained)
+        if (minScheduledMonth !== null && activeMonthNum < minScheduledMonth) {
+          invPointsPossible = 0;
+          invPointsObtained = 0;
+          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Aguardando realização";
         } else {
-          invStatus = "PENDENTE";
+          // M is in or after scheduled month, but not evaluated yet
+          invPointsPossible = 20;
+          invPointsObtained = 0;
+          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Aguardando realização";
         }
-        invNotes = `Média semestral: ${okCount} de ${totalCount} OK.`;
       }
 
       // Calculate Material Sem Movimentação Criterion ("10") Values
@@ -692,6 +878,14 @@ export default function App() {
           });
 
           const { score, status, scoreCategory } = calculateDerivedMetrics(finalCriteria);
+
+          // Save evaluations to Supabase in the background
+          if (isSupabaseReady()) {
+            finalCriteria.forEach((crit) => {
+              dbSaveEvaluation(b.name, activeMonth, activeYear, crit.id, crit.name, crit, user?.name || "Auditor");
+            });
+          }
+
           return {
             ...b,
             criteria: finalCriteria,
@@ -707,6 +901,11 @@ export default function App() {
 
   // Almoxarife submit files/evidence to dynamic state
   const handleAlmoxarifeSubmitEvidence = (criterionId: string, comments: string, photos: string[]) => {
+    if (cycleState.status !== "ABERTO") {
+      alert("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
+      return;
+    }
+
     if (!activeBranchId) return;
 
     const currentBranch = branches.find((b) => b.id === activeBranchId);
@@ -1200,6 +1399,9 @@ export default function App() {
                     onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
                     criterionState={activeBranch.criteria.find((c) => c.id === "2")}
                     top10={currentConfig.top10}
+                    branchId={activeBranch.id}
+                    activeMonth={activeMonth}
+                    activeYear={activeYear}
                   />
                 )}
                 {activeSubscreen === "LAYOUT_ARRANJO" && (
@@ -1288,6 +1490,29 @@ export default function App() {
           <SupervisorPanel user={user} branches={processedBranches} onLogout={handleLogout} />
         )}
       </main>
+
+      {showMigrationModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 text-slate-800">
+          <div className="bg-white rounded-2xl border-2 border-amber-300 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <span className="material-symbols-outlined text-[32px]">warning</span>
+              <h3 className="text-base font-black tracking-tight text-slate-900">Dados locais encontrados</h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              O sistema detectou dados salvos localmente (ambiente de testes).
+              Esses dados eram fictícios e não serão migrados.
+              A partir de agora todos os dados serão salvos no banco de dados.
+            </p>
+            <button
+              type="button"
+              onClick={handleClearLegacyLocalStorage}
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-[0.98]"
+            >
+              Entendido — Limpar dados locais
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

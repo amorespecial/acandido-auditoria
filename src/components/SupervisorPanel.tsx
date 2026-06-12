@@ -414,13 +414,15 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                         </h4>
                       </div>
 
-                      <span
-                        className={`px-2.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider border rounded-full ${getStatusColor(
-                          occ.status
-                        )}`}
-                      >
-                        {occ.status}
-                      </span>
+                      {occ.status !== "Sem Estoque Mín/Máx" && (
+                        <span
+                          className={`px-2.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider border rounded-full ${getStatusColor(
+                            occ.status
+                          )}`}
+                        >
+                          {occ.status}
+                        </span>
+                      )}
                     </div>
 
                     {/* Operational Details updated by Almoxarife */}

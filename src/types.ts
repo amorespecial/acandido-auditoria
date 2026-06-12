@@ -45,7 +45,7 @@ export interface MaterialOccurrence {
   id: string;
   material: string;
   date: string;
-  status: "Comprado - Aguardando" | "Chegou" | "Sem Estoque Mín/Máx" | "Outro" | "RESOLVIDO" | "MATERIAL NO ALMOXARIFADO";
+  status: "Comprado - Aguardando" | "Chegou" | "Sem Estoque Mín/Máx" | "Outro" | "RESOLVIDO" | "MATERIAL NO ALMOXARIFADO" | "COMPRADO, ESPERANDO CHEGAR" | "CIENTE";
   obs?: string;
   branchId?: string;
   branchName?: string;

@@ -1,0 +1,762 @@
+import { supabase, isSupabaseReady } from "./supabaseClient";
+export { isSupabaseReady };
+import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus } from "./types";
+import { OFFICIAL_CREDENTIALS } from "./components/Login";
+
+// Helper variables for fallback / mock mode
+const STORAGE_PREFIX = "acandido_";
+
+// Month conversion helpers
+export const monthNameToNum = (name: string): number => {
+  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const index = months.findIndex(m => m.toLowerCase() === name.toLowerCase());
+  return index !== -1 ? index + 1 : 5; // default to 5 (Maio)
+};
+
+export const monthNumToName = (num: number): string => {
+  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  return months[num - 1] || "Maio";
+};
+
+// Base64 helper for image uploads
+export const base64ToBlob = (base64: string): Blob => {
+  try {
+    const parts = base64.split(';base64,');
+    const contentType = parts[0].split(':')[1] || 'image/jpeg';
+    const raw = window.atob(parts[1] || parts[0]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  } catch (e) {
+    console.error("Failed to parse base64 to blob", e);
+    return new Blob([], { type: 'image/jpeg' });
+  }
+};
+
+// Supabase Storage file upload helper with signed URL (1 hour expiration)
+export const uploadFile = async (
+  bucket: 'evidencias-almoxarife' | 'evidencias-auditor',
+  filePath: string,
+  fileSource: File | Blob | string // string means base64
+): Promise<string> => {
+  let blob: Blob;
+  if (typeof fileSource === 'string') {
+    blob = base64ToBlob(fileSource);
+  } else {
+    blob = fileSource;
+  }
+
+  const cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
+
+  if (!isSupabaseReady()) {
+    console.warn(`[Supabase Storage Offline] Simulating upload of ${cleanPath} to bucket: ${bucket}`);
+    // Return a data URL or helper URL
+    if (typeof fileSource === 'string' && fileSource.startsWith('data:')) {
+      return fileSource; // keep raw image data for mockup view
+    }
+    return `https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600`;
+  }
+
+  const { error } = await supabase.storage.from(bucket).upload(cleanPath, blob, {
+    cacheControl: '3600',
+    upsert: true
+  });
+
+  if (error) {
+    console.error(`Error uploading to Supabase Storage:`, error);
+    throw error;
+  }
+
+  // Generate signed URL (expiring in 1 hour)
+  const { data, error: signedError } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(cleanPath, 3600);
+
+  if (signedError || !data?.signedUrl) {
+    console.error("Error creating signed URL:", signedError);
+    throw signedError || new Error("Signed URL generation failed");
+  }
+
+  return data.signedUrl;
+};
+
+// Auto Seeding function
+export const seedDatabaseIfEmpty = async () => {
+  if (!isSupabaseReady()) {
+    console.log("[Supabase Offline] Seeding skipped (running in offline simulation mode)");
+    return;
+  }
+
+  try {
+    // 1. Seed system users
+    const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('id').limit(1);
+    if (!usersError && (!existingUsers || existingUsers.length === 0)) {
+      console.log("Seeding system users table ('usuarios')...");
+      const usersToInsert = OFFICIAL_CREDENTIALS.map(u => ({
+        nome: u.name,
+        email: u.email,
+        perfil: u.role.toLowerCase(), // 'auditor' or 'almoxarife' or 'supervisor'
+        almoxarifado: u.ownerName,
+        ativo: true
+      }));
+      await supabase.from('usuarios').insert(usersToInsert);
+    }
+
+    // 2. Seed calendario_inventarios 2026
+    const { data: existingCal, error: calError } = await supabase.from('calendario_inventarios').select('id').limit(1);
+    if (!calError && (!existingCal || existingCal.length === 0)) {
+      console.log("Seeding 2026 inventory schedule table ('calendario_inventarios')...");
+      const CALENDAR_ENTRIES_2026 = [
+        { almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26" },
+        { almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27" },
+        { almoxarifado: "A.Candido CG", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
+        { almoxarifado: "A.Candido CG", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
+        { almoxarifado: "Trans CG", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
+        { almoxarifado: "Trans CG", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
+        { almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
+        { almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
+        { almoxarifado: "Trans Fret CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-25" },
+        { almoxarifado: "Trans Fret CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-15" },
+        { almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-05-16" },
+        { almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-31" },
+        { almoxarifado: "Trans Fret PB", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-08" },
+        { almoxarifado: "Trans Fret PB", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-22" },
+        { almoxarifado: "Trans Fret PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
+        { almoxarifado: "Trans Fret PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
+        { almoxarifado: "Trans Rod CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-09" },
+        { almoxarifado: "Trans Rod CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-10" },
+        { almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
+        { almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
+        { almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
+        { almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
+        { almoxarifado: "Trans Rod PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
+        { almoxarifado: "Trans Rod PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
+        { almoxarifado: "Transnacional RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-07" },
+        { almoxarifado: "Transnacional RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-26" },
+        { almoxarifado: "Unissanta RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-06" },
+        { almoxarifado: "Unissanta RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-25" },
+        { almoxarifado: "Unitrans JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-12" },
+        { almoxarifado: "Unitrans JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-09" }
+      ];
+      await supabase.from('calendario_inventarios').insert(CALENDAR_ENTRIES_2026);
+    }
+
+    // 3. Seed almoxarifados metadata
+    const { data: existingAlms, error: almsError } = await supabase.from('almoxarifados').select('id').limit(1);
+    if (!almsError && (!existingAlms || existingAlms.length === 0)) {
+      console.log("Seeding warehouses table ('almoxarifados')...");
+      const initialWarehousesMap = [
+        { nome: "ALMOXARIFADO UNITRANS JP", cidade: "João Pessoa", estado: "PB", grupo: "A", responsavel: "Robson", ativo: true },
+        { nome: "SANTA MARIA JP", cidade: "João Pessoa", estado: "PB", grupo: "A", responsavel: "Robson", ativo: true },
+        { nome: "TRANS CG", cidade: "Campina Grande", estado: "PB", grupo: "A", responsavel: "Paulo", ativo: true },
+        { nome: "A.CÂNDIDO CG", cidade: "Campina Grande", estado: "PB", grupo: "A", responsavel: "Paulo", ativo: true },
+        { nome: "FRETAMENTO GOIANA", cidade: "Goiana", estado: "PE", grupo: "A", responsavel: "Ezequiel", ativo: true },
+        { nome: "FRETAMENTO PE", cidade: "Recife", estado: "PE", grupo: "A", responsavel: "Sérgio", ativo: true },
+        { nome: "RODOVIÁRIO PE", cidade: "Recife", estado: "PE", grupo: "A", responsavel: "Sérgio", ativo: true },
+        { nome: "RODOVIÁRIO METROP CT", cidade: "Cabedelo", estado: "PB", grupo: "B", responsavel: "Robson", ativo: true },
+        { nome: "FRETAMENTO PB", cidade: "João Pessoa", estado: "PB", group: "B", responsavel: "Lucas", ativo: true },
+        { nome: "TRANS CG METROP BY", cidade: "Bayeux", estado: "PB", grupo: "B", responsavel: "Matheus", ativo: true },
+        { nome: "RODOVIÁRIO RETROP BY", cidade: "Bayeux", estado: "PB", grupo: "B", responsavel: "Matheus", ativo: true },
+        { nome: "TRANSNACIONAL RN", cidade: "Natal", estado: "RN", grupo: "B", responsavel: "Raimundo", ativo: true },
+        { nome: "UNISSANTA RN", cidade: "Natal", estado: "RN", grupo: "B", responsavel: "Joel", ativo: true },
+        { nome: "FRETAMENTO CE", cidade: "Fortaleza", estado: "CE", grupo: "B", responsavel: "Arline", ativo: true },
+        { nome: "RODOVIÁRIO CE", cidade: "Fortaleza", estado: "CE", grupo: "B", responsavel: "Arline", ativo: true }
+      ];
+      await supabase.from('almoxarifados').insert(initialWarehousesMap);
+    }
+  } catch (error) {
+    console.error("Failed to seed database tables:", error);
+  }
+};
+
+// ======================= SYSTEM USERS (usuarios) =======================
+export const dbFetchUsers = async (): Promise<AppUser[]> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
+    return saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+  }
+  const { data, error } = await supabase.from('usuarios').select('*');
+  if (error) {
+    console.error("dbFetchUsers error, falling back:", error);
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
+    return saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+  }
+  return data.map(u => ({
+    name: u.nome,
+    email: u.email,
+    role: u.perfil.toUpperCase() as any,
+    ownerName: u.almoxarifado || u.nome.split(" ")[0],
+    group: "A",
+    status: u.ativo ? "ATIVO" : "SUSPENSO"
+  }));
+};
+
+export const dbSaveUser = async (user: AppUser) => {
+  if (!isSupabaseReady()) {
+    const users = await dbFetchUsers();
+    const index = users.findIndex(u => u.email.toLowerCase() === user.email.toLowerCase());
+    if (index !== -1) {
+      users[index] = user;
+    } else {
+      users.push(user);
+    }
+    localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(users));
+    return;
+  }
+
+  const { error } = await supabase.from('usuarios').upsert({
+    nome: user.name,
+    email: user.email,
+    perfil: user.role.toLowerCase(),
+    almoxarifado: user.ownerName,
+    ativo: user.status !== "SUSPENSO"
+  }, { onConflict: 'email' });
+
+  if (error) {
+    throw error;
+  }
+};
+
+// ======================= CYCLES (ciclos) =======================
+export interface CycleState {
+  activeMonth: string;
+  activeYear: string;
+  status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM";
+  openedAt?: string;
+  openedBy?: string;
+}
+
+export const dbFetchCycleState = async (): Promise<CycleState> => {
+  const defaultState: CycleState = { activeMonth: "Maio", activeYear: "2026", status: "ABERTO" };
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_cycle_state_manual");
+    return saved ? JSON.parse(saved) : defaultState;
+  }
+
+  const { data, error } = await supabase.from('ciclos').select('*').order('iniciado_em', { ascending: false }).limit(1);
+  if (error || !data || data.length === 0) {
+    return defaultState;
+  }
+
+  const current = data[0];
+  let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM" = "ABERTO";
+  if (current.status === 'bloqueado') statusStr = "AGUARDANDO_FECHAMENTO";
+  else if (current.status === 'fechado') statusStr = "NENHUM";
+
+  return {
+    activeMonth: monthNumToName(current.mes),
+    activeYear: String(current.ano),
+    status: statusStr,
+    openedAt: current.iniciado_em,
+    openedBy: current.iniciado_por
+  };
+};
+
+export const dbSaveCycleState = async (cycle: CycleState) => {
+  // Sync to localstorage too
+  localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cycle));
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  const statusDb = cycle.status === "ABERTO" ? "aberto" : cycle.status === "AGUARDANDO_FECHAMENTO" ? "bloqueado" : "fechado";
+
+  await supabase.from('ciclos').upsert({
+    mes: monthNameToNum(cycle.activeMonth),
+    ano: Number(cycle.activeYear),
+    status: statusDb,
+    iniciado_por: cycle.openedBy || "Fernando Silva",
+    fechado_em: cycle.status === "NENHUM" ? new Date().toISOString() : null
+  }, { onConflict: 'mes,ano' });
+};
+
+// ======================= CRITERIA EVALUATIONS (avaliacoes) =======================
+export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, anoStr: string): Promise<Record<string, Partial<CriterionState>>> => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return {};
+  }
+
+  const { data, error } = await supabase
+    .from('avaliacoes')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mes)
+    .eq('ano', ano);
+
+  if (error || !data) {
+    return {};
+  }
+
+  const mapped: Record<string, Partial<CriterionState>> = {};
+  data.forEach(row => {
+    mapped[row.criterio_codigo] = {
+      status: row.resultado as EvaluationStatus,
+      pointsObtained: row.pontuacao ?? 0,
+      notes: row.descricao_evidencia,
+      evidenceNotes: row.descricao_evidencia,
+      nokEvidenceLinks: row.links_evidencia || []
+    };
+  });
+  return mapped;
+};
+
+export const dbSaveEvaluation = async (
+  almoxarifado: string,
+  mesName: string,
+  anoStr: string,
+  criterionId: string,
+  criterionName: string,
+  evaluation: Partial<CriterionState>,
+  evaluatedBy: string
+) => {
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  await supabase.from('avaliacoes').upsert({
+    almoxarifado,
+    mes,
+    ano,
+    criterio_codigo: criterionId,
+    criterio_nome: criterionName,
+    resultado: evaluation.status || "PENDENTE",
+    pontuacao: evaluation.pointsObtained ?? 0,
+    avaliado_por: evaluatedBy,
+    avaliado_em: new Date().toISOString(),
+    descricao_evidencia: evaluation.notes || evaluation.evidenceNotes || "",
+    links_evidencia: evaluation.nokEvidenceLinks || []
+  }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+};
+
+// ======================= EVIDENCE SUBMISSIONS (envios_almoxarife) =======================
+export const dbFetchAlmoxarifeSubmissions = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('envios_almoxarife')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mes)
+    .eq('ano', ano);
+
+  return error ? [] : data;
+};
+
+export const dbSubmitAlmoxarifeEvidence = async (
+  almoxarifado: string,
+  mesName: string,
+  anoStr: string,
+  criterionId: string,
+  submittedBy: string,
+  comment: string,
+  storageUrls: string[]
+) => {
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  await supabase.from('envios_almoxarife').insert({
+    almoxarifado,
+    mes,
+    ano,
+    criterio_codigo: criterionId,
+    enviado_por: submittedBy,
+    comentario: comment,
+    storage_paths: storageUrls
+  });
+};
+
+// ======================= CALENDAR SCHEDULES (calendario_inventarios) =======================
+export const dbFetchSchedules = async (): Promise<any[]> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_calendario_inventarios");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  const { data, error } = await supabase.from('calendario_inventarios').select('*');
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map(item => ({
+    almoxarifado: item.almoxarifado,
+    ano: item.ano,
+    semestre: item.semestre,
+    indice: item.indice,
+    data: item.data_agendada
+  }));
+};
+
+export const dbSaveSchedules = async (schedules: any[]) => {
+  localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(schedules));
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  // Rewrite / refresh schedule list (sync-up)
+  for (const item of schedules) {
+    await supabase.from('calendario_inventarios').upsert({
+      almoxarifado: item.almoxarifado,
+      ano: item.ano,
+      semestre: item.semestre,
+      indice: item.indice || 1,
+      data_agendada: item.data
+    }, { onConflict: 'almoxarifado,ano,semestre,indice' });
+  }
+};
+
+// ======================= WARRANTIES (garantias) =======================
+export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_warranties");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  const { data, error } = await supabase.from('garantias').select('*').order('registrado_em', { ascending: false });
+  if (error || !data) {
+    const saved = localStorage.getItem("acandido_warranties");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  return data.map(item => ({
+    id: item.id,
+    itemCode: item.item,
+    itemDescription: item.item, // fallback
+    manufacturer: item.fabricante || "",
+    expiryDate: item.garantia_ate || "",
+    almoxarifado: item.almoxarifado,
+    nfEmissionDate: "",
+    reference: "",
+    lastUpdateDate: item.registrado_em,
+    pieceObservation: "",
+    scrapObservation: "",
+    monthYear: `${monthNumToName(item.mes)} ${item.ano}`
+  }));
+};
+
+export const dbSaveWarranties = async (warranties: WarrantyItem[]) => {
+  localStorage.setItem("acandido_warranties", JSON.stringify(warranties));
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  for (const item of warranties) {
+    const spaceParts = item.monthYear ? item.monthYear.split(' ') : [];
+    const mesStr = spaceParts[0] || "Maio";
+    const anoNum = Number(spaceParts[1] || "2026");
+
+    await supabase.from('garantias').upsert({
+      id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
+      almoxarifado: item.almoxarifado,
+      mes: monthNameToNum(mesStr),
+      ano: anoNum,
+      item: item.itemCode,
+      fabricante: item.manufacturer,
+      garantia_ate: item.expiryDate || null,
+      registrado_por: "Almoxarife",
+      registrado_em: item.createdAt || new Date().toISOString()
+    });
+  }
+};
+
+// ======================= LEVEL OF SERVICE OCCURRENCES (nivel_servico) =======================
+export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_occurrences");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  const { data, error } = await supabase.from('nivel_servico').select('*');
+  if (error || !data) {
+    const saved = localStorage.getItem("acandido_occurrences");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  return data.map(o => ({
+    id: o.id,
+    material: o.material_em_falta,
+    date: o.data_ocorrencia || "",
+    status: "Sem Estoque Mín/Máx", // initial status
+    branchId: o.almoxarifado,
+    branchName: o.almoxarifado,
+    veiculo: o.veiculo || "",
+    solicitante: o.solicitante || "",
+    codigoMaterial: o.codigo_material || "",
+    filial: o.almoxarifado
+  }));
+};
+
+export const dbSaveOccurrences = async (occs: MaterialOccurrence[]) => {
+  localStorage.setItem("acandido_occurrences", JSON.stringify(occs));
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  for (const item of occs) {
+    const rawDate = item.date || new Date().toISOString().split('T')[0];
+    await supabase.from('nivel_servico').upsert({
+      id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
+      almoxarifado: item.branchName || item.filial || "",
+      mes: Number(rawDate.split('-')[1]) || 5,
+      ano: Number(rawDate.split('-')[0]) || 2026,
+      veiculo: item.veiculo,
+      codigo_material: item.codigoMaterial,
+      material_em_falta: item.material,
+      data_ocorrencia: rawDate,
+      solicitante: item.solicitante
+    });
+  }
+};
+
+// ======================= NON-MOVING MATERIALS (material_sem_movimentacao) =======================
+export const dbFetchNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number): Promise<any> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem(`acandido_materials_parados_${almoxarifado}`);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  const { data, error } = await supabase
+    .from('material_sem_movimentacao')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('ano', ano)
+    .eq('semestre', semestre);
+
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+
+  const item = data[0];
+  return {
+    id: item.id,
+    almoxarifado: item.almoxarifado,
+    ano: item.ano,
+    semestre: item.semestre,
+    timestamp: item.lista_inserida_em,
+    insertedBy: item.lista_inserida_por,
+    materials: item.itens || [],
+    isEvaluated: !!item.resultado,
+    resultStatus: item.resultado as EvaluationStatus,
+    reviewedBy: item.avaliado_por,
+    reviewedAt: item.avaliado_em,
+    nokEvidenceLinks: item.links_evidencia || []
+  };
+};
+
+export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number, payload: any) => {
+  // Sync to localstorage
+  localStorage.setItem(`acandido_materials_parados_${almoxarifado}`, JSON.stringify(payload));
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  await supabase.from('material_sem_movimentacao').upsert({
+    almoxarifado,
+    ano,
+    semestre,
+    lista_inserida_em: payload.timestamp || new Date().toISOString(),
+    lista_inserida_por: payload.insertedBy || "Almoxarife",
+    itens: payload.materials || payload.itemsToCount || [],
+    resultado: payload.resultStatus || null,
+    avaliado_em: payload.reviewedAt || null,
+    avaliado_por: payload.reviewedBy || null,
+    links_evidencia: payload.nokEvidenceLinks || []
+  }, { onConflict: 'almoxarifado,ano,semestre' });
+};
+
+// ======================= TOP 10 CONFIG (top10_configuracao) =======================
+export const dbFetchTop10Config = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+  const lsKey = `acandido_top10_config_${almoxarifado}_${mesName}_${anoStr}`;
+
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem(lsKey);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  const { data, error } = await supabase
+    .from('top10_configuracao')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mes)
+    .eq('ano', ano);
+
+  if (error || !data || data.length === 0) {
+    // try to read fallback
+    const saved = localStorage.getItem(lsKey);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  return {
+    itens: data[0].itens,
+    configurado_por: data[0].configurado_por,
+    configurado_em: data[0].configurado_em
+  };
+};
+
+export const dbSaveTop10Config = async (almoxarifado: string, mesName: string, anoStr: string, itens: any[], user: string) => {
+  const lsKey = `acandido_top10_config_${almoxarifado}_${mesName}_${anoStr}`;
+  localStorage.setItem(lsKey, JSON.stringify({ itens }));
+
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  await supabase.from('top10_configuracao').upsert({
+    almoxarifado,
+    mes,
+    ano,
+    itens,
+    configurado_por: user,
+    configurado_em: new Date().toISOString()
+  }, { onConflict: 'almoxarifado,mes,ano' });
+};
+
+// ======================= TOP 10 ENVIOS (top10_envios) =======================
+export const dbFetchTop10Envios = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('top10_envios')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mes)
+    .eq('ano', ano);
+
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+
+  return data[0];
+};
+
+export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, anoStr: string, fotos: any[], user: string) => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  await supabase.from('top10_envios').upsert({
+    almoxarifado,
+    mes,
+    ano,
+    enviado_por: user,
+    fotos
+  }, { onConflict: 'almoxarifado,mes,ano' });
+};
+
+// ======================= LAYOUT CONFIG (layout_configuracao) =======================
+export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+  const lsKey = `acandido_layout_config_${almoxarifado}_${mesName}_${anoStr}`;
+
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem(lsKey);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  const { data, error } = await supabase
+    .from('layout_configuracao')
+    .select('*')
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mes)
+    .eq('ano', ano);
+
+  if (error || !data || data.length === 0) {
+    const saved = localStorage.getItem(lsKey);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  return {
+    localizacao: data[0].localizacao,
+    configurado_por: data[0].configurado_por,
+    configurado_em: data[0].configurado_em
+  };
+};
+
+export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string) => {
+  const lsKey = `acandido_layout_config_${almoxarifado}_${mesName}_${anoStr}`;
+  localStorage.setItem(lsKey, JSON.stringify({ localizacao }));
+
+  const mes = monthNameToNum(mesName);
+  const ano = Number(anoStr);
+
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  await supabase.from('layout_configuracao').upsert({
+    almoxarifado,
+    mes,
+    ano,
+    localizacao,
+    configurado_por: user,
+    configurado_em: new Date().toISOString()
+  }, { onConflict: 'almoxarifado,mes,ano' });
+};
+
+// ======================= UNIMOBIN EMPLOYEES (colaboradores_unimobin) =======================
+export const dbFetchColaboradoresUnimobin = async () => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_all_collab_profiles");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  const { data, error } = await supabase.from('colaboradores_unimobin').select('*').eq('ativo', true);
+  if (error || !data) {
+    const saved = localStorage.getItem("acandido_all_collab_profiles");
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  return data.map(row => ({
+    id: row.id,
+    name: row.nome,
+    status: "Aguardando envio" as const, // default status mapping
+    cargo: row.cargo || "Motorista/Colaborador"
+  }));
+};
+
+export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => {
+  if (!isSupabaseReady()) {
+    return;
+  }
+
+  await supabase.from('colaboradores_unimobin').insert({
+    nome: name,
+    cargo: cargo,
+    ativo: true
+  });
+};

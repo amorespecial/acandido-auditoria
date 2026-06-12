@@ -45,7 +45,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         branches: []
       },
       "Paulo": {
-        name: "Expresso Nacional / A.Cândido CG",
+        name: "Trans CG / A.Cândido CG",
         location: "Campina Grande, PB",
         group: "A",
         branches: []
@@ -158,7 +158,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
 
     const scoresMap: { [key: string]: number[] } = {
       robson: [90, 95, 100, 100, 95, activeScore], // Unitrans JP / Santa Maria JP
-      paulo: [70, 75, 75, 80, 80, activeScore], // Expresso Nacional / A.Cândido CG
+      paulo: [70, 75, 75, 80, 80, activeScore], // Trans CG / A.Cândido CG
       sérgio: [70, 75, 70, 75, 75, activeScore], // Fretamento Jaboatão / Rodoviário Jaboatão
       ezequiel: [60, 65, 65, 70, 70, activeScore], // Fretamento Goiana
       raimundo: [80, 80, 80, 85, 85, activeScore], // Almoxarifado Unissana RN
@@ -226,7 +226,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           <div className="mt-6 grid grid-cols-2 gap-4 bg-white/5 p-4 rounded-xl border border-white/10">
             <div>
               <p className="text-[9px] text-[#C8A84B] font-extrabold uppercase font-mono tracking-wider">Pontos Acumulados</p>
-              <p className="text-2xl font-bold font-mono mt-1 text-white">{myScore} <span className="text-xs text-white/50 font-normal">/ 500 pts</span></p>
+              <p className="text-2xl font-bold font-mono mt-1 text-white">{myScore} <span className="text-xs text-white/50 font-normal">/ 600 pts</span></p>
             </div>
             <div>
               <p className="text-[9px] text-[#C8A84B] font-extrabold uppercase font-mono tracking-wider">Status Participação</p>
@@ -263,11 +263,21 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
   if (selectedEntry) {
     const groupEntries = selectedEntry.group === "A" ? groupAEntries : groupBEntries;
     const positionInGroup = groupEntries.findIndex((e) => e.id === selectedEntry.id) + 1;
-    const efficiency = Math.round(((selectedEntry.semestralScore / 500) * 100) / 5) * 5;
 
     // Get historical monthly data
     const monthlyVals = getHistoricalMonths(selectedEntry);
-    const sortedVals = [...monthlyVals].sort((a, b) => b.val - a.val);
+
+    const hasJuneData = selectedEntry.branches.some(
+      (b) => b.criteria.some((c) => c.status === "OK" || c.status === "NOK")
+    );
+    const monthsWithData = monthlyVals.filter((m, idx) => {
+      if (idx < 5) return true; // JAN to MAI always closed
+      return hasJuneData; // JUN included if evaluated/launched
+    });
+
+    const totalAccumulatedScore = monthsWithData.reduce((sum, d) => sum + d.val, 0);
+
+    const sortedVals = [...monthsWithData].sort((a, b) => b.val - a.val);
     const bestMonth = sortedVals[0] || { month: "JUN", val: 100 };
     const worstMonth = sortedVals[sortedVals.length - 1] || { month: "JAN", val: 0 };
 
@@ -358,15 +368,10 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
             </div>
           </div>
 
-          <div className="bg-[#1B2A4A] text-white p-4 rounded-xl flex items-center gap-4 border border-white/5 shrink-0">
-            <div className="text-right">
+          <div className="bg-[#1B2A4A] text-white p-4 rounded-xl flex items-center justify-center border border-white/5 shrink-0 min-w-[140px]">
+            <div className="text-center">
               <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontos Semestrais</p>
-              <p className="text-2xl font-mono font-black">{selectedEntry.semestralScore} <span className="text-sm font-normal text-slate-400">/ 500</span></p>
-            </div>
-            <div className="h-10 w-px bg-white/20"></div>
-            <div>
-              <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Aproveitamento</p>
-              <p className="text-2xl font-mono font-black text-emerald-400">{selectedEntry.semestralScore} pts</p>
+              <p className="text-xl font-mono font-black">{selectedEntry.semestralScore} <span className="text-xs font-normal text-slate-400">/ 600</span></p>
             </div>
           </div>
         </div>
@@ -481,30 +486,34 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                 const chartWidth = width - paddingLeft - paddingRight;
                 const chartHeight = height - paddingTop - paddingBottom;
 
-                // Build cumulative array
-                let rSum = 0;
-                const cumulativePoints = monthlyVals.map((item, idx) => {
-                  rSum += item.val;
+                // Build visible month data based on active or evaluated status
+                const hasJuneData = selectedEntry.branches.some(
+                  (b) => b.criteria.some((c) => c.status === "OK" || c.status === "NOK")
+                );
+                const monthsWithData = monthlyVals.filter((m, idx) => {
+                  if (idx < 5) return true; // JAN to MAI are always closed
+                  return hasJuneData; // JUN is shown if evaluated/launched
+                });
+
+                let cumulativeSum = 0;
+                const visibleData = monthsWithData.map((item, idx) => {
+                  cumulativeSum += item.val;
                   return {
                     month: item.month,
                     monthlyVal: item.val,
-                    cumulativeVal: rSum,
+                    cumulativeVal: cumulativeSum,
                     index: idx
                   };
                 });
 
-                // Slice visible data based on active month
-                const visibleData = cumulativePoints.slice(0, Math.min(6, visibleCount));
-
-                // Calculate paths
+                // Calculate paths using monthlyVal (capped at 100 pt max)
                 let pathD = "";
                 let fillD = "";
 
                 visibleData.forEach((d, idx) => {
-                  const x = visibleData.length > 1
-                    ? paddingLeft + (idx / (visibleData.length - 1)) * chartWidth
-                    : paddingLeft + 0.5 * chartWidth;
-                  const y = paddingTop + (1 - d.cumulativeVal / 500) * chartHeight;
+                  const originalIdx = monthlyVals.findIndex(mv => mv.month === d.month);
+                  const x = paddingLeft + (originalIdx / 5) * chartWidth;
+                  const y = paddingTop + (1 - d.monthlyVal / 100) * chartHeight;
                   if (idx === 0) {
                     pathD += `M ${x} ${y}`;
                   } else {
@@ -513,14 +522,16 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                 });
 
                 if (visibleData.length > 0) {
-                  const xFirst = visibleData.length > 1 ? paddingLeft : paddingLeft + 0.5 * chartWidth;
-                  const xLast = visibleData.length > 1 ? paddingLeft + chartWidth : paddingLeft + 0.5 * chartWidth;
+                  const firstOriginalIdx = monthlyVals.findIndex(mv => mv.month === visibleData[0].month);
+                  const lastOriginalIdx = monthlyVals.findIndex(mv => mv.month === visibleData[visibleData.length - 1].month);
+                  const xFirst = paddingLeft + (firstOriginalIdx / 5) * chartWidth;
+                  const xLast = paddingLeft + (lastOriginalIdx / 5) * chartWidth;
                   fillD = pathD + ` L ${xLast} ${paddingTop + chartHeight} L ${xFirst} ${paddingTop + chartHeight} Z`;
                 }
 
-                const gridValues = [0, 100, 200, 300, 400, 500];
+                const gridValues = [0, 20, 40, 60, 80, 100];
                 const activeIdx = chartSelectedIdx !== null ? chartSelectedIdx : visibleData.length - 1;
-                const currentSelectedMonthData = visibleData[activeIdx];
+                const currentSelectedMonthData = visibleData[activeIdx] || visibleData[visibleData.length - 1];
 
                 return (
                   <div className="space-y-4">
@@ -529,8 +540,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                         <svg viewBox="0 0 500 240" className="w-full h-auto overflow-visible select-none">
                           {/* Grid Lines */}
                           {gridValues.map((v) => {
-                            const y = paddingTop + (1 - v / 500) * chartHeight;
-                            const isMinLine = v === 300;
+                            const y = paddingTop + (1 - v / 100) * chartHeight;
+                            const isMinLine = v === 80;
                             if (isMinLine) return null; // Handled separately with bold red
                             return (
                               <g key={v} className="opacity-40">
@@ -557,36 +568,36 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                             );
                           })}
 
-                          {/* Red dashed line for operational limit (300 pts) */}
+                          {/* Red dashed line for operational limit/target (80 pts) */}
                           <g>
                             <line
                               x1={paddingLeft}
-                              y1={paddingTop + (1 - 300 / 500) * chartHeight}
+                              y1={paddingTop + (1 - 80 / 100) * chartHeight}
                               x2={width - paddingRight}
-                              y2={paddingTop + (1 - 300 / 500) * chartHeight}
+                              y2={paddingTop + (1 - 80 / 100) * chartHeight}
                               stroke="#EF4444"
                               strokeDasharray="4,4"
                               strokeWidth="1.5"
                             />
                             <text
                               x={paddingLeft - 10}
-                              y={paddingTop + (1 - 300 / 500) * chartHeight + 3}
+                              y={paddingTop + (1 - 80 / 100) * chartHeight + 3}
                               textAnchor="end"
                               fill="#EF4444"
                               fontSize="8"
                               className="font-mono font-black"
                             >
-                              300
+                              80
                             </text>
                             <text
                               x={width - paddingRight - 10}
-                              y={paddingTop + (1 - 300 / 500) * chartHeight - 5}
+                              y={paddingTop + (1 - 80 / 100) * chartHeight - 5}
                               textAnchor="end"
                               fill="#EF4444"
                               fontSize="7.5"
                               className="font-sans font-black uppercase tracking-wider"
                             >
-                              Mínimo Operacional
+                              Meta de Qualificação
                             </text>
                           </g>
 
@@ -620,19 +631,41 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                             />
                           )}
 
+                          {/* Static X-Axis Labels (always 6 months) */}
+                          {monthlyVals.map((d, idx) => {
+                            const x = paddingLeft + (idx / 5) * chartWidth;
+                            const hasDataIdx = visibleData.some(vd => vd.month === d.month);
+                            const visibleItem = visibleData.find(vd => vd.month === d.month);
+                            const isCurrentActive = visibleItem ? (visibleItem.index === activeIdx) : false;
+
+                            return (
+                              <g key={`lbl-${d.month}`}>
+                                <text
+                                  x={x}
+                                  y={height - 12}
+                                  textAnchor="middle"
+                                  fill={isCurrentActive ? "#1B2A4A" : "#94A3B8"}
+                                  fontSize="9"
+                                  className={`font-mono font-black ${isCurrentActive ? "underline" : ""}`}
+                                >
+                                  {d.month}
+                                </text>
+                              </g>
+                            );
+                          })}
+
                           {/* Points to click */}
-                          {visibleData.map((d, idx) => {
-                            const x = visibleData.length > 1
-                              ? paddingLeft + (idx / (visibleData.length - 1)) * chartWidth
-                              : paddingLeft + 0.5 * chartWidth;
-                            const y = paddingTop + (1 - d.cumulativeVal / 500) * chartHeight;
-                            const isCurrentActive = idx === activeIdx;
+                          {visibleData.map((d) => {
+                            const originalIdx = monthlyVals.findIndex(mv => mv.month === d.month);
+                            const x = paddingLeft + (originalIdx / 5) * chartWidth;
+                            const y = paddingTop + (1 - d.monthlyVal / 100) * chartHeight;
+                            const isCurrentActive = d.index === activeIdx;
 
                             return (
                               <g
-                                key={d.month}
+                                key={`pt-${d.month}`}
                                 className="cursor-pointer"
-                                onClick={() => setChartSelectedIdx(idx)}
+                                onClick={() => setChartSelectedIdx(d.index)}
                               >
                                 {/* Hover halo */}
                                 <circle
@@ -652,17 +685,6 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                                   strokeWidth="2"
                                   className="transition-all duration-300 transform"
                                 />
-                                {/* Label under point */}
-                                <text
-                                  x={x}
-                                  y={height - 12}
-                                  textAnchor="middle"
-                                  fill={isCurrentActive ? "#1B2A4A" : "#94A3B8"}
-                                  fontSize="9"
-                                  className={`font-mono font-black ${isCurrentActive ? "underline" : ""}`}
-                                >
-                                  {d.month}
-                                </text>
                                 {/* Dynamic values on top of points */}
                                 <text
                                   x={x}
@@ -672,7 +694,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                                   fontSize="9.5"
                                   className="font-mono font-black"
                                 >
-                                  {d.cumulativeVal}
+                                  {d.monthlyVal}
                                 </text>
                               </g>
                             );
@@ -690,7 +712,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                         </div>
                         <div className="text-center">
                           <p className="text-[9px] text-slate-400 font-extrabold uppercase font-sans tracking-wide">Desempenho no Mês</p>
-                          <p className="text-sm font-bold text-emerald-605 text-emerald-600 mt-0.5">+{currentSelectedMonthData.monthlyVal} pts</p>
+                          <p className="text-sm font-bold text-emerald-650 text-emerald-600 mt-0.5">+{currentSelectedMonthData.monthlyVal} pts</p>
                         </div>
                         <div className="text-right">
                           <p className="text-[9px] text-slate-400 font-extrabold uppercase font-sans tracking-wide">Total Acumulado</p>
@@ -705,12 +727,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
               {/* Metric stats columns */}
               <div className="grid grid-cols-3 gap-3 text-center mt-4 pt-4 border-t border-slate-50">
                 <div className="p-2 bg-slate-50 bg-opacity-70 rounded-lg border border-slate-200/50">
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Média Mensal</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Total Acumulado</p>
                   <p className="text-sm font-black text-[#1B2A4A] font-mono mt-0.5">
                     {awaiting_pair ? (
                       <span className="text-[9px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-1.5 py-0.5 leading-none">Aguardando par</span>
                     ) : (
-                      `${Math.round(selectedEntry.semestralScore / visibleCount)} pts`
+                      `${totalAccumulatedScore} pts`
                     )}
                   </p>
                 </div>
@@ -1054,7 +1076,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                     <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
                       <div
                         className={`h-full ${item.semestralScore < 300 ? "bg-red-500" : item.semestralScore <= 350 ? "bg-amber-400" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(100, (item.semestralScore / 500) * 100)}%` }}
+                        style={{ width: `${Math.min(100, (item.semestralScore / 600) * 100)}%` }}
                       ></div>
                     </div>
                   </div>

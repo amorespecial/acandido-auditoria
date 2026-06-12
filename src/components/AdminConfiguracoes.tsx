@@ -82,6 +82,19 @@ export default function AdminConfiguracoes({
 }: AdminConfiguracoesProps) {
   const [activeTab, setActiveTab] = useState<"USUARIOS" | "ALMOXARIFADOS" | "COLABORADORES" | "GARANTIAS" | "CICLO" | "SUPERVISOR" | "CRITERIOS" | "INVENTARIOS">("USUARIOS");
 
+  // Dynamic names list derived from active branches
+  const activeAlmoxNames = [...new Set(branches.map((b) => b.name))].sort((a, b) => a.localeCompare(b));
+
+  // Add Branch Form controls
+  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
+  const [newBranchForm, setNewBranchForm] = useState({
+    name: "",
+    location: "",
+    group: "A" as "A" | "B",
+    ownerName: "",
+    meta: 80
+  });
+
   // ================= STATE: REFRESH/MANAGE CYCLE & FORM FIELDS =================
   const [cycleMonth, setCycleMonth] = useState(cycleState?.activeMonth || "Junho");
   const [cycleYear, setCycleYear] = useState(cycleState?.activeYear || "2026");
@@ -103,7 +116,13 @@ export default function AdminConfiguracoes({
   const [garantiaConfig, setGarantiaConfig] = useState(() => {
     const saved = localStorage.getItem("acandido_garantia_fields_config");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.auditorEditHistory === undefined) {
+          parsed.auditorEditHistory = true;
+        }
+        return parsed;
+      } catch (e) {}
     }
     return {
       fabricante: true,
@@ -111,6 +130,7 @@ export default function AdminConfiguracoes({
       reference: true,
       pieceObservation: true,
       scrapObservation: true,
+      auditorEditHistory: true,
       customFields: [] as any[]
     };
   });
@@ -392,6 +412,7 @@ export default function AdminConfiguracoes({
 
   useEffect(() => {
     localStorage.setItem("acandido_users", JSON.stringify(users));
+    window.dispatchEvent(new Event("storage"));
   }, [users]);
 
   // Modals for Users
@@ -468,6 +489,7 @@ export default function AdminConfiguracoes({
 
   useEffect(() => {
     localStorage.setItem("acandido_all_collab_profiles", JSON.stringify(collabList));
+    window.dispatchEvent(new Event("storage"));
   }, [collabList]);
 
   const [newCollabName, setNewCollabName] = useState("");
@@ -507,10 +529,12 @@ export default function AdminConfiguracoes({
 
   useEffect(() => {
     localStorage.setItem("acandido_preset_items", JSON.stringify(gItems));
+    window.dispatchEvent(new Event("storage"));
   }, [gItems]);
 
   useEffect(() => {
     localStorage.setItem("acandido_preset_manufacturers", JSON.stringify(gManufacturers));
+    window.dispatchEvent(new Event("storage"));
   }, [gManufacturers]);
 
   // Modal actions for Warranties
@@ -657,23 +681,204 @@ export default function AdminConfiguracoes({
     setUserToExclude(null);
   };
 
-  // ================= ALMOXARIFADOS EDIT =================
+  // ================= ALMOXARIFADOS EDIT & TRANSITIONS =================
+  const handleSaveNewBranch = () => {
+    if (!newBranchForm.name.trim()) {
+      alert("Por favor, informe o nome do almoxarifado.");
+      return;
+    }
+    const slug = newBranchForm.name.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+
+    // Check if branch ID already exists
+    if (branches.some(b => b.id === slug)) {
+      alert("Já existe um almoxarifado com o mesmo nome ou ID.");
+      return;
+    }
+
+    const defaultCriteria = [
+      { id: "1", number: "01", name: "Inventário", recurrence: "Semestral" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "2", number: "02", name: "TOP 10", recurrence: "Mensal" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "3", number: "03", name: "Nota Fiscal", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "4", number: "04", name: "LayOut", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "5", number: "05", name: "Recebimento de Material", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "6", number: "06", name: "Curso Unimobin", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const, evidenceNotes: "Aguardando envio do relatório oficial de frotas pelo almoxarife." },
+      { id: "7", number: "07", name: "Nível de Serviço", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "8", number: "08", name: "Registro de Requisições", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "9", number: "09", name: "Controle de Garantia", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+      { id: "10", number: "10", name: "Material Sem Movimentação", recurrence: "Semestral" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const }
+    ];
+
+    const bId = slug.toLowerCase();
+    const owner = newBranchForm.ownerName.toLowerCase();
+    // Audit mode calculation
+    const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
+    const criteria = defaultCriteria.map((c) => {
+      const auditMode = (isRobsonOrLucas && (c.id === "2" || c.id === "4")) ? ("Presencial" as const) : ("A_Distancia" as const);
+      return { ...c, auditMode };
+    });
+
+    const newBranch: Branch = {
+      id: slug,
+      name: newBranchForm.name.toUpperCase().trim(),
+      location: newBranchForm.location.trim() || "Campina Grande, PB",
+      currentScore: 0,
+      meta: Number(newBranchForm.meta) || 80,
+      status: "PENDENTE",
+      scoreCategory: "Abaixo da Meta",
+      ownerName: newBranchForm.ownerName.trim() || "Paulo",
+      group: newBranchForm.group,
+      semestralScore: 0,
+      criteria
+    };
+
+    onUpdateBranchNames([...branches, newBranch]);
+
+    // Dynamic addition for calendar data
+    const calS1 = {
+      id: `cal-${slug}-2026-1-1`,
+      almoxarifado: newBranch.name,
+      ano: 2026,
+      semestre: 1,
+      indice: 1,
+      data_agendada: ""
+    };
+    const calS2 = {
+      id: `cal-${slug}-2026-2-1`,
+      almoxarifado: newBranch.name,
+      ano: 2026,
+      semestre: 2,
+      indice: 1,
+      data_agendada: ""
+    };
+    const updatedCalendar = [...calendarData, calS1, calS2];
+    setCalendarData(updatedCalendar);
+    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCalendar));
+
+    window.dispatchEvent(new Event("storage"));
+    alert(`Almoxarifado ${newBranch.name} adicionado com sucesso!`);
+    setShowAddBranchModal(false);
+    setNewBranchForm({
+      name: "",
+      location: "",
+      group: "A",
+      ownerName: "",
+      meta: 80
+    });
+  };
+
   const handleSaveBranchName = () => {
     if (!editingBranch || !branchFormName.trim()) return;
 
+    const oldName = editingBranch.name;
+    const newName = branchFormName.trim().toUpperCase();
+
+    // 1. Update branches in parent state
     const updated = branches.map((b) => {
       if (b.id === editingBranch.id) {
         return {
           ...b,
-          name: branchFormName.trim().toUpperCase()
+          name: newName
         };
       }
       return b;
     });
-
     onUpdateBranchNames(updated);
-    alert("Nome do almoxarifado alterado com sucesso!");
+
+    // 2. Cascade rename inside global Calendar inventories
+    const updatedCal = calendarData.map((c) => {
+      if (c.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
+        return { ...c, almoxarifado: newName };
+      }
+      return c;
+    });
+    setCalendarData(updatedCal);
+    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCal));
+
+    // 3. Cascade rename inside active registered warranties list
+    const savedWarranties = localStorage.getItem("acandido_warranties");
+    if (savedWarranties) {
+      try {
+        const warranties = JSON.parse(savedWarranties);
+        const updatedW = warranties.map((w: any) => {
+          if (w.almoxarifado && w.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
+            return { ...w, almoxarifado: newName };
+          }
+          return w;
+        });
+        localStorage.setItem("acandido_warranties", JSON.stringify(updatedW));
+      } catch (e) {}
+    }
+
+    // 4. Cascade rename inside supervisor occurrences list
+    const savedOccs = localStorage.getItem("acandido_occurrences");
+    if (savedOccs) {
+      try {
+        const occs = JSON.parse(savedOccs);
+        const updatedO = occs.map((o: any) => {
+          let updatedItem = { ...o };
+          let changed = false;
+          if (o.branchName && o.branchName.toLowerCase() === oldName.toLowerCase()) {
+            updatedItem.branchName = newName;
+            changed = true;
+          }
+          if (o.filial && o.filial.toLowerCase() === oldName.toLowerCase()) {
+            updatedItem.filial = newName;
+            changed = true;
+          }
+          return updatedItem;
+        });
+        localStorage.setItem("acandido_occurrences", JSON.stringify(updatedO));
+      } catch (e) {}
+    }
+
+    // Notify all listeners
+    window.dispatchEvent(new Event("storage"));
+
+    alert("Nome de almoxarifado alterador com sucesso em todo o sistema!");
     setEditingBranch(null);
+  };
+
+  const handleDeleteBranch = (branchId: string, branchName: string) => {
+    if (branches.length <= 1) {
+      alert("Não é possível remover o último almoxarifado ativo do sistema corporativo.");
+      return;
+    }
+    const yes = confirm(`Deseja realmente REMOVER o almoxarifado "${branchName}"? Esta ação removerá a unidade da lista do painel, do ranking e de seletores, mantendo históricos passados intactos.`);
+    if (!yes) return;
+
+    // 1. Remove from active branches React state
+    const updated = branches.filter((b) => b.id !== branchId);
+    onUpdateBranchNames(updated);
+
+    // 2. Clear branch assignments from any user profiles
+    const updatedUsers = users.map((u) => {
+      if (u.almoxarifados) {
+        return {
+          ...u,
+          almoxarifados: u.almoxarifados.filter(bId => bId !== branchId)
+        };
+      }
+      return u;
+    });
+    setUsers(updatedUsers);
+    localStorage.setItem("acandido_users", JSON.stringify(updatedUsers));
+
+    // 3. Cleanup branch collaborators lists
+    const updatedCollabs = collabList.filter((c) => c.branchId !== branchId);
+    setCollabList(updatedCollabs);
+    localStorage.setItem("acandido_all_collab_profiles", JSON.stringify(updatedCollabs));
+
+    // 4. Cleanup its dynamic calendar references
+    const updatedCalendar = calendarData.filter((c) => c.almoxarifado.toLowerCase() !== branchName.toLowerCase());
+    setCalendarData(updatedCalendar);
+    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCalendar));
+
+    window.dispatchEvent(new Event("storage"));
+    alert(`Almoxarifado "${branchName}" removido com sucesso.`);
   };
 
   // ================= COLABORADORES Unimobin =================
@@ -800,7 +1005,7 @@ export default function AdminConfiguracoes({
       </header>
 
       {/* Inner Tabs Menu */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto scrollbar-hide py-1">
+      <div className="flex flex-wrap border-b border-slate-200 gap-x-2 gap-y-1 py-1 mb-2" id="menus-config-gui">
         <button
           onClick={() => setActiveTab("USUARIOS")}
           className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
@@ -1012,9 +1217,18 @@ export default function AdminConfiguracoes({
       {/* ================= TAB 2: ALMOXARIFADOS ================= */}
       {activeTab === "ALMOXARIFADOS" && (
         <div className="bg-white rounded-xl border border-slate-100 shadow-xs p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider border-b pb-2">Almoxarifados do Grupo</h3>
-            <p className="text-xs text-slate-400 mt-1">Lista completa das unidades que participam do ranqueamento de auditoria preventiva mensal.</p>
+          <div className="flex justify-between items-center pb-2 border-b">
+            <div>
+              <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider">Almoxarifados do Grupo</h3>
+              <p className="text-xs text-slate-400 mt-1">Lista completa das unidades que participam do ranqueamento de auditoria preventiva mensal.</p>
+            </div>
+            <button
+              onClick={() => setShowAddBranchModal(true)}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-[15px]">add_home_work</span>
+              + Novo Almoxarifado
+            </button>
           </div>
 
           <div className="overflow-x-auto text-xs">
@@ -1024,9 +1238,9 @@ export default function AdminConfiguracoes({
                   <th className="p-3">ID</th>
                   <th className="p-3">Nome do Almoxarifado</th>
                   <th className="p-3">Localização Física</th>
-                  <th className="p-3">Grupo</th>
+                  <th className="p-3 bg-slate-50/20 text-center">Grupo</th>
                   <th className="p-3">Supervisor Nominal</th>
-                  <th className="p-3 text-right">Ação</th>
+                  <th className="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1041,7 +1255,7 @@ export default function AdminConfiguracoes({
                       </span>
                     </td>
                     <td className="p-3 font-medium text-slate-600">{b.ownerName}</td>
-                    <td className="p-3 text-right">
+                    <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
                       <button
                         onClick={() => {
                           setEditingBranch(b);
@@ -1050,6 +1264,12 @@ export default function AdminConfiguracoes({
                         className="px-2 py-1 bg-[#1B2A4A] hover:bg-slate-800 text-white rounded text-[11px] font-bold uppercase transition"
                       >
                         Editar Nome
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBranch(b.id, b.name)}
+                        className="px-2 py-1 bg-red-50 text-red-650 hover:bg-red-100 border border-red-150 text-red-650 rounded text-[11px] font-bold uppercase transition"
+                      >
+                        Excluir
                       </button>
                     </td>
                   </tr>
@@ -1216,6 +1436,38 @@ export default function AdminConfiguracoes({
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="border border-slate-200 p-4 rounded-xl space-y-4 bg-slate-50/50 mt-6">
+            <div className="flex items-center gap-2 pb-2 border-b">
+              <span className="material-symbols-outlined text-amber-600 text-[20px]">security</span>
+              <div>
+                <span className="text-xs font-black text-[#1B2A4A] uppercase block font-sans">Permissões Especiais de Usuário (Fernando Silva)</span>
+                <span className="text-[10px] text-slate-400 font-medium">Controle os direitos de alteração e reabertura de registros antigos ou finalizados.</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white border rounded-lg shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-amber-500 text-[22px] shrink-0">history_toggle_off</span>
+                <div>
+                  <span className="text-xs font-bold text-slate-700 block">Edição e reabertura de histórico de garantias</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Permite reabrir, editar e gravar modificações em itens de garantia históricos sem reabrir ciclo completo.</span>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!garantiaConfig.auditorEditHistory}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, auditorEditHistory: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span className="ml-3 text-xs font-black text-emerald-700 w-16">
+                  {garantiaConfig.auditorEditHistory ? "Ativado" : "Desativado"}
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -1709,7 +1961,7 @@ export default function AdminConfiguracoes({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-150">
-                {ALMOXARIFADOS_LIST.map((almox) => {
+                {activeAlmoxNames.map((almox) => {
                   const s1Items = calendarData.filter(d => d.almoxarifado === almox && d.ano === calendarYear && d.semestre === 1).sort((a,b) => a.indice - b.indice);
                   const s2Items = calendarData.filter(d => d.almoxarifado === almox && d.ano === calendarYear && d.semestre === 2).sort((a,b) => a.indice - b.indice);
 
@@ -2017,6 +2269,93 @@ export default function AdminConfiguracoes({
                   className="px-3 py-1.5 bg-[#1B2A4A] text-white text-xs font-black uppercase rounded shadow"
                 >
                   Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ADICIONAR ALMOXARIFADO ================= */}
+      {showAddBranchModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-emerald-600">add_home_work</span>
+              Novo Almoxarifado
+            </h3>
+            <div className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase block">Nome do Almoxarifado</label>
+                <input
+                  type="text"
+                  placeholder="EX: TRANS CG / EXP"
+                  value={newBranchForm.name}
+                  onChange={(e) => setNewBranchForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
+                  className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase block">Localização Física</label>
+                <input
+                  type="text"
+                  placeholder="EX: Campina Grande, PB"
+                  value={newBranchForm.location}
+                  onChange={(e) => setNewBranchForm(prev => ({ ...prev, location: e.target.value }))}
+                  className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase block">Grupo de Ranqueamento</label>
+                  <select
+                    value={newBranchForm.group}
+                    onChange={(e) => setNewBranchForm(prev => ({ ...prev, group: e.target.value as "A" | "B" }))}
+                    className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
+                  >
+                    <option value="A">Grupo A</option>
+                    <option value="B">Grupo B</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase block">Meta Preventiva (%)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={newBranchForm.meta}
+                    onChange={(e) => setNewBranchForm(prev => ({ ...prev, meta: Number(e.target.value) || 80 }))}
+                    className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase block">Supervisor Responsável</label>
+                <input
+                  type="text"
+                  placeholder="Nome do Supervisor"
+                  value={newBranchForm.ownerName}
+                  onChange={(e) => setNewBranchForm(prev => ({ ...prev, ownerName: e.target.value }))}
+                  className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  onClick={() => setShowAddBranchModal(false)}
+                  className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 border rounded-lg transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveNewBranch}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-750 text-white text-xs font-black uppercase rounded-lg shadow-sm transition-all active:scale-95"
+                >
+                  Criar Almoxarifado
                 </button>
               </div>
             </div>

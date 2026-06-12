@@ -33,6 +33,12 @@ export default function AdminEvaluationDetail({
   const [layoutInstructionsInput, setLayoutInstructionsInput] = useState("");
   const [layoutConfigUpdatedCount, setLayoutConfigUpdatedCount] = useState(0);
 
+  // TOP 10 monthly configuration states and helper
+  const [showTop10ConfigModal, setShowTop10ConfigModal] = useState(false);
+  const [top10ItemsInput, setTop10ItemsInput] = useState<{ code: string; description: string; qty: number }[]>([]);
+  const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
+  const [activeLightboxImg, setActiveLightboxImg] = useState<string | null>(null);
+
   const cycleStateParsed = (() => {
     try {
       const saved = localStorage.getItem("acandido_cycle_state_manual");
@@ -92,6 +98,93 @@ export default function AdminEvaluationDetail({
     setLayoutConfigUpdatedCount(prev => prev + 1);
     setShowLayoutConfigModal(false);
     alert("Configuração do LayOut para este almoxarifado salva com sucesso!");
+  };
+
+  const top10Config = (() => {
+    const _dummy = top10ConfigUpdatedCount;
+    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  })();
+
+  const handleOpenTop10Config = () => {
+    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed?.itens && Array.isArray(parsed.itens)) {
+          setTop10ItemsInput(parsed.itens);
+          setShowTop10ConfigModal(true);
+          return;
+        }
+      } catch (e) {}
+    }
+    setTop10ItemsInput([{ code: "", description: "", qty: 1 }]);
+    setShowTop10ConfigModal(true);
+  };
+
+  const handleSaveTop10Config = () => {
+    if (top10ItemsInput.length === 0) {
+      alert("Por favor, adicione pelo menos 1 item na lista antes de salvar.");
+      return;
+    }
+    if (top10ItemsInput.length > 10) {
+      alert("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
+      return;
+    }
+    for (let i = 0; i < top10ItemsInput.length; i++) {
+      const item = top10ItemsInput[i];
+      if (!item.code.trim() || !item.description.trim() || !item.qty) {
+        alert(`Por favor, preencha todos os campos do item Nº ${i + 1}.`);
+        return;
+      }
+    }
+    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
+    localStorage.setItem(key, JSON.stringify({
+      itens: top10ItemsInput.map(it => ({
+        code: it.code.trim(),
+        description: it.description.trim(),
+        qty: Math.max(1, Math.round(Number(it.qty)) || 1)
+      }))
+    }));
+    setTop10ConfigUpdatedCount(prev => prev + 1);
+    setShowTop10ConfigModal(false);
+    window.dispatchEvent(new Event("storage"));
+    alert("Lista de TOP 10 deste mês salva com sucesso e enviada ao almoxarife!");
+  };
+
+  const handleAddTop10Row = () => {
+    if (top10ItemsInput.length >= 10) {
+      alert("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
+      return;
+    }
+    setTop10ItemsInput(prev => [...prev, { code: "", description: "", qty: 1 }]);
+  };
+
+  const handleRemoveTop10Row = (index: number) => {
+    setTop10ItemsInput(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateTop10Row = (index: number, field: "code" | "description" | "qty", value: any) => {
+    setTop10ItemsInput(prev => prev.map((item, idx) => {
+      if (idx === index) {
+        let val = value;
+        if (field === "code") {
+          val = value.toUpperCase();
+        }
+        return {
+          ...item,
+          [field]: val
+        };
+      }
+      return item;
+    }));
   };
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -892,6 +985,32 @@ export default function AdminEvaluationDetail({
                           )}
                         </div>
 
+                        {crit.id === "2" && (
+                          <div className="mt-2 flex flex-col gap-1">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <button
+                                type="button"
+                                disabled={isCycleClosed}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenTop10Config();
+                                }}
+                                className={`inline-flex items-center gap-1 bg-[#1B2A4A] border border-[#1B2A4A]/20 text-white font-black px-2.5 py-1 rounded text-[10px] uppercase hover:opacity-90 transition-all shadow-xs select-none ${
+                                  isCycleClosed ? "opacity-55 cursor-not-allowed text-white/75" : ""
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[12px]">settings</span>
+                                Configurar TOP 10 do Mês
+                              </button>
+                              <span className="text-[10px] text-slate-500 font-mono font-medium">
+                                {top10Config?.itens && top10Config.itens.length > 0
+                                  ? `${top10Config.itens.length} itens configurados para o mês.`
+                                  : "⚠️ Aguardando configuração dos itens do mês"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {crit.id === "4" && (
                           <div className="mt-2 flex flex-col gap-1">
                             <div className="flex flex-wrap gap-2 items-center">
@@ -1439,6 +1558,74 @@ export default function AdminEvaluationDetail({
                     <div className="border border-dashed border-violet-200 bg-white p-2 text-center text-[10px] text-violet-600 rounded font-semibold flex items-center justify-center gap-1">
                       <span className="material-symbols-outlined text-[14px]">photo_library</span>
                       Dados digitados integrados
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SPECIAL FEATURE: SELEÇÃO DE EVIDÊNCIAS DE TOP 10 - CRITÉRIO 2 */}
+              {selectedCriterion.id === "2" && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                  <div>
+                    <span className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-blue-600">star</span>
+                      Configuração do TOP 10 — {branch.name.replace("ALMOXARIFADO ", "")}
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Itens selecionados para auditagem no mês de {cycleStateParsed.activeMonth} {cycleStateParsed.activeYear}.
+                    </p>
+                  </div>
+
+                  {selectedCriterion.auditMode === "Presencial" ? (
+                    <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs font-bold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px]">info</span>
+                      Modo Presencial Ativo. Avalie presencialmente o TOP 10 durante a vistoria no almoxarifado.
+                    </div>
+                  ) : !top10Config?.itens || top10Config.itens.length === 0 ? (
+                    <div className="p-4 bg-white border border-dashed rounded-lg text-center text-xs text-slate-400 font-semibold">
+                      ⚠️ Nenhum item configurado para este mês por enquanto.
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-slate-150 rounded-xl overflow-hidden font-sans">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black text-slate-400 uppercase">
+                            <th className="p-2.5 w-10 text-center">Nº</th>
+                            <th className="p-2.5">Código</th>
+                            <th className="p-2.5">Descrição</th>
+                            <th className="p-2.5 text-center">Qtd</th>
+                            <th className="p-2.5 text-right">Foto</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {top10Config.itens.map((item: any, idx: number) => {
+                            const photo = selectedCriterion.submittedPhotos?.[idx];
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/50">
+                                <td className="p-2.5 text-center font-mono font-bold text-slate-400">{idx + 1}</td>
+                                <td className="p-2.5 font-mono text-slate-700 font-bold">{item.code}</td>
+                                <td className="p-2.5 text-slate-700">{item.description}</td>
+                                <td className="p-2.5 text-center font-mono font-bold text-[#1B2A4A]">{item.qty}º</td>
+                                <td className="p-2.5 text-right">
+                                  {photo ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveLightboxImg(photo)}
+                                      className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-violet-105 bg-violet-100 border border-violet-200 text-violet-700 text-[10px] font-extrabold uppercase rounded hover:bg-violet-200 transition"
+                                    >
+                                      👁 Ver Foto
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-amber-600 font-mono italic">
+                                      Pendente
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -2094,6 +2281,152 @@ export default function AdminEvaluationDetail({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONFIGURAR TOP 10 MODAL */}
+      {showTop10ConfigModal && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 transition-opacity">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#1B2A4A] text-white flex justify-between items-center bg-gradient-to-r from-[#1B2A4A] to-[#21355c]">
+              <div>
+                <p className="text-[9px] font-bold text-[#C8A84B] uppercase tracking-widest font-mono">
+                  PARÂMETROS EXIGIDOS DO CRITÉRIO 02
+                </p>
+                <h4 className="text-sm font-black uppercase tracking-wider leading-tight mt-0.5">⚙ Configurar TOP 10 — {branch.name.replace("ALMOXARIFADO ", "")}</h4>
+              </div>
+              <button
+                onClick={() => setShowTop10ConfigModal(false)}
+                className="text-white hover:text-[#C8A84B] transition-colors font-bold"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <div>
+                <p className="text-xs font-bold text-slate-700">Mês de referência:</p>
+                <p className="text-sm font-black text-indigo-900 font-sans uppercase">{cycleStateParsed.activeMonth} {cycleStateParsed.activeYear}</p>
+                <div className="bg-slate-50 border border-slate-150 p-3.5 rounded-lg text-xs text-slate-500 leading-normal font-medium mt-2">
+                  Adicione os itens que o almoxarife deve fotografar este mês. Cada item exige 1 foto. <strong>Mínimo: 1 item, Máximo: 10 itens</strong>.
+                </div>
+              </div>
+
+              {/* Rows List */}
+              <div className="space-y-2.5 font-sans">
+                {top10ItemsInput.length === 0 ? (
+                  <div className="p-8 border border-dashed text-center text-xs text-slate-400 font-bold rounded-xl bg-slate-50/50">
+                    Nenhum item adicionado. Clique no botão de adicionar abaixo para iniciar a lista do mês.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-12 gap-2 text-[10px] font-black text-slate-400 uppercase font-mono px-2">
+                      <div className="col-span-1 text-center">Nº</div>
+                      <div className="col-span-3">Código do Item</div>
+                      <div className="col-span-5">Descrição</div>
+                      <div className="col-span-2 text-center">Qtd</div>
+                      <div className="col-span-1 text-right"></div>
+                    </div>
+
+                    {top10ItemsInput.map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-slate-50/40 p-2 border rounded-lg hover:border-slate-300 hover:bg-slate-50/75 transition">
+                        <div className="col-span-1 text-center font-mono font-bold text-slate-400 text-xs">
+                          {idx + 1}
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="text"
+                            placeholder="Código"
+                            value={row.code}
+                            onChange={(e) => handleUpdateTop10Row(idx, "code", e.target.value)}
+                            className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-bold font-mono focus:outline-none focus:border-[#1B2A4A]"
+                          />
+                        </div>
+                        <div className="col-span-5">
+                          <input
+                            type="text"
+                            placeholder="Descrição do material"
+                            value={row.description}
+                            onChange={(e) => handleUpdateTop10Row(idx, "description", e.target.value)}
+                            className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#1B2A4A]"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={row.qty}
+                            onChange={(e) => handleUpdateTop10Row(idx, "qty", parseInt(e.target.value) || 1)}
+                            className="w-full border border-slate-200 bg-white rounded-md p-1.5 text-xs text-center text-slate-805 font-bold font-mono focus:outline-none focus:border-[#1B2A4A]"
+                          />
+                        </div>
+                        <div className="col-span-1 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTop10Row(idx)}
+                            className="w-8 h-8 rounded-md hover:bg-red-50 text-rose-600 font-bold flex items-center justify-center transition border border-transparent hover:border-rose-100 cursor-pointer active:scale-90"
+                            title="Remover linha"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add item button */}
+              {top10ItemsInput.length < 10 && (
+                <button
+                  type="button"
+                  onClick={handleAddTop10Row}
+                  className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black uppercase rounded-lg border border-dashed border-indigo-200 flex items-center justify-center gap-1.5 hover:shadow-xs transition select-none"
+                >
+                  <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                  Adicionar item (MÁX. 10 ITENS — {top10ItemsInput.length}/10)
+                </button>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTop10ConfigModal(false)}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-md text-xs font-bold transition hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTop10Config}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-black uppercase shadow transition active:scale-95"
+              >
+                Salvar Configuração
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL SCALE IMAGE AUDIT LIGHTBOX */}
+      {activeLightboxImg && (
+        <div className="fixed inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 z-[99999] transition-all">
+          <div className="relative max-w-xl w-full max-h-[80vh] flex items-center justify-center">
+            <img src={activeLightboxImg} alt="Evidência ampliada" className="max-w-full max-h-[80vh] object-contain rounded-xl border border-slate-800 shadow-2xl" />
+            <button
+              onClick={() => setActiveLightboxImg(null)}
+              className="absolute -top-12 right-0 bg-white text-[#1B2A4A] hover:bg-slate-100 font-extrabold w-10 h-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer"
+              type="button"
+            >
+              ✖
+            </button>
+          </div>
+          <p className="text-white/60 text-xs mt-3 font-mono font-bold">Clique no ✖ acima para fechar a visualização</p>
         </div>
       )}
     </div>

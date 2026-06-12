@@ -154,21 +154,24 @@ export default function AlmoxarifeHome({
 
         <div className="space-y-3">
           {activeCriteria.map((crit) => {
-            const isSpecialCard = crit.id === "7" || crit.id === "9";
+            const isSpecialCard = crit.id === "7" || crit.id === "9" || crit.id === "1";
             if (isSpecialCard) {
-              const tabName = crit.id === "9" ? "Garantias" : "Serviços";
-              let displayStatus = crit.status;
+              const tabName = crit.id === "9" ? "Garantias" : crit.id === "7" ? "Serviços" : "Calendário";
+              const displayStatus = crit.status;
+              const isAguardando = crit.id === "1" && !!crit.isAguardandoRealizacao;
               let statusBadge = "bg-stone-50 text-stone-500 border-stone-200";
               let icon = "hourglass_empty";
 
-              if (displayStatus === "OK") {
+              if (isAguardando) {
+                statusBadge = "bg-[#f1f5f9] text-[#475569] border-[#cbd5e1] font-black";
+                icon = "calendar_today";
+              } else if (displayStatus === "OK") {
                 statusBadge = "bg-emerald-50 text-emerald-700 border-emerald-250 font-black";
                 icon = "check_circle";
               } else if (displayStatus === "NOK") {
                 statusBadge = "bg-rose-50 text-rose-700 border-[#ffccd5] font-black";
                 icon = "cancel";
               } else {
-                displayStatus = "PENDENTE";
                 statusBadge = "bg-amber-50 text-amber-700 border-amber-200 font-extrabold";
                 icon = "pending";
               }
@@ -191,7 +194,7 @@ export default function AlmoxarifeHome({
 
                     <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border leading-none shrink-0 flex items-center gap-1 ${statusBadge}`}>
                       <span className="material-symbols-outlined text-[11px] leading-none">{icon}</span>
-                      {displayStatus === "OK" ? "Conforme" : displayStatus === "NOK" ? "Não Conforme" : "Pendente"}
+                      {isAguardando ? "Aguardando Realização" : displayStatus === "OK" ? "Conforme" : displayStatus === "NOK" ? "Não Conforme" : "Pendente"}
                     </span>
                   </div>
 
@@ -199,20 +202,36 @@ export default function AlmoxarifeHome({
                   <div className="bg-white border border-slate-100 rounded-lg p-2.5 text-[10px] text-slate-500 leading-normal flex items-start gap-1.5">
                     <span className="material-symbols-outlined text-[13px] text-indigo-500 shrink-0 select-none mt-0.5">info</span>
                     <div>
-                      O lançamento deste critério é feito na aba <strong className="font-bold text-[#1B2A4A]">{tabName}</strong>. Aqui você acompanha apenas o resultado da auditoria.
+                      {crit.id === "1" ? (
+                        <span>
+                          Este critério é semestral e obedece ao seu <strong>Calendário de Inventários</strong>. O almoxarife apenas visualiza este item — o Auditor Geral Fernando Silva lançará a nota e evidência no mês agendado.
+                        </span>
+                      ) : (
+                        <span>
+                          O lançamento deste critério é feito na aba <strong className="font-bold text-[#1B2A4A]">{tabName}</strong>. Aqui você acompanha apenas o resultado da auditoria.
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* If OK: Visual confirmation */}
-                  {displayStatus === "OK" && (
+                  {!isAguardando && displayStatus === "OK" && (
                     <div className="bg-emerald-50/40 border border-emerald-100/50 p-2.5 rounded-lg flex items-center gap-2 text-[11px] text-emerald-800 leading-normal font-sans shadow-3xs">
                       <span className="material-symbols-outlined text-[16px] text-emerald-600 shrink-0">verified</span>
-                      <span className="font-medium">Critério conforme! Nota máxima atribuída de <strong className="font-bold font-mono">{crit.pointsPossible}/{crit.pointsPossible} pts</strong>.</span>
+                      <span className="font-medium">Critério conforme! Nota máxima atribuída de <strong className="font-bold font-mono">{crit.pointsPossible}/{crit.pointsPossible} pts</strong> propagada para todo o semestre.</span>
+                    </div>
+                  )}
+
+                  {/* If AGUARDANDO: Friendly indicator */}
+                  {isAguardando && (
+                    <div className="bg-slate-100/50 border border-slate-200/50 p-2.5 rounded-lg flex items-center gap-2 text-[11px] text-slate-800 leading-normal font-sans shadow-3xs">
+                      <span className="material-symbols-outlined text-[16px] text-slate-600 shrink-0">calendar_month</span>
+                      <span className="font-medium shrink-0 max-w-full text-slate-700">{crit.notes || "Aguardando a data do inventário planejado."}</span>
                     </div>
                   )}
 
                   {/* If PENDENTE: Friendly indicator */}
-                  {displayStatus === "PENDENTE" && (
+                  {!isAguardando && displayStatus !== "OK" && displayStatus !== "NOK" && (
                     <div className="bg-amber-50/40 border border-amber-100/50 p-2.5 rounded-lg flex items-center gap-2 text-[11px] text-amber-800 leading-normal font-sans shadow-3xs">
                       <span className="material-symbols-outlined text-[16px] text-amber-600 shrink-0">schedule</span>
                       <span className="font-medium">Aguardando auditoria presencial ou consolidação pelo auditor.</span>

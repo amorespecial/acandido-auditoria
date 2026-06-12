@@ -120,7 +120,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
   
   // Highlighted Treatment Form fields (the only 3 they can modify)
   const [treatmentCodigoMaterial, setTreatmentCodigoMaterial] = useState("");
-  const [treatmentStatus, setTreatmentStatus] = useState<"RESOLVIDO" | "MATERIAL NO ALMOXARIFADO">("RESOLVIDO");
+  const [treatmentStatus, setTreatmentStatus] = useState<"RESOLVIDO" | "MATERIAL NO ALMOXARIFADO" | "COMPRADO, ESPERANDO CHEGAR" | "CIENTE">("RESOLVIDO");
   const [treatmentObs, setTreatmentObs] = useState("");
 
   const persistChange = (updated: MaterialOccurrence[]) => {
@@ -413,14 +413,18 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
                 {/* Actions bottom strip */}
                 {!isPresencial && (
                   <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-4">
-                    <button
-                      onClick={() => handleDeleteOccurrence(occ.id)}
-                      type="button"
-                      className="text-[10px] text-slate-400 hover:text-red-600 font-bold flex items-center gap-0.5 px-2 py-1 rounded transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[13px]">delete</span>
-                      Remover
-                    </button>
+                    {user.role !== "ALMOXARIFE" ? (
+                      <button
+                        onClick={() => handleDeleteOccurrence(occ.id)}
+                        type="button"
+                        className="text-[10px] text-slate-400 hover:text-red-600 font-bold flex items-center gap-0.5 px-2 py-1 rounded transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">delete</span>
+                        Remover
+                      </button>
+                    ) : (
+                      <div />
+                    )}
 
                     {occ.status !== "RESOLVIDO" && (
                       <button
@@ -550,6 +554,8 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
                   >
                     <option value="RESOLVIDO">RESOLVIDO</option>
                     <option value="MATERIAL NO ALMOXARIFADO">MATERIAL NO ALMOXARIFADO</option>
+                    <option value="COMPRADO, ESPERANDO CHEGAR">COMPRADO, ESPERANDO CHEGAR</option>
+                    <option value="CIENTE">CIENTE</option>
                   </select>
                 </div>
 

@@ -63,7 +63,7 @@ export const initialBranches: Branch[] = [
   },
   {
     id: "expresso-nacional",
-    name: "EXPRESSO NACIONAL",
+    name: "TRANS CG",
     location: "Campina Grande, Paraíba",
     currentScore: 80,
     meta: 80,
@@ -331,7 +331,7 @@ export function getCollaboratorsForBranch(branchId?: string, branchName?: string
       names = ["Lucas"];
     } else if (bId.includes("goiana") || bName.includes("goiana")) {
       names = ["Ezequiel", "Leo"];
-    } else if (bId.includes("expresso") || bId.includes("nacional") || bName.includes("nacional")) {
+    } else if (bId.includes("expresso") || bId.includes("nacional") || bName.includes("nacional") || bName.includes("trans") || bName.includes("cg")) {
       names = ["Paulo", "Wegeles", "Vagner"];
     } else if (bId.includes("acandido") || bId.includes("candido") || bName.includes("cândido") || bName.includes("candido")) {
       names = ["Paulo", "Wegeles", "Vagner"];

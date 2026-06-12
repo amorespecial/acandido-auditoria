@@ -89,7 +89,13 @@ export default function AlmoxarifeGarantia({
   const [garantiaConfig, setGarantiaConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("acandido_garantia_fields_config");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.auditorEditHistory === undefined) {
+          parsed.auditorEditHistory = true;
+        }
+        return parsed;
+      }
     } catch {}
     return {
       fabricante: true,
@@ -97,9 +103,14 @@ export default function AlmoxarifeGarantia({
       reference: true,
       pieceObservation: true,
       scrapObservation: true,
+      auditorEditHistory: true,
       customFields: [] as any[]
     };
   });
+
+  const isFernandoSilva = user && (user.name === "Fernando Silva" || user.email === "estoque01jp@gmail.com");
+  const isPermissionActive = garantiaConfig && (garantiaConfig as any).auditorEditHistory !== false;
+  const canFernandoSilvaEditHistory = isFernandoSilva && isPermissionActive;
 
   const [customFormValues, setCustomFormValues] = useState<Record<string, string>>({});
 
@@ -204,9 +215,16 @@ export default function AlmoxarifeGarantia({
     setShowFormModal(true);
   };
 
-  const handleOpenEdit = (item: WarrantyItem) => {
-    if (!isCycleOpen) {
+  const handleOpenEdit = (item: WarrantyItem, isAuditOverride = false) => {
+    const isOverride = isAuditOverride && canFernandoSilvaEditHistory;
+    if (!isCycleOpen && !isOverride) {
       alert("Apenas leitura: Não é possível editar registros pois o ciclo está fechado.");
+      return;
+    }
+    const currentMonthYear = `${activeMonth} ${activeYear}`;
+    const isPastMonth = item.monthYear !== currentMonthYear;
+    if (isPastMonth && !isOverride) {
+      alert("Apenas leitura: Registros de meses anteriores no histórico não podem ser editados.");
       return;
     }
     setEditingItem(item);
@@ -486,28 +504,45 @@ export default function AlmoxarifeGarantia({
                     <td className="p-5 text-center whitespace-nowrap">
                       {!isPresencial ? (
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleOpenEdit(w)}
-                            title="Editar"
-                            className={`p-1.5 rounded transition ${
-                              isCycleOpen
-                                ? "text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-                                : "text-slate-350 cursor-not-allowed"
-                            }`}
-                          >
-                            <span className="material-symbols-outlined text-[18px]">edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteItem(w.id)}
-                            title="Excluir"
-                            className={`p-1.5 rounded transition ${
-                              isCycleOpen
-                                ? "text-red-500 hover:bg-red-50 hover:text-red-700"
-                                : "text-slate-350 cursor-not-allowed"
-                            }`}
-                          >
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </button>
+                          {(!isCycleOpen || w.monthYear !== `${activeMonth} ${activeYear}`) ? (
+                            canFernandoSilvaEditHistory ? (
+                              <button
+                                onClick={() => handleOpenEdit(w, true)}
+                                title="Reabrir / Editar"
+                                className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200 active:scale-95 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-3xs transition-all"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">lock_open</span>
+                                Reabrir / Editar
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-405 font-bold uppercase tracking-wider text-slate-400">Histórico Arquivado</span>
+                            )
+                          ) : (
+                            <React.Fragment>
+                              <button
+                                onClick={() => handleOpenEdit(w)}
+                                title="Editar"
+                                className={`p-1.5 rounded transition ${
+                                  isCycleOpen
+                                    ? "text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                                    : "text-slate-350 cursor-not-allowed"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteItem(w.id)}
+                                title="Excluir"
+                                className={`p-1.5 rounded transition ${
+                                  isCycleOpen
+                                    ? "text-red-500 hover:bg-red-50 hover:text-red-700"
+                                    : "text-slate-350 cursor-not-allowed"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                              </button>
+                            </React.Fragment>
+                          )}
                         </div>
                       ) : (
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Auditoria Local</span>
