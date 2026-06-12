@@ -218,32 +218,23 @@ export default function AlmoxarifeHistorico({
     // Filter real closed entries that belong to this branch
     const realBranchEntries = savedEntries.filter((e) => e.branchId === activeBranch.id);
 
-    // Prepare simulated history months to provide solid historical context from Jan to May 2026
-    const simulatedMonths = [
-      { id: "sim-maio-" + activeBranch.id, monthYear: "Maio 2026", score: 95, nokItems: ["Nível de Serviço"], auditedDetails: "Reclamação de demora crônica no abastecimento de peças essenciais (Kit Embreagem) registrada no módulo." },
-      { id: "sim-abril-" + activeBranch.id, monthYear: "Abril 2026", score: 100, nokItems: [], auditedDetails: "Unidade operou com máxima eficiência. Zero devoluções atrasadas e acuracidade exemplar no inventário rotativo." },
-      { id: "sim-marco-" + activeBranch.id, monthYear: "Março 2026", score: 80, nokItems: ["LayOut", "Curso Unimobin"], auditedDetails: "Auditores identificaram caixas de papelão e ferramentas obstruindo corredores. Equipe com treinamento pendente." },
-      { id: "sim-fev-" + activeBranch.id, monthYear: "Fevereiro 2026", score: 95, nokItems: ["Controle de Garantia"], auditedDetails: "Acúmulo de sucatas de baterias Moura fora da gaiola demarcada no pátio descoberto." },
-      { id: "sim-jan-" + activeBranch.id, monthYear: "Janeiro 2026", score: 100, nokItems: [], auditedDetails: "Ciclo com fechamento semestral concluído com êxito sem nenhuma não conformidade persistente." }
-    ];
-
     // Combine both, avoiding duplicates (in case user re-saves/closes a simulated month)
     const combined: HistoricalReportDetails[] = [];
 
     // First, process real entries saved in localStorage
     realBranchEntries.forEach((entry) => {
       let statusLabel: "Excelente" | "Bom" | "Atenção" | "Alerta" = "Alerta";
-      let badgeClass = "bg-rose-50 text-rose-700 border-rose-200";
+      let badgeClass = "bg-rose-50 text-rose-700 border-rose-200 font-extrabold";
 
       if (entry.score >= 90) {
         statusLabel = "Excelente";
-        badgeClass = "bg-emerald-50 text-emerald-700 border-[#a7f3d0]";
+        badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-250 font-black";
       } else if (entry.score >= 80) {
         statusLabel = "Bom";
-        badgeClass = "bg-cyan-50 text-cyan-700 border-[#bae6fd]";
+        badgeClass = "bg-cyan-50 text-cyan-700 border-cyan-200 font-black";
       } else if (entry.score >= 70) {
         statusLabel = "Atenção";
-        badgeClass = "bg-amber-50 text-amber-700 border-[#fef3c7]";
+        badgeClass = "bg-amber-50 text-amber-700 border-amber-250 font-extrabold";
       }
 
       // Convert stored criteria or generate standard
@@ -270,37 +261,6 @@ export default function AlmoxarifeHistorico({
         auditedDetails: entry.auditedDetails || "Ciclo finalizado de forma positiva e avaliado pelo encarregado de qualidade.",
         criteria: mappedCriteria
       });
-    });
-
-    // Then, append simulated historical entries if they haven't been shadowed by a real closed month
-    simulatedMonths.forEach((sim) => {
-      const isOverwritten = combined.some((e) => e.monthYear === sim.monthYear);
-      if (!isOverwritten) {
-        let statusLabel: "Excelente" | "Bom" | "Atenção" | "Alerta" = "Alerta";
-        let badgeClass = "bg-rose-50 text-rose-700 border-rose-200 font-extrabold";
-
-        if (sim.score >= 90) {
-          statusLabel = "Excelente";
-          badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-250 font-black";
-        } else if (sim.score >= 80) {
-          statusLabel = "Bom";
-          badgeClass = "bg-cyan-50 text-cyan-700 border-cyan-200 font-black";
-        } else if (sim.score >= 70) {
-          statusLabel = "Atenção";
-          badgeClass = "bg-amber-50 text-amber-700 border-amber-250 font-extrabold";
-        }
-
-        combined.push({
-          id: sim.id,
-          monthYear: sim.monthYear,
-          score: sim.score,
-          statusLabel,
-          badgeClass,
-          nokItems: sim.nokItems,
-          auditedDetails: sim.auditedDetails,
-          criteria: reconstructCriteria(sim.score, sim.nokItems)
-        });
-      }
     });
 
     return combined;
@@ -423,81 +383,93 @@ export default function AlmoxarifeHistorico({
           </div>
 
           {/* List of cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {currentHistory.map((report) => {
-              const nokCount = report.nokItems.length;
+          {currentHistory.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-3xs max-w-sm mx-auto space-y-3">
+              <span className="material-symbols-outlined text-[48px] text-slate-400">
+                assignment_late
+              </span>
+              <h3 className="text-sm font-black text-[#1B2A4A] uppercase">📋 Nenhum histórico encontrado</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Nenhum histórico encontrado — aguardando primeiro ciclo encerrado
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {currentHistory.map((report) => {
+                const nokCount = report.nokItems.length;
 
-              return (
-                <div
-                  key={report.id}
-                  className="bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-sm transition-all duration-200 flex flex-col justify-between space-y-4"
-                >
-                  {/* Top line of card */}
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="text-base font-black text-[#1B2A4A] leading-tight font-sans">
-                        {report.monthYear}
-                      </h3>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5" title={activeBranch.name}>
-                        {activeBranch.name.replace("ALMOXARIFADO ", "")}
-                      </p>
-                    </div>
+                return (
+                  <div
+                    key={report.id}
+                    className="bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-sm transition-all duration-200 flex flex-col justify-between space-y-4"
+                  >
+                    {/* Top line of card */}
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="text-base font-black text-[#1B2A4A] leading-tight font-sans">
+                          {report.monthYear}
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5" title={activeBranch.name}>
+                          {activeBranch.name.replace("ALMOXARIFADO ", "")}
+                        </p>
+                      </div>
 
-                    <div className="flex flex-col items-end gap-1.5 shrink-0 select-none">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${report.badgeClass}`}>
-                        {report.statusLabel}
-                      </span>
-                      <span className="text-2xl font-black font-mono text-[#1B2A4A] leading-none">
-                        {report.score} <span className="text-xs font-bold text-slate-400 font-sans">pts</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Summary content / NOKs */}
-                  <div className="text-xs flex-1 space-y-2">
-                    <p className="text-slate-500 font-medium leading-relaxed italic line-clamp-2">
-                      "{report.auditedDetails}"
-                    </p>
-
-                    {nokCount > 0 ? (
-                      <div className="space-y-1 pt-1">
-                        <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider flex items-center gap-1 shrink-0 select-none">
-                          <span className="material-symbols-outlined text-[13px]">report</span>
-                          Pontos de Inconformidade ({nokCount}):
+                      <div className="flex flex-col items-end gap-1.5 shrink-0 select-none">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${report.badgeClass}`}>
+                          {report.statusLabel}
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {report.nokItems.map((item, idx) => (
-                            <span
-                              key={idx}
-                              className="bg-rose-50 border border-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center"
-                            >
-                              {item}
-                            </span>
-                          ))}
-                        </div>
+                        <span className="text-2xl font-black font-mono text-[#1B2A4A] leading-none">
+                          {report.score} <span className="text-xs font-bold text-slate-400 font-sans">pts</span>
+                        </span>
                       </div>
-                    ) : (
-                      <div className="pt-2 text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-1 select-none">
-                        <span className="material-symbols-outlined text-[14px]">verified</span>
-                        Conformidade Absoluta (100% de Nota)
-                      </div>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Action buttons */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end select-none">
-                    <button
-                      onClick={() => setViewingReport(report)}
-                      className="px-4 py-2 bg-slate-50 hover:bg-[#1B2A4A] text-slate-700 hover:text-white border border-slate-200 hover:border-[#1B2A4A] rounded-xl text-xs font-black transition-all flex items-center gap-1.5 uppercase tracking-wider"
-                    >
-                      <span>Ver Relatório Completo</span>
-                      <span className="material-symbols-outlined text-[16px]">trending_up</span>
-                    </button>
+                    {/* Summary content / NOKs */}
+                    <div className="text-xs flex-1 space-y-2">
+                      <p className="text-slate-500 font-medium leading-relaxed italic line-clamp-2">
+                        "{report.auditedDetails}"
+                      </p>
+
+                      {nokCount > 0 ? (
+                        <div className="space-y-1 pt-1">
+                          <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider flex items-center gap-1 shrink-0 select-none">
+                            <span className="material-symbols-outlined text-[13px]">report</span>
+                            Pontos de Inconformidade ({nokCount}):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {report.nokItems.map((item, idx) => (
+                              <span
+                                key={idx}
+                                className="bg-rose-50 border border-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pt-2 text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-1 select-none">
+                          <span className="material-symbols-outlined text-[14px]">verified</span>
+                          Conformidade Absoluta (100% de Nota)
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-end select-none">
+                      <button
+                        onClick={() => setViewingReport(report)}
+                        className="px-4 py-2 bg-slate-50 hover:bg-[#1B2A4A] text-slate-700 hover:text-white border border-slate-200 hover:border-[#1B2A4A] rounded-xl text-xs font-black transition-all flex items-center gap-1.5 uppercase tracking-wider"
+                      >
+                        <span>Ver Relatório Completo</span>
+                        <span className="material-symbols-outlined text-[16px]">trending_up</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         /* ACTIVE CONSOLIDATED DETAIL VIEW (RELATÓRIO COMPLETO) */

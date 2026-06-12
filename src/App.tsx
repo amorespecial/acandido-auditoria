@@ -21,6 +21,41 @@ import AlmoxarifeHistorico from "./components/AlmoxarifeHistorico";
 import SupervisorPanel from "./components/SupervisorPanel";
 
 export default function App() {
+  // Absolute General Reset of demonstration data to prepare for real cycles
+  if (typeof window !== "undefined") {
+    const resetKey = "acandido_general_clean_reset_v9";
+    if (localStorage.getItem(resetKey) !== "true") {
+      const savedUser = localStorage.getItem("acandido_app_user");
+      const savedUsersList = localStorage.getItem("acandido_users");
+      
+      // Clear all mock data keys
+      localStorage.removeItem("acandido_branches");
+      localStorage.removeItem("acandido_history");
+      localStorage.removeItem("acandido_cycle_configs3");
+      localStorage.removeItem("acandido_warranties");
+      localStorage.removeItem("acandido_occurrences");
+      localStorage.removeItem("acandido_cycle_state_manual");
+      localStorage.removeItem("acandido_calendario_inventarios");
+      localStorage.removeItem("acandido_all_collab_profiles");
+      
+      // Remove any branch specific materials parados list
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("acandido_materials_parados_")) {
+          localStorage.removeItem(k);
+        }
+      }
+
+      if (savedUser) localStorage.setItem("acandido_app_user", savedUser);
+      if (savedUsersList) localStorage.setItem("acandido_users", savedUsersList);
+      
+      localStorage.setItem("acandido_localstorage_cleared", "true");
+      localStorage.setItem(resetKey, "true");
+      
+      window.location.reload();
+    }
+  }
+
   const [user, setUser] = useState<AppUser | null>(() => {
     const saved = localStorage.getItem("acandido_app_user");
     return saved ? JSON.parse(saved) : null;
@@ -87,7 +122,7 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<"PAINEL" | "RANKING" | "HISTORICO" | "CONFIGURI">("PAINEL");
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
-  // Centralized cycle state for Fernando Silva (default to ABERTO for Maio 2026 on first load)
+  // Centralized cycle state for Fernando Silva (default to NENHUM for Junho 2026 on first load)
   const [cycleState, setCycleState] = useState<{
     activeMonth: string;
     activeYear: string;
@@ -96,12 +131,15 @@ export default function App() {
     openedBy?: string;
   }>(() => {
     const saved = localStorage.getItem("acandido_cycle_state_manual");
-    return saved ? JSON.parse(saved) : {
-      activeMonth: "Maio",
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {
+      activeMonth: "Junho",
       activeYear: "2026",
-      status: "ABERTO",
-      openedAt: "15/05/2026",
-      openedBy: "Fernando Silva"
+      status: "NENHUM"
     };
   });
 
@@ -113,7 +151,7 @@ export default function App() {
         if (parsed.activeMonth) return parsed.activeMonth;
       } catch (e) {}
     }
-    return "Maio";
+    return "Junho";
   });
 
   const [activeYear, setActiveYear] = useState<string>(() => {
@@ -677,6 +715,41 @@ export default function App() {
     ];
 
     return tempBranches.map((b) => {
+      // Calculate dynamic semester score based strictly on actual closed months in history of the current semester
+      let dynamicSemScore = 0;
+      if (typeof window !== "undefined") {
+        const savedHistVal = localStorage.getItem("acandido_history");
+        if (savedHistVal) {
+          try {
+            const hList = JSON.parse(savedHistVal);
+            if (Array.isArray(hList)) {
+              const activeSemMonths = activeSemestre === 1 
+                ? [1, 2, 3, 4, 5, 6] 
+                : [7, 8, 9, 10, 11, 12];
+              const monthIndices: Record<string, number> = {
+                "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+                "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+              };
+
+              hList.forEach((h: any) => {
+                if (h.branchId === b.id) {
+                  const pts = h.monthYear.split(" ");
+                  if (pts.length >= 2) {
+                    const hYear = parseInt(pts[1]) || 2026;
+                    const hMonthIndex = monthIndices[pts[0].toLowerCase()] || 1;
+                    if (hYear === activeYearNum && activeSemMonths.includes(hMonthIndex)) {
+                      dynamicSemScore += h.score || 0;
+                    }
+                  }
+                }
+              });
+            }
+          } catch (e) {
+            console.error("Error parsing history for dynamicSemScore:", e);
+          }
+        }
+      }
+
       const pair = twinPairs.find((p) => p.includes(b.id));
 
       if (!pair) {
@@ -700,9 +773,13 @@ export default function App() {
         // Round score to multiple of 5
         const finalScore = Math.round(obtained / 5) * 5;
 
+        // Cumulative active evaluation score is only added if cycle is active
+        const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
+
         return {
           ...b,
           currentScore: finalScore,
+          semestralScore: dynamicSemScore + liveActiveScore,
           scoreCategory,
           status,
           maxAuditablePoints: maxAuditable,
@@ -729,10 +806,12 @@ export default function App() {
         else { scoreCategory = "Abaixo da Meta"; status = "NOK"; }
 
         const finalScore = Math.round(obtained / 5) * 5;
+        const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
 
         return {
           ...b,
           currentScore: finalScore,
+          semestralScore: dynamicSemScore + liveActiveScore,
           scoreCategory,
           status,
           maxAuditablePoints: maxAuditable,
@@ -807,11 +886,13 @@ export default function App() {
       else { scoreCategory = "Abaixo da Meta"; status = "NOK"; }
 
       const finalScore = Math.round(obtained / 5) * 5;
+      const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
 
       return {
         ...b,
         criteria: cooperativeCriteria,
         currentScore: finalScore,
+        semestralScore: dynamicSemScore + liveActiveScore,
         scoreCategory,
         status,
         maxAuditablePoints: maxAuditable,
@@ -1041,18 +1122,18 @@ export default function App() {
             {/* Global Manual status badge visible to all */}
             <div className="ml-2">
               {cycleState.status === "ABERTO" && (
-                <span className="hidden md:inline-flex bg-emerald-500/10 border border-emerald-500/35 text-emerald-400 font-extrabold px-2.5 py-1 rounded text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
+                <span className="inline-flex bg-emerald-500/10 border border-emerald-500/35 text-emerald-400 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
                   ● CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
-                <span className="hidden md:inline-flex bg-amber-500/15 border border-amber-500/30 text-amber-500 font-extrabold px-2.5 py-1 rounded text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
+                <span className="inline-flex bg-amber-500/15 border border-amber-500/30 text-amber-500 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
                   ● AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "NENHUM" && (
-                <span className="hidden md:inline-flex bg-[#374151] border border-slate-600 text-slate-350 font-extrabold px-2.5 py-1 rounded text-[10px] uppercase tracking-wider shadow-inner select-none">
-                  ● NENHUM CICLO ATIVO
+                <span className="inline-flex bg-[#374151] border border-slate-600 text-slate-300 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider shadow-inner select-none">
+                  🔘 NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
                 </span>
               )}
             </div>
@@ -1368,60 +1449,94 @@ export default function App() {
         {/* ================= ALMOXARIFE VIEW CONTENT ================= */}
         {user.role === "ALMOXARIFE" && (
           <div className="max-w-md mx-auto relative">
-            {!currentConfig.configured ? (
-              <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
-                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
-                  <span className="material-symbols-outlined text-[36px]">lock_clock</span>
-                </div>
-                <h3 className="text-sm font-black text-[#1B2A4A]">Aguardando abertura do ciclo</h3>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
-                </p>
-                <div className="p-3 bg-rose-50/50 border border-rose-100/50 rounded-xl text-left text-[10px] text-rose-800 leading-normal space-y-1">
-                  <span className="font-bold block mb-1">Passos pendentes:</span>
-                  <p>• Parametrização dos 9 itens críticos do relatório TOP 10.</p>
-                  <p>• Especificação da prateleira/layout físico a ser auditado.</p>
-                  <p>• Transmissão do relatório de saldos da TransNet.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full py-2 bg-slate-100 font-bold hover:bg-slate-200 text-slate-600 text-[11px] rounded-lg transition-all"
-                >
-                  Sair / Voltar para Login
-                </button>
-              </div>
-            ) : activeSubscreen ? (
+            {activeSubscreen ? (
               <>
                 {activeSubscreen === "CONTAGEM_TOP10" && (
-                  <AlmoxarifeContagem
-                    onBack={() => setActiveSubscreen(null)}
-                    onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
-                    criterionState={activeBranch.criteria.find((c) => c.id === "2")}
-                    top10={currentConfig.top10}
-                    branchId={activeBranch.id}
-                    activeMonth={activeMonth}
-                    activeYear={activeYear}
-                  />
+                  !currentConfig.configured ? (
+                    <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
+                      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
+                        <span className="material-symbols-outlined text-[36px]">lock_clock</span>
+                      </div>
+                      <h3 className="text-sm font-black text-[#1B2A4A]">Aguardando abertura do ciclo</h3>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-2 bg-slate-100 font-bold hover:bg-slate-200 text-slate-600 text-[11px] rounded-lg transition-all"
+                      >
+                        Sair / Voltar para Login
+                      </button>
+                    </div>
+                  ) : (
+                    <AlmoxarifeContagem
+                      onBack={() => setActiveSubscreen(null)}
+                      onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
+                      criterionState={activeBranch.criteria.find((c) => c.id === "2")}
+                      top10={currentConfig.top10}
+                      branchId={activeBranch.id}
+                      activeMonth={activeMonth}
+                      activeYear={activeYear}
+                    />
+                  )
                 )}
                 {activeSubscreen === "LAYOUT_ARRANJO" && (
-                  <AlmoxarifeLayout
-                    onBack={() => setActiveSubscreen(null)}
-                    onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
-                    criterionState={activeBranch.criteria.find((c) => c.id === "4")}
-                    branchId={activeBranch.id}
-                    activeMonth={activeMonth}
-                    activeYear={activeYear}
-                  />
+                  !currentConfig.configured ? (
+                    <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
+                      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
+                        <span className="material-symbols-outlined text-[36px]">lock_clock</span>
+                      </div>
+                      <h3 className="text-sm font-black text-[#1B2A4A]">Aguardando abertura do ciclo</h3>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-2 bg-slate-100 font-bold hover:bg-slate-200 text-slate-600 text-[11px] rounded-lg transition-all"
+                      >
+                        Sair / Voltar para Login
+                      </button>
+                    </div>
+                  ) : (
+                    <AlmoxarifeLayout
+                      onBack={() => setActiveSubscreen(null)}
+                      onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
+                      criterionState={activeBranch.criteria.find((c) => c.id === "4")}
+                      branchId={activeBranch.id}
+                      activeMonth={activeMonth}
+                      activeYear={activeYear}
+                    />
+                  )
                 )}
                 {activeSubscreen === "UNIMOBIN_CERTIFICADOS" && (
-                  <AlmoxarifeUnimobin
-                    onBack={() => setActiveSubscreen(null)}
-                    onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
-                    criterionState={activeBranch.criteria.find((c) => c.id === "6")}
-                    branchId={activeBranch.id}
-                    branchName={activeBranch.name}
-                  />
+                  !currentConfig.configured ? (
+                    <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
+                      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
+                        <span className="material-symbols-outlined text-[36px]">lock_clock</span>
+                      </div>
+                      <h3 className="text-sm font-black text-[#1B2A4A]">Aguardando abertura do ciclo</h3>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-2 bg-slate-100 font-bold hover:bg-slate-200 text-slate-600 text-[11px] rounded-lg transition-all"
+                      >
+                        Sair / Voltar para Login
+                      </button>
+                    </div>
+                  ) : (
+                    <AlmoxarifeUnimobin
+                      onBack={() => setActiveSubscreen(null)}
+                      onSubmitEvidence={handleAlmoxarifeSubmitEvidence}
+                      criterionState={activeBranch.criteria.find((c) => c.id === "6")}
+                      branchId={activeBranch.id}
+                      branchName={activeBranch.name}
+                    />
+                  )
                 )}
                 {activeSubscreen === "NIVEL_SERVICO" && (
                   <AlmoxarifeNivelServico
@@ -1445,14 +1560,39 @@ export default function App() {
             ) : (
               <>
                 {almoxarifeTab === "HOME" && (
-                  <AlmoxarifeHome
-                    branch={activeBranch}
-                    allBranches={processedBranches}
-                    user={user}
-                    onNavigateToScreen={(scr) => setActiveSubscreen(scr)}
-                    activeMonth={activeMonth}
-                    activeYear={activeYear}
-                  />
+                  !currentConfig.configured ? (
+                    <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6 col-span-full">
+                      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
+                        <span className="material-symbols-outlined text-[36px]">lock_clock</span>
+                      </div>
+                      <h3 className="text-sm font-black text-[#1B2A4A]">Aguardando abertura do ciclo</h3>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
+                      </p>
+                      <div className="p-3 bg-rose-50/50 border border-rose-100/50 rounded-xl text-left text-[10px] text-rose-800 leading-normal space-y-1">
+                        <span className="font-bold block mb-1">Passos pendentes:</span>
+                        <p>• Parametrização dos 9 itens críticos do relatório TOP 10.</p>
+                        <p>• Especificação da prateleira/layout físico a ser auditado.</p>
+                        <p>• Transmissão do relatório de saldos da TransNet.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-2 bg-slate-100 font-bold hover:bg-slate-200 text-slate-600 text-[11px] rounded-lg transition-all"
+                      >
+                        Sair / Voltar para Login
+                      </button>
+                    </div>
+                  ) : (
+                    <AlmoxarifeHome
+                      branch={activeBranch}
+                      allBranches={processedBranches}
+                      user={user}
+                      onNavigateToScreen={(scr) => setActiveSubscreen(scr)}
+                      activeMonth={activeMonth}
+                      activeYear={activeYear}
+                    />
+                  )
                 )}
                 {almoxarifeTab === "NIVEL_SERVICO" && (
                   <AlmoxarifeNivelServico

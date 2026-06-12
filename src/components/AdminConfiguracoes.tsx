@@ -1927,16 +1927,16 @@ export default function AdminConfiguracoes({
               <span className="font-extrabold text-[#1B2A4A] uppercase">Ano:</span>
               <select
                 value={calendarYear}
-                onChange={(e) => setCalendarYear(parseInt(e.target.value) || 2026)}
+                onChange={(e) => setCalendarYear(Math.max(2026, parseInt(e.target.value) || 2026))}
                 className="border border-slate-200 rounded-lg bg-white px-3 py-1.5 text-xs text-[#1B2A4A] font-black focus:outline-none"
               >
-                {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                {[2026, 2027, 2028, 2029, 2030].map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
               <button
                 type="button"
-                onClick={() => setCalendarYear(prev => prev - 1)}
+                onClick={() => setCalendarYear(prev => Math.max(2026, prev - 1))}
                 className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-bold transition-colors flex items-center gap-1 text-[11px]"
               >
                 <span>&lt; Ano anterior</span>

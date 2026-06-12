@@ -230,7 +230,7 @@ export interface CycleState {
 }
 
 export const dbFetchCycleState = async (): Promise<CycleState> => {
-  const defaultState: CycleState = { activeMonth: "Maio", activeYear: "2026", status: "ABERTO" };
+  const defaultState: CycleState = { activeMonth: "Maio", activeYear: "2026", status: "NENHUM" };
   if (!isSupabaseReady()) {
     const saved = localStorage.getItem("acandido_cycle_state_manual");
     return saved ? JSON.parse(saved) : defaultState;

@@ -46,7 +46,7 @@ export default function AdminPanel({
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
 
-  const years = ["2026", "2025", "2024"];
+  const years = ["2026", "2027", "2028"];
 
   const filteredBranches = branches.filter((b) => {
     if (selectedGroup !== "TODOS" && b.group !== selectedGroup) return false;
@@ -126,7 +126,7 @@ export default function AdminPanel({
               )}
               {cycleState.status === "NENHUM" && (
                 <span className="bg-slate-700/45 border border-slate-600 text-slate-400 font-extrabold px-3 py-1 rounded text-xs select-none">
-                  ● NENHUM CICLO ATIVO NO MOMENTO
+                  🔘 NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
                 </span>
               )}
             </div>
@@ -199,7 +199,7 @@ export default function AdminPanel({
       </section>
 
       {/* Overview stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total de Unidades</p>
           <p className="text-2xl font-black text-[#1B2A4A] mt-1">{filteredBranches.length}</p>
@@ -207,21 +207,39 @@ export default function AdminPanel({
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Aprovadas (OK)</p>
           <p className="text-2xl font-black text-emerald-600 mt-1">
-            {filteredBranches.filter((b) => b.currentScore >= b.meta).length}
+            {filteredBranches.filter((b) => {
+              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+              return hasRegistered && b.currentScore >= b.meta;
+            }).length}
           </p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Abaixo da Meta</p>
           <p className="text-2xl font-black text-red-500 mt-1">
-            {filteredBranches.filter((b) => b.currentScore < b.meta).length}
+            {filteredBranches.filter((b) => {
+              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+              return hasRegistered && b.currentScore < b.meta;
+            }).length}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-amber-100 bg-amber-50/10">
+          <p className="text-[10px] uppercase font-bold tracking-wider text-amber-600">Aguardando Avaliação</p>
+          <p className="text-2xl font-black text-slate-650 text-slate-600 mt-1">
+            {filteredBranches.filter((b) => {
+              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+              return !hasRegistered;
+            }).length}
           </p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
           <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Média de Desempenho</p>
           <p className="text-2xl font-black text-[#C8A84B] mt-1 pr-1 font-mono">
-            {filteredBranches.length > 0
-              ? Math.round((filteredBranches.reduce((acc, b) => acc + b.currentScore, 0) / filteredBranches.length))
-              : 0} pts
+            {(() => {
+              const evaluatedBranches = filteredBranches.filter(b => b.criteria.some(c => c.status === "OK" || c.status === "NOK"));
+              if (evaluatedBranches.length === 0) return "0 pts";
+              const total = evaluatedBranches.reduce((acc, b) => acc + b.currentScore, 0);
+              return `${Math.round(total / evaluatedBranches.length)} pts`;
+            })()}
           </p>
         </div>
       </div>
@@ -322,26 +340,37 @@ export default function AdminPanel({
       {/* Bento grid list of Branches */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredBranches.map((branch) => {
-          let badgeColor = "bg-stone-100 text-stone-700";
-          if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white";
-          if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white";
-          if (branch.status === "NOK") badgeColor = "bg-red-500 text-white";
+          const hasRegisteredEvaluation = branch.criteria.some((c) => c.status === "OK" || c.status === "NOK");
+          const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO").length;
 
-          let scoreTextClass = "text-[#1B2A4A]";
-          let progressBgClass = "bg-[#1B2A4A]";
-
-          if (branch.currentScore >= 85) {
-            scoreTextClass = "text-emerald-600 font-extrabold";
-            progressBgClass = "bg-emerald-500";
-          } else if (branch.currentScore >= 70) {
-            scoreTextClass = "text-amber-500 font-extrabold";
-            progressBgClass = "bg-amber-500";
+          let badgeColor = "bg-stone-150 text-stone-700";
+          let badgeText: string = branch.status;
+          if (hasRegisteredEvaluation) {
+            if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white";
+            if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white";
+            if (branch.status === "NOK") badgeColor = "bg-red-500 text-white";
           } else {
-            scoreTextClass = "text-red-500 font-extrabold";
-            progressBgClass = "bg-red-500";
+            badgeColor = "bg-slate-100 text-slate-500 border border-slate-200 font-black tracking-wide";
+            badgeText = "AGUARDANDO INÍCIO DO CICLO";
           }
 
-          const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO" || c.status === "PENDENTE").length;
+          let scoreTextClass = "text-slate-400 font-medium";
+          let progressBgClass = "bg-slate-200";
+          let progressWidth = 0;
+
+          if (hasRegisteredEvaluation) {
+            progressWidth = Math.min(((branch.pointsObtainedSum ?? branch.currentScore) / (branch.maxAuditablePoints ?? 100)) * 100, 100);
+            if (branch.currentScore >= 85) {
+              scoreTextClass = "text-emerald-600 font-extrabold";
+              progressBgClass = "bg-emerald-500";
+            } else if (branch.currentScore >= 70) {
+              scoreTextClass = "text-amber-500 font-extrabold";
+              progressBgClass = "bg-amber-500";
+            } else {
+              scoreTextClass = "text-red-500 font-extrabold";
+              progressBgClass = "bg-red-500";
+            }
+          }
 
           return (
             <div
@@ -351,38 +380,38 @@ export default function AdminPanel({
               <div>
                 <div className="flex justify-between items-start gap-3 mb-3">
                   <div>
-                    <h3 className="text-sm font-extrabold text-[#1B2A4A] leading-tight group-hover:text-blue-900 transition-colors">
+                    <h3 className="text-sm font-extrabold text-[#1B2A4A] leading-tight group-hover:text-blue-900 transition-colors zoom-in-5">
                       {branch.name}
                     </h3>
                     <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
                       <span className="material-symbols-outlined text-[12px] text-[#C8A84B]">location_on</span>
-                      {branch.location} • <span className="font-extrabold text-slate-600">Grupo {branch.group}</span>
+                      {branch.location} • <span className="font-extrabold text-slate-600 font-mono">Grupo {branch.group}</span>
                     </p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${badgeColor} shrink-0`}>
-                    {branch.status}
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor} shrink-0`}>
+                    {badgeText}
                   </span>
                 </div>
 
                 <div className="flex flex-col items-center justify-center py-4 bg-slate-50/50 rounded-xl mb-4">
-                  <div className="text-3xl font-black text-[#1B2A4A] mb-0.5">
-                    {branch.pointsObtainedSum ?? branch.currentScore}
-                    <span className="text-sm text-slate-400 font-medium">/{branch.maxAuditablePoints ?? 100}</span>
+                  <div className="text-3xl font-black text-[#1B2A4A] mb-0.5 font-mono">
+                    {hasRegisteredEvaluation ? (branch.pointsObtainedSum ?? branch.currentScore) : "0"}
+                    <span className="text-sm text-slate-400 font-normal">/{branch.maxAuditablePoints ?? 75}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <div className="text-[10px] text-slate-450 font-bold uppercase tracking-widest text-slate-400">
                     Nota Mensal
                   </div>
                 </div>
 
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-[11px] font-medium text-slate-500">
-                    <span>{(branch.maxAuditablePoints ?? 100)} pts auditáveis este mês</span>
-                    <span className={scoreTextClass}>{branch.scoreCategory}</span>
+                    <span>{(branch.maxAuditablePoints ?? 75)} pts auditáveis este mês</span>
+                    <span className={scoreTextClass}>{hasRegisteredEvaluation ? branch.scoreCategory : "Sem avaliação"}</span>
                   </div>
                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                     <div
                       className={`${progressBgClass} h-full transition-all duration-550`}
-                      style={{ width: `${Math.min(((branch.pointsObtainedSum ?? branch.currentScore) / (branch.maxAuditablePoints ?? 100)) * 100, 100)}%` }}
+                      style={{ width: `${progressWidth}%` }}
                     ></div>
                   </div>
                 </div>
@@ -392,8 +421,12 @@ export default function AdminPanel({
                 <span className="text-[10px] text-slate-400 font-bold tracking-wide">
                   {pendingCount > 0 ? (
                     <span className="text-amber-500 font-extrabold">🔔 {pendingCount} envios pendentes</span>
-                  ) : (
+                  ) : hasRegisteredEvaluation ? (
                     <span className="text-emerald-600">✓ Tudo avaliado</span>
+                  ) : (
+                    <span className="text-slate-400 font-semibold flex items-center gap-1">
+                      ⏳ Ciclo não avaliado
+                    </span>
                   )}
                 </span>
                 <button

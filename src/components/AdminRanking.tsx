@@ -156,30 +156,64 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       ? Math.round((entry.branches.reduce((sum, b) => sum + b.currentScore, 0) / entry.branches.length) / 5) * 5
       : 80;
 
-    const scoresMap: { [key: string]: number[] } = {
-      robson: [90, 95, 100, 100, 95, activeScore], // Unitrans JP / Santa Maria JP
-      paulo: [70, 75, 75, 80, 80, activeScore], // Trans CG / A.Cândido CG
-      sérgio: [70, 75, 70, 75, 75, activeScore], // Fretamento Jaboatão / Rodoviário Jaboatão
-      ezequiel: [60, 65, 65, 70, 70, activeScore], // Fretamento Goiana
-      raimundo: [80, 80, 80, 85, 85, activeScore], // Almoxarifado Unissana RN
-      joel: [90, 90, 90, 90, 95, activeScore], // Reunidas Transportes NAT
-      lucas: [75, 80, 75, 80, 80, activeScore], // Fretamento PB
-      matheus: [80, 85, 85, 90, 90, activeScore], // Trans CG Bayeux / Rodoviário Cabedelo
-      arline: [60, 60, 60, 60, 65, activeScore] // Fretamento Maracanau / Rodoviário Fortaleza
-    };
+    // Load actual history to build values dynamically
+    let historyEntries: any[] = [];
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("acandido_history");
+      if (saved) {
+        try {
+          historyEntries = JSON.parse(saved);
+          if (!Array.isArray(historyEntries)) historyEntries = [];
+        } catch {
+          historyEntries = [];
+        }
+      }
+    }
 
-    const defaultJan = Math.round((entry.semestralScore / 5) / 5) * 5;
-    const vals = scoresMap[entry.id] || [defaultJan, defaultJan, defaultJan, defaultJan, defaultJan, activeScore];
-    
     const months = currentSemester === 1
       ? ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN"]
       : ["JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
-    return months.map((m, idx) => ({
-      month: m,
-      val: vals[idx]
-    }));
+    const semMonthsMap: { [key: string]: string } = currentSemester === 1
+      ? { "JAN": "Janeiro", "FEV": "Fevereiro", "MAR": "Março", "ABR": "Abril", "MAI": "Maio", "JUN": "Junho" }
+      : { "JUL": "Julho", "AGO": "Agosto", "SET": "Setembro", "OUT": "Outubro", "NOV": "Novembro", "DEZ": "Dezembro" };
+
+    return months.map((m) => {
+      const fullMonthName = semMonthsMap[m];
+
+      // If it is the active cycle month and the cycle is active, we showcase the live score
+      if (cycleStateParsed.status !== "NENHUM" && fullMonthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
+        return { month: m, val: activeScore };
+      }
+
+      // Check if there are closed history records for this specific month/year under this unified entry's branches
+      const branchIds = entry.branches.map(b => b.id);
+      const matchingEntries = historyEntries.filter(
+        (h) => branchIds.includes(h.branchId) && 
+               h.monthYear.toLowerCase().startsWith(fullMonthName.toLowerCase())
+      );
+
+      if (matchingEntries.length > 0) {
+        // Since we combined twin branches' semestral scores as the sum, we sum branch scores for that month too
+        const sumScore = matchingEntries.reduce((sum, h) => sum + (h.score || 0), 0);
+        return { month: m, val: sumScore };
+      }
+
+      // Default: no history and not active month -> 0 pts
+      return { month: m, val: 0 };
+    });
   };
+
+  const hasRealHistory = (() => {
+    try {
+      const saved = localStorage.getItem("acandido_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) && parsed.length > 0;
+      }
+    } catch (e) {}
+    return false;
+  })();
 
   // 1. ================= ALMOXARIFE (CONFIDENTIAL) VIEW =================
   if (user.role === "ALMOXARIFE") {
@@ -189,12 +223,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
     const myEntryIdx = currentList.findIndex(
       (e) => e.ownerName.toLowerCase() === user.ownerName.toLowerCase()
     );
-    const myPos = myEntryIdx !== -1 ? myEntryIdx + 1 : 2;
+    const myPos = hasRealHistory && myEntryIdx !== -1 ? myEntryIdx + 1 : "—";
     const myEntry = currentList[myEntryIdx];
-    const myScore = myEntry ? myEntry.semestralScore : (isGroupA ? 395 : 475);
+    const myScore = hasRealHistory && myEntry ? myEntry.semestralScore : 0;
 
-    const firstPlaceScore = currentList[0]?.semestralScore || (isGroupA ? 540 : 545);
-    const missingPoints = Math.max(0, firstPlaceScore - myScore);
+    const firstPlaceScore = hasRealHistory ? (currentList[0]?.semestralScore || 0) : 0;
+    const missingPoints = hasRealHistory ? Math.max(0, firstPlaceScore - myScore) : 0;
 
     return (
       <div className="max-w-md mx-auto space-y-6">
@@ -998,6 +1032,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         </div>
 
         <div className="space-y-3.5">
+          {!hasRealHistory && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center text-xs font-semibold text-slate-500 animate-pulse">
+               🔘 O ranking será calculado a partir do primeiro ciclo encerrado pelo auditor
+            </div>
+          )}
+
           {currentLeaderboard.map((item, index) => {
             const place = index + 1;
             const isBelowGoal = item.semestralScore < 300;
@@ -1010,11 +1050,11 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
               >
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 flex items-center justify-center font-black text-sm rounded-full shrink-0 ${
-                    place === 1
+                    hasRealHistory && place === 1
                       ? "bg-amber-100 text-amber-800 border border-amber-300 shadow-xs"
                       : "bg-slate-200 text-slate-600"
                   }`}>
-                    {place}º
+                    {hasRealHistory ? `${place}º` : "—"}
                   </div>
                   <div>
                     <h5 className="text-sm font-black text-[#1B2A4A] group-hover:text-amber-600 transition-colors">
@@ -1027,22 +1067,26 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-start gap-4 shrink-0 border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-200/50">
-                  {place === 1 ? (
-                    <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                      Líder
-                    </span>
-                  ) : item.semestralScore < 300 ? (
-                    <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                      🔴 ABAIXO DO MÍNIMO
-                    </span>
-                  ) : item.semestralScore <= 350 ? (
-                    <span className="bg-amber-55 bg-amber-500 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                      ⚠️ ATENÇÃO
-                    </span>
-                  ) : (
-                    <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                      Ativo
-                    </span>
+                  {hasRealHistory && (
+                    <>
+                      {place === 1 ? (
+                        <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                          Líder
+                        </span>
+                      ) : item.semestralScore < 300 ? (
+                        <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
+                          🔴 ABAIXO DO MÍNIMO
+                        </span>
+                      ) : item.semestralScore <= 350 ? (
+                        <span className="bg-amber-55 bg-amber-500 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
+                          ⚠️ ATENÇÃO
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                          Ativo
+                        </span>
+                      )}
+                    </>
                   )}
 
                   <div className="text-right min-w-[130px]">
@@ -1051,6 +1095,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                         {item.semestralScore} <span className="text-[10px] font-normal text-slate-400 font-sans">pts</span>
                       </span>
                       {(() => {
+                        if (!hasRealHistory) return null;
                         const monthlyVals = getHistoricalMonths(item);
                         const activeIdx = Math.max(0, visibleCount - 1);
                         const prevIdx = Math.max(0, activeIdx - 1);
@@ -1075,8 +1120,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                     </div>
                     <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
                       <div
-                        className={`h-full ${item.semestralScore < 300 ? "bg-red-500" : item.semestralScore <= 350 ? "bg-amber-400" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(100, (item.semestralScore / 600) * 100)}%` }}
+                        className={`h-full ${item.semestralScore === 0 ? "bg-transparent" : (item.semestralScore < 300 ? "bg-[#1B2A4A]/70" : (item.semestralScore <= 350 ? "bg-amber-400" : "bg-emerald-500"))}`}
+                        style={{ width: `${item.semestralScore === 0 ? 0 : Math.min(100, (item.semestralScore / 600) * 105)}%` }}
                       ></div>
                     </div>
                   </div>

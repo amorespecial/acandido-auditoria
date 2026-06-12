@@ -232,20 +232,20 @@ const getScheduledInventoryDate = (branchName: string, monthYear: string) => {
 
 const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
   const monthlyScoresMap: Record<string, number[]> = {
-    "unitrans-jp": [50, 50, 50, 45, 45],
-    "santa-maria-jp": [50, 50, 50, 45, 45],
-    "expresso-nacional": [40, 40, 40, 35, 35],
-    "acandido-cg": [40, 40, 40, 35, 35],
-    "fretamento-goiana": [70, 70, 70, 60, 60],
-    "fretamento-jaboatao": [40, 40, 35, 35, 35],
-    "rodoviario-jaboatao": [40, 35, 35, 35, 35],
-    "unissana-rn": [85, 85, 80, 80, 80],
-    "reunidas-nat": [95, 90, 90, 90, 90],
-    "fretamento-pb": [80, 80, 80, 75, 75],
-    "trans-cg-bayeux": [45, 45, 45, 40, 40],
-    "rodoviario-cabedelo": [45, 45, 45, 40, 40],
-    "fretamento-maracanau": [35, 30, 30, 30, 30],
-    "rodoviario-fortaleza": [30, 30, 30, 30, 30],
+    "unitrans-jp": [],
+    "santa-maria-jp": [],
+    "expresso-nacional": [],
+    "acandido-cg": [],
+    "fretamento-goiana": [],
+    "fretamento-jaboatao": [],
+    "rodoviario-jaboatao": [],
+    "unissana-rn": [],
+    "reunidas-nat": [],
+    "fretamento-pb": [],
+    "trans-cg-bayeux": [],
+    "rodoviario-cabedelo": [],
+    "fretamento-maracanau": [],
+    "rodoviario-fortaleza": [],
   };
 
   let savedEntries: any[] = [];
@@ -264,78 +264,8 @@ const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
   // Filter real entries that belong to this branch
   const realBranchEntries = savedEntries.filter((e) => e.branchId === bId);
 
-  // Default simulated months
-  const scores = monthlyScoresMap[bId] || [40, 40, 40, 40, 40];
-  const months = ["Maio 2026", "Abril 2026", "Março 2026", "Fevereiro 2026", "Janeiro 2026"];
-
-  const simulated: AuditHistoryEntry[] = months.map((m, idx) => {
-    const isJan = idx === 4; // Janeiro 2026
-    const score = scores[idx];
-
-    let type: "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral" | "Mensal" = "Mensal";
-    if (isJan) {
-      type = "Avaliação Semestral";
-    } else if (score >= 90) {
-      type = "Excelente";
-    } else if (score >= 80) {
-      type = "Mensal";
-    } else if (score >= 45) {
-      type = "Atenção";
-    } else {
-      type = "Alerta";
-    }
-
-    let nokItems: string[] = [];
-    const missing = 100 - score;
-
-    if (missing > 0) {
-      if (missing === 5) {
-        nokItems = ["Nível de Serviço"];
-      } else if (missing === 10) {
-        nokItems = ["Curso Unimobin"];
-      } else if (missing === 15) {
-        nokItems = ["Curso Unimobin", "Nível de Serviço"];
-      } else if (missing === 20) {
-        nokItems = ["TOP 10"];
-      } else if (missing === 25) {
-        nokItems = ["TOP 10", "Nível de Serviço"];
-      } else if (missing === 30) {
-        nokItems = ["TOP 10", "Curso Unimobin"];
-      } else if (missing === 35) {
-        nokItems = ["TOP 10", "Curso Unimobin", "Nível de Serviço"];
-      } else if (missing === 40) {
-        nokItems = ["Inventário", "TOP 10"];
-      } else if (missing === 45) {
-        nokItems = ["Inventário", "TOP 10", "Nível de Serviço"];
-      } else if (missing === 50) {
-        nokItems = ["Inventário", "TOP 10", "Curso Unimobin"];
-      } else if (missing === 55) {
-        nokItems = ["Inventário", "TOP 10", "Curso Unimobin", "Nível de Serviço"];
-      } else if (missing === 60) {
-        nokItems = ["Inventário", "TOP 10", "Nota Fiscal", "LayOut"];
-      } else if (missing === 65) {
-        nokItems = ["Inventário", "TOP 10", "Nota Fiscal", "LayOut", "Nível de Serviço"];
-      } else if (missing === 70) {
-        nokItems = ["Inventário", "TOP 10", "Nota Fiscal", "LayOut", "Curso Unimobin"];
-      } else {
-        nokItems = ["Inventário", "TOP 10", "Nota Fiscal", "LayOut", "Curso Unimobin"];
-      }
-    }
-
-    let auditedDetails = `Ciclo encerrado e validado em conformidade estrutural.`;
-    if (nokItems.length > 0) {
-      auditedDetails = `Unidade avaliada com inconformidades operacionais pontuais em: ${nokItems.join(", ")}.`;
-    }
-
-    return {
-      id: `h-${bId}-${idx}`,
-      monthYear: m,
-      type,
-      score,
-      nokItems,
-      auditedDetails
-    };
-  });
+  // Default simulated months - cleared to ensure start is empty
+  const simulated: AuditHistoryEntry[] = [];
 
   const combined: AuditHistoryEntry[] = [];
   
@@ -1972,7 +1902,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
             </span>
             <h3 className="text-sm font-black text-[#1B2A4A] uppercase">📋 Nenhum histórico encontrado</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Este almoxarifado ainda não possui ciclos encerrados registrados.
+              Nenhum histórico encontrado — aguardando primeiro ciclo encerrado
             </p>
           </div>
         ) : (
