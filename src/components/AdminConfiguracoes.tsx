@@ -606,10 +606,10 @@ export default function AdminConfiguracoes({
         email: userForm.email.toLowerCase().trim(),
         password: userForm.password,
         ownerName: userForm.name.trim().split(" ")[0],
-        group: userForm.group,
-        almoxarifados: userForm.almoxarifados,
+        group: userForm.role === "ADMIN" ? "A" : userForm.group,
+        almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
         status: "ATIVO" as const,
-        cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : "Supervisor de Manutenção"
+        cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
       };
 
       setUsers(prev => [...prev, newUser]);
@@ -629,10 +629,10 @@ export default function AdminConfiguracoes({
               name: userForm.name.trim(),
               role: userForm.role,
               ownerName: userForm.name.trim().split(" ")[0],
-              group: userForm.group,
-              almoxarifados: userForm.almoxarifados,
+              group: userForm.role === "ADMIN" ? "A" : userForm.group,
+              almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
               password: userForm.password ? userForm.password : u.password,
-              cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : "Supervisor de Manutenção"
+              cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
             };
           }
           return u;
@@ -1146,7 +1146,7 @@ export default function AdminConfiguracoes({
                         </span>
                       </td>
                       <td className="p-3 max-w-[200px] truncate text-slate-600 font-medium">
-                        {isFernando ? (
+                        {u.role === "ADMIN" ? (
                           <span className="italic text-slate-400">Acesso Geral</span>
                         ) : u.almoxarifados && u.almoxarifados.length > 0 ? (
                           u.almoxarifados.map((id) => {
@@ -2155,7 +2155,7 @@ export default function AdminConfiguracoes({
 
               {/* Position and limits configs */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className={userForm.role === "ADMIN" ? "col-span-2" : ""}>
                   <label className="text-[11px] font-black text-slate-400 uppercase block">Perfil *</label>
                   <select
                     value={userForm.role}
@@ -2164,57 +2164,62 @@ export default function AdminConfiguracoes({
                   >
                     <option value="ALMOXARIFE">Almoxarife</option>
                     <option value="SUPERVISOR">Supervisor</option>
+                    <option value="ADMIN">Auditor</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-black text-slate-400 uppercase block">Pontuação / Grupo *</label>
-                  <select
-                    value={userForm.group}
-                    onChange={(e) => setUserForm(prev => ({ ...prev, group: e.target.value as AppUser["group"] }))}
-                    className="w-full border border-slate-200 p-2.5 text-xs font-black rounded-lg focus:outline-[#1B2A4A] mt-1 bg-white"
-                  >
-                    <option value="A">Grupo A - Alto Fluxo</option>
-                    <option value="B">Grupo B - Apoio</option>
-                  </select>
-                </div>
+                {userForm.role !== "ADMIN" && (
+                  <div>
+                    <label className="text-[11px] font-black text-slate-400 uppercase block">Pontuação / Grupo *</label>
+                    <select
+                      value={userForm.group}
+                      onChange={(e) => setUserForm(prev => ({ ...prev, group: e.target.value as AppUser["group"] }))}
+                      className="w-full border border-slate-200 p-2.5 text-xs font-black rounded-lg focus:outline-[#1B2A4A] mt-1 bg-white"
+                    >
+                      <option value="A">Grupo A - Alto Fluxo</option>
+                      <option value="B">Grupo B - Apoio</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Multi Select Almoxarifados */}
-              <div>
-                <label className="text-[11px] font-black text-slate-400 uppercase block mb-1">Almoxarifado(s) Vinculado(s) *</label>
-                <div className="border border-slate-200 rounded-lg p-3 max-h-[160px] overflow-y-auto space-y-1.5 bg-white">
-                  {branches.map(b => {
-                    const isChecked = userForm.almoxarifados.includes(b.id);
-                    return (
-                      <label key={b.id} className="flex items-center gap-2 cursor-pointer select-none py-0.5 text-xs font-medium text-slate-700 hover:text-black">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            if (isChecked) {
-                              setUserForm(prev => ({
-                                ...prev,
-                                almoxarifados: prev.almoxarifados.filter(id => id !== b.id)
-                              }));
-                            } else {
-                              setUserForm(prev => ({
-                                ...prev,
-                                almoxarifados: [...prev.almoxarifados, b.id]
-                              }));
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-slate-300 text-[#1B2A4A] focus:ring-[#1B2A4A]"
-                        />
-                        <span>{b.name}</span>
-                      </label>
-                    );
-                  })}
+              {userForm.role !== "ADMIN" && (
+                <div>
+                  <label className="text-[11px] font-black text-slate-400 uppercase block mb-1">Almoxarifado(s) Vinculado(s) *</label>
+                  <div className="border border-slate-200 rounded-lg p-3 max-h-[160px] overflow-y-auto space-y-1.5 bg-white">
+                    {branches.map(b => {
+                      const isChecked = userForm.almoxarifados.includes(b.id);
+                      return (
+                        <label key={b.id} className="flex items-center gap-2 cursor-pointer select-none py-0.5 text-xs font-medium text-slate-700 hover:text-black">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setUserForm(prev => ({
+                                  ...prev,
+                                  almoxarifados: prev.almoxarifados.filter(id => id !== b.id)
+                                }));
+                              } else {
+                                setUserForm(prev => ({
+                                  ...prev,
+                                  almoxarifados: [...prev.almoxarifados, b.id]
+                                }));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-[#1B2A4A] focus:ring-[#1B2A4A]"
+                          />
+                          <span>{b.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="text-[10px] text-slate-400 block mt-1 leading-normal">
+                    Permite o login e a visibilidade exclusiva destas filiais. Selecione 2 para habilitar tratamento de garagem dupla automaticamente.
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-400 block mt-1 leading-normal">
-                  Permite o login e a visibilidade exclusiva destas filiais. Selecione 2 para habilitar tratamento de garagem dupla automaticamente.
-                </span>
-              </div>
+              )}
 
               <div className="border-t pt-4 flex justify-end gap-2">
                 <button

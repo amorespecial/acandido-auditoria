@@ -108,7 +108,7 @@ export default function AlmoxarifeGarantia({
     };
   });
 
-  const isFernandoSilva = user && (user.name === "Fernando Silva" || user.email === "estoque01jp@gmail.com");
+  const isFernandoSilva = user && (user.role === "ADMIN" || user.name === "Fernando Silva" || user.email === "estoque01jp@gmail.com");
   const isPermissionActive = garantiaConfig && (garantiaConfig as any).auditorEditHistory !== false;
   const canFernandoSilvaEditHistory = isFernandoSilva && isPermissionActive;
 
