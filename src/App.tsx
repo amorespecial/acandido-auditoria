@@ -1338,7 +1338,7 @@ export default function App() {
               <div className="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-lg border border-white/10 text-xs text-white">
                 <span className="hidden md:inline text-[9px] font-black uppercase text-slate-300 tracking-wider">Troca Rápida:</span>
                 <select
-                  value={user ? (user.email === "natalice.auditora@acandidogrupo.com.br" ? "NATALICE" : (user.role === "ADMIN" ? "ADMIN" : user.ownerName)) : "NONE"}
+                  value={user ? (user.email.toLowerCase().trim() === "natalice.auditora@acandidogrupo.com.br" ? "NATALICE" : (user.role === "ADMIN" ? "ADMIN" : user.ownerName)) : "NONE"}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "NONE") {
@@ -1639,6 +1639,7 @@ export default function App() {
                       });
                     }}
                     onArchiveCycle={handleArchiveCycle}
+                    user={user}
                   />
                 )}
                 {adminTab === "CONFIGURI" && (
@@ -1649,6 +1650,7 @@ export default function App() {
                     cycleState={cycleState}
                     onUpdateCycleState={setCycleState}
                     onArchiveCycle={handleArchiveCycle}
+                    user={user}
                   />
                 )}
                 {adminTab === "RANKING" && <AdminRanking user={user} branches={processedBranches} />}

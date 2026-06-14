@@ -261,6 +261,7 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
       }
 
       return {
+        id: u.id,
         name: u.nome,
         email: u.email,
         role,
@@ -285,6 +286,9 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
         // and our local storage has the password, use/keep the local storage password to avoid breaking login!
         if (!merged[idx].password && lu.password) {
           merged[idx].password = lu.password;
+        }
+        if (merged[idx].id) {
+          lu.id = merged[idx].id;
         }
       }
     }
@@ -917,7 +921,7 @@ export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => 
   });
 };
 
-export const dbDeleteUser = async (email: string) => {
+export const dbDeleteUser = async (email: string, id?: any) => {
   // Always remove from local storage first to guarantee immediate success
   const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
   if (saved) {
@@ -946,7 +950,13 @@ export const dbDeleteUser = async (email: string) => {
   // Attempt to delete from Supabase if ready
   if (isSupabaseReady()) {
     try {
-      const { error } = await supabase.from('usuarios').delete().eq('email', email.toLowerCase().trim());
+      let query = supabase.from('usuarios').delete();
+      if (id) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('email', email.toLowerCase().trim());
+      }
+      const { error } = await query;
       if (error) {
         console.warn("Supabase user deletion failed (already deleted from Local Storage):", error);
       }

@@ -67,6 +67,7 @@ interface AdminConfiguracoesProps {
   };
   onUpdateCycleState?: (newState: any) => void;
   onArchiveCycle?: (month: string, year: string, score: number) => void;
+  user?: any;
 }
 
 interface MiniCollaborator {
@@ -81,6 +82,7 @@ export default function AdminConfiguracoes({
   cycleState,
   onUpdateCycleState,
   onArchiveCycle,
+  user,
 }: AdminConfiguracoesProps) {
   const [activeTab, setActiveTab] = useState<"USUARIOS" | "ALMOXARIFADOS" | "COLABORADORES" | "GARANTIAS" | "CICLO" | "SUPERVISOR" | "CRITERIOS" | "INVENTARIOS">("USUARIOS");
 
@@ -784,7 +786,7 @@ export default function AdminConfiguracoes({
     setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== emailToExclude));
 
     if (isSupabaseReady()) {
-      dbDeleteUser(userToExclude.email).then(() => {
+      dbDeleteUser(userToExclude.email, userToExclude.id).then(() => {
         // Safe success check
         alert(`Usuário ${userToExclude.name} excluído com sucesso!`);
         setUserToExclude(null);
@@ -1115,7 +1117,7 @@ export default function AdminConfiguracoes({
       <header className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
         <h2 className="text-xl font-extrabold text-[#1B2A4A] flex items-center gap-2">
           <span className="material-symbols-outlined text-[#C8A84B]">settings</span>
-          Configurações do Auditor Geral — Fernando Silva
+          Configurações do Auditor Geral — {user?.name || "Fernando Silva"}
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           Gerenciamento exclusivo e permanente de usuários, almoxarifados do grupo, lista de colaboradores Unimobin e itens de garantia.
@@ -1561,7 +1563,7 @@ export default function AdminConfiguracoes({
             <div className="flex items-center gap-2 pb-2 border-b">
               <span className="material-symbols-outlined text-amber-600 text-[20px]">security</span>
               <div>
-                <span className="text-xs font-black text-[#1B2A4A] uppercase block font-sans">Permissões Especiais de Usuário (Fernando Silva)</span>
+                <span className="text-xs font-black text-[#1B2A4A] uppercase block font-sans">Permissões Especiais de Usuário ({user?.name || "Fernando Silva"})</span>
                 <span className="text-[10px] text-slate-400 font-medium">Controle os direitos de alteração e reabertura de registros antigos ou finalizados.</span>
               </div>
             </div>
@@ -1640,7 +1642,7 @@ export default function AdminConfiguracoes({
                         activeMonth: cycleMonth,
                         activeYear: cycleYear,
                         status: "ABERTO",
-                        openedBy: "Fernando Silva",
+                        openedBy: user?.name || "Fernando Silva",
                         openedAt: new Date().toLocaleDateString("pt-BR")
                       });
                       alert(`Novo ciclo aberto para ${cycleMonth}/${cycleYear}! Todos os almoxarifes passam a preencher este período.`);
@@ -1702,8 +1704,9 @@ export default function AdminConfiguracoes({
                   disabled={cycleState?.status === "NENHUM" || !onArchiveCycle}
                   onClick={() => {
                     if (!cycleState) return;
-                    const challenge = prompt("Para arquivar e fechar o ciclo permanentemente, digite seu nome completo (Fernando Silva):");
-                    if (challenge !== "Fernando Silva") {
+                    const currentAudName = user?.name || "Fernando Silva";
+                    const challenge = prompt(`Para arquivar e fechar o ciclo permanentemente, digite seu nome completo (${currentAudName}):`);
+                    if (challenge !== currentAudName) {
                       alert("Entrada incorreta. Cancelado.");
                       return;
                     }

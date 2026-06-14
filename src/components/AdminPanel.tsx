@@ -18,6 +18,7 @@ interface AdminPanelProps {
   };
   onUpdateCycleState: (newState: any) => void;
   onArchiveCycle: (month: string, year: string, finalScore: number) => void;
+  user?: any;
 }
 
 export default function AdminPanel({
@@ -30,6 +31,7 @@ export default function AdminPanel({
   cycleState,
   onUpdateCycleState,
   onArchiveCycle,
+  user,
 }: AdminPanelProps) {
   const [selectedGroup, setSelectedGroup] = useState<"TODOS" | "A" | "B">("TODOS");
   const [filterType, setFilterType] = useState<"TODOS" | "OK" | "PENDENTE" | "NOK">("TODOS");
@@ -60,7 +62,7 @@ export default function AdminPanel({
       activeMonth: openForm.month,
       activeYear: openForm.year,
       status: "ABERTO",
-      openedBy: "Fernando Silva",
+      openedBy: user?.name || "Fernando Silva",
       openedAt: new Date().toLocaleDateString("pt-BR")
     });
     // Set filters immediately to look at the initialized month
@@ -72,8 +74,9 @@ export default function AdminPanel({
 
   // Close cycle handler
   const handleCloseAndArchiveCycle = () => {
-    if (challengeNameInput.trim() !== "Fernando Silva") {
-      alert("Para prosseguir, por favor digite corretamente o seu nome: Fernando Silva");
+    const activeAudName = user?.name || "Fernando Silva";
+    if (challengeNameInput.trim().toLowerCase() !== activeAudName.trim().toLowerCase()) {
+      alert(`Para prosseguir, por favor digite corretamente o seu nome: ${activeAudName}`);
       return;
     }
 
@@ -120,7 +123,7 @@ export default function AdminPanel({
                     ● AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
                   </span>
                   <span className="text-[10px] text-slate-350">
-                    Modo avaliação. Envios bloqueados para os almoxarifes. Aguardando revisão de notas de Fernando Silva.
+                    Modo avaliação. Envios bloqueados para os almoxarifes. Aguardando revisão de notas de {cycleState.openedBy || user?.name || "Fernando Silva"}.
                   </span>
                 </>
               )}
@@ -248,7 +251,7 @@ export default function AdminPanel({
         <div>
           <h2 className="text-base font-extrabold text-[#1B2A4A] flex items-center gap-2">
             <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">dashboard</span>
-            Painel Central de Avaliação — Fernando Silva
+            Painel Central de Avaliação — {user?.name || "Fernando Silva"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">Filtros de visualização e busca de relatórios por filial.</p>
         </div>
@@ -526,12 +529,12 @@ export default function AdminPanel({
               </div>
 
               <div className="space-y-1 pt-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase block">Digite o seu nome para confirmar o lacre: Fernando Silva</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase block">Digite o seu nome para confirmar o lacre: {user?.name || "Fernando Silva"}</label>
                 <input
                   type="text"
                   value={challengeNameInput}
                   onChange={(e) => setChallengeNameInput(e.target.value)}
-                  placeholder="Fernando Silva"
+                  placeholder={user?.name || "Fernando Silva"}
                   className="w-full border border-slate-300 p-2.5 text-xs font-bold rounded-lg focus:border-red-500 focus:ring-1 focus:ring-red-500"
                 />
               </div>
@@ -547,9 +550,9 @@ export default function AdminPanel({
                 <button
                   type="button"
                   onClick={handleCloseAndArchiveCycle}
-                  disabled={challengeNameInput.trim() !== "Fernando Silva"}
+                  disabled={challengeNameInput.trim().toLowerCase() !== (user?.name || "Fernando Silva").trim().toLowerCase()}
                   className={`px-4 py-2 text-white text-xs font-black uppercase rounded-lg shadow ${
-                    challengeNameInput.trim() === "Fernando Silva"
+                    challengeNameInput.trim().toLowerCase() === (user?.name || "Fernando Silva").trim().toLowerCase()
                       ? "bg-red-650 bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
                       : "bg-slate-150 text-slate-400 cursor-not-allowed border"
                   }`}

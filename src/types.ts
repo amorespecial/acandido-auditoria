@@ -93,6 +93,7 @@ export interface InventoryItemToCount {
 }
 
 export interface AppUser {
+  id?: any;
   name: string;
   role: "ADMIN" | "ALMOXARIFE" | "SUPERVISOR";
   email: string;
