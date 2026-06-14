@@ -283,13 +283,13 @@ export default function AdminConfiguracoes({
         almoxarifados: []
       },
       {
-        name: "Natalice",
+        name: "Natalice Oliveira",
         role: "ADMIN" as const,
-        email: "natalice.auditora@acandidogrupo.com.br",
-        password: "Natalice@Auditora2026",
-        ownerName: "Natalice",
+        email: "estoquejp@acandidotransportes.com.br",
+        password: "Nathalia1",
+        ownerName: "Natalice Oliveira",
         group: "A" as const,
-        cargo: "Auditora",
+        cargo: "Auditor Geral",
         status: "ATIVO" as const,
         almoxarifados: []
       },
@@ -468,21 +468,11 @@ export default function AdminConfiguracoes({
   }, []);
 
   useEffect(() => {
-    // Check if Natalice is missing from current users, and if so, auto-add her to keep everything updated!
-    const hasNatalice = users.some(u => u.email.toLowerCase().trim() === "natalice.auditora@acandidogrupo.com.br");
-    if (!hasNatalice) {
-      const natalice: AppUser = {
-        name: "Natalice",
-        role: "ADMIN" as const,
-        email: "natalice.auditora@acandidogrupo.com.br",
-        password: "Natalice@Auditora2026",
-        ownerName: "Natalice",
-        group: "A" as const,
-        cargo: "Auditora",
-        status: "ATIVO" as const,
-        almoxarifados: []
-      };
-      setUsers(prev => [natalice, ...prev]);
+    // Filter out Natalice if she remains in the local state, ensuring permanent deletion
+    const filteredUsers = users.filter(u => u.email.toLowerCase().trim() !== "natalice.auditora@acandidogrupo.com.br");
+    if (filteredUsers.length !== users.length) {
+      setUsers(filteredUsers);
+      dbDeleteUser("natalice.auditora@acandidogrupo.com.br").catch(e => console.warn(e));
       return;
     }
 

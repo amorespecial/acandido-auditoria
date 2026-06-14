@@ -1338,7 +1338,11 @@ export default function App() {
               <div className="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-lg border border-white/10 text-xs text-white">
                 <span className="hidden md:inline text-[9px] font-black uppercase text-slate-300 tracking-wider">Troca Rápida:</span>
                 <select
-                  value={user ? (user.email.toLowerCase().trim() === "natalice.auditora@acandidogrupo.com.br" ? "NATALICE" : (user.role === "ADMIN" ? "ADMIN" : user.ownerName)) : "NONE"}
+                  value={user ? (
+                    user.email.toLowerCase().trim() === "estoquejp@acandidotransportes.com.br" ? "NATALICE" : (
+                      user.email.toLowerCase().trim() === "estoque01jp@gmail.com" ? "ADMIN" : user.ownerName
+                    )
+                  ) : "NONE"}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "NONE") {
@@ -1355,10 +1359,10 @@ export default function App() {
                       setActiveSubscreen(null);
                     } else if (val === "NATALICE") {
                       setUser({
-                        name: "Natalice",
+                        name: "Natalice Oliveira",
                         role: "ADMIN",
-                        email: "natalice.auditora@acandidogrupo.com.br",
-                        ownerName: "Natalice",
+                        email: "estoquejp@acandidotransportes.com.br",
+                        ownerName: "Natalice Oliveira",
                         group: "A"
                       });
                       setSelectedBranchId(null);
@@ -1394,7 +1398,7 @@ export default function App() {
                 >
                   <option value="NONE" disabled>-- Escolha um Perfil --</option>
                   <option value="ADMIN">Fernando Silva (Auditor)</option>
-                  <option value="NATALICE">Natalice (Auditora)</option>
+                  <option value="NATALICE">Natalice Oliveira (Auditora)</option>
                   <option value="Robson">Robson (Almoxarife JP/SM)</option>
                   <option value="Paulo">Paulo (Almoxarife CG/EN)</option>
                   <option value="Matheus">Matheus (Almoxarife CG/RC)</option>
