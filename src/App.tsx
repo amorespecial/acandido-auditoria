@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, uploadFile, dbSubmitAlmoxarifeEvidence } from "./supabaseService";
+import { supabase } from "./supabaseClient";
 
 // View components
 import Login from "./components/Login";
@@ -10,6 +11,8 @@ import AdminRanking from "./components/AdminRanking";
 import AdminHistory from "./components/AdminHistory";
 import AdminEvaluationDetail from "./components/AdminEvaluationDetail";
 import AdminConfiguracoes from "./components/AdminConfiguracoes";
+import AdminGarantiasPanel from "./components/AdminGarantiasPanel";
+import AdminServicosPanel from "./components/AdminServicosPanel";
 
 import AlmoxarifeHome from "./components/AlmoxarifeHome";
 import AlmoxarifeContagem from "./components/AlmoxarifeContagem";
@@ -119,7 +122,7 @@ export default function App() {
   });
 
   // Admin routing states
-  const [adminTab, setAdminTab] = useState<"PAINEL" | "RANKING" | "HISTORICO" | "CONFIGURI">("PAINEL");
+  const [adminTab, setAdminTab] = useState<"PAINEL" | "RANKING" | "HISTORICO" | "CONFIGURI" | "GARANTIAS" | "SERVICOS">("PAINEL");
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
   // Centralized cycle state for Fernando Silva (default to NENHUM for Junho 2026 on first load)
@@ -202,6 +205,8 @@ export default function App() {
 
   // Database and LocalStorage Migration States
   const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
+  const [dbConnectionError, setDbConnectionError] = useState(false);
 
   useEffect(() => {
     // Database seeding
@@ -215,6 +220,91 @@ export default function App() {
       setShowMigrationModal(true);
     }
   }, [user]);
+
+  // 1. Initial connection check and cycle load
+  useEffect(() => {
+    const checkConnectionAndLoadCycle = async () => {
+      if (!isSupabaseReady()) {
+        setDbConnectionError(true);
+        return;
+      }
+      try {
+        const { error } = await supabase.from('usuarios').select('id').limit(1);
+        if (error) {
+          console.error("Supabase initial connection error:", error);
+          setDbConnectionError(true);
+        } else {
+          setDbConnectionError(false);
+          try {
+            const dbCycle = await dbFetchCycleState();
+            if (dbCycle && dbCycle.status) {
+              setCycleState(dbCycle);
+            }
+          } catch (cycleErr) {
+            console.error("Failed to load initial cycle state:", cycleErr);
+          }
+        }
+      } catch (err) {
+        console.error("Supabase exception checking connection:", err);
+        setDbConnectionError(true);
+      }
+    };
+    checkConnectionAndLoadCycle();
+  }, []);
+
+  // 2. Realtime Subscriptions for live updates
+  useEffect(() => {
+    if (!isSupabaseReady()) return;
+
+    const cyclesChannel = supabase
+      .channel("realtime-ciclos")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ciclos" },
+        async (payload) => {
+          console.log("Realtime ciclos update received:", payload);
+          try {
+            const dbCycle = await dbFetchCycleState();
+            if (dbCycle) {
+              setCycleState(dbCycle);
+            }
+          } catch (err) {
+            console.error("Error reloading cycle state on realtime payload:", err);
+          }
+        }
+      )
+      .subscribe();
+
+    const evaluationsChannel = supabase
+      .channel("realtime-avaliacoes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "avaliacoes" },
+        () => {
+          console.log("Realtime update on avaliacoes!");
+          setRefetchTrigger(prev => prev + 1);
+        }
+      )
+      .subscribe();
+
+    const submissionsChannel = supabase
+      .channel("realtime-submissions")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "envios_almoxarife" },
+        () => {
+          console.log("Realtime update on envios_almoxarife!");
+          setRefetchTrigger(prev => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(cyclesChannel);
+      supabase.removeChannel(evaluationsChannel);
+      supabase.removeChannel(submissionsChannel);
+    };
+  }, []);
 
   const handleClearLegacyLocalStorage = () => {
     const savedUser = localStorage.getItem("acandido_app_user");
@@ -281,7 +371,7 @@ export default function App() {
     };
 
     fetchEvaluationsFromSupabase();
-  }, [activeMonth, activeYear]);
+  }, [activeMonth, activeYear, refetchTrigger]);
 
   // Sync branches to local storage
   useEffect(() => {
@@ -361,11 +451,23 @@ export default function App() {
     };
   }, [branches, cycleState, cycleConfigs]);
 
-  // Sync cycle state to local storage
+  // Sync cycle state to local storage and Supabase database on changes
   useEffect(() => {
     localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cycleState));
     if (cycleState.activeMonth) setActiveMonth(cycleState.activeMonth);
     if (cycleState.activeYear) setActiveYear(cycleState.activeYear);
+
+    const saveCycleToSupabase = async () => {
+      if (isSupabaseReady()) {
+        try {
+          await dbSaveCycleState(cycleState);
+        } catch (err) {
+          console.error("Failed to sync cycle state to Supabase:", err);
+          setDbConnectionError(true);
+        }
+      }
+    };
+    saveCycleToSupabase();
   }, [cycleState]);
 
   useEffect(() => {
@@ -981,7 +1083,7 @@ export default function App() {
   };
 
   // Almoxarife submit files/evidence to dynamic state
-  const handleAlmoxarifeSubmitEvidence = (criterionId: string, comments: string, photos: string[]) => {
+  const handleAlmoxarifeSubmitEvidence = async (criterionId: string, comments: string, photos: string[]) => {
     if (cycleState.status !== "ABERTO") {
       alert("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
       return;
@@ -992,13 +1094,34 @@ export default function App() {
     const currentBranch = branches.find((b) => b.id === activeBranchId);
     if (!currentBranch) return;
 
+    let processedPhotos = [...photos];
+    if (isSupabaseReady()) {
+      processedPhotos = await Promise.all(
+        photos.map(async (photo, index) => {
+          if (photo.startsWith("data:image")) {
+            try {
+              const ext = photo.split(';')[0].split('/')[1] || 'jpg';
+              const cleanExt = ext.split('+')[0]; // Safe extension
+              const fileName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}.${cleanExt}`;
+              const signedUrl = await uploadFile('evidencias-almoxarife', fileName, photo);
+              return signedUrl;
+            } catch (err) {
+              console.error("Failed to upload submission photo:", err);
+              return photo;
+            }
+          }
+          return photo;
+        })
+      );
+    }
+
     const updatedCriteria = currentBranch.criteria.map((c) => {
       if (c.id === criterionId) {
         return {
           ...c,
           status: "ENVIADO" as const, // Sent to auditor for evaluation review
           evidenceNotes: comments,
-          submittedPhotos: photos,
+          submittedPhotos: processedPhotos,
           submittedAt: new Date().toLocaleDateString("pt-BR"),
         };
       }
@@ -1006,6 +1129,23 @@ export default function App() {
     });
 
     handleUpdateCriteria(activeBranchId, updatedCriteria);
+
+    if (isSupabaseReady()) {
+      try {
+        await dbSubmitAlmoxarifeEvidence(
+          currentBranch.name,
+          activeMonth,
+          activeYear,
+          criterionId,
+          user?.name || "Almoxarife",
+          comments,
+          processedPhotos
+        );
+      } catch (err) {
+        console.error("Failed to insert into envios_almoxarife:", err);
+      }
+    }
+
     alert("Evidência transmitida com sucesso! Fernando Silva receberá uma notificação para auditar seu envio.");
   };
 
@@ -1101,6 +1241,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FBF8FC] flex flex-col font-sans select-none pb-12">
+      {dbConnectionError && (
+        <div className="w-full bg-red-600 text-white font-medium text-center py-3 px-4 text-sm flex items-center justify-center gap-2 shadow-inner z-50">
+          <span>⚠ Erro de conexão com o banco de dados. Tente recarregar a página.</span>
+        </div>
+      )}
       {/* BRAND HEADER & DEMO SWITCHER */}
       <header className="w-full bg-[#1B2A4A] border-b-4 border-[#C8A84B] sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1163,7 +1308,7 @@ export default function App() {
               <div className="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-lg border border-white/10 text-xs text-white">
                 <span className="hidden md:inline text-[9px] font-black uppercase text-slate-300 tracking-wider">Troca Rápida:</span>
                 <select
-                  value={user ? (user.role === "ADMIN" ? "ADMIN" : user.ownerName) : "NONE"}
+                  value={user ? (user.email === "natalice.auditora@acandidogrupo.com.br" ? "NATALICE" : (user.role === "ADMIN" ? "ADMIN" : user.ownerName)) : "NONE"}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "NONE") {
@@ -1174,6 +1319,16 @@ export default function App() {
                         role: "ADMIN",
                         email: "estoque01jp@gmail.com",
                         ownerName: "Fernando Silva",
+                        group: "A"
+                      });
+                      setSelectedBranchId(null);
+                      setActiveSubscreen(null);
+                    } else if (val === "NATALICE") {
+                      setUser({
+                        name: "Natalice",
+                        role: "ADMIN",
+                        email: "natalice.auditora@acandidogrupo.com.br",
+                        ownerName: "Natalice",
                         group: "A"
                       });
                       setSelectedBranchId(null);
@@ -1209,6 +1364,7 @@ export default function App() {
                 >
                   <option value="NONE" disabled>-- Escolha um Perfil --</option>
                   <option value="ADMIN">Fernando Silva (Auditor)</option>
+                  <option value="NATALICE">Natalice (Auditora)</option>
                   <option value="Robson">Robson (Almoxarife JP/SM)</option>
                   <option value="Paulo">Paulo (Almoxarife CG/EN)</option>
                   <option value="Matheus">Matheus (Almoxarife CG/RC)</option>
@@ -1286,6 +1442,32 @@ export default function App() {
               }`}
             >
               Histórico Consolidado
+            </button>
+            <button
+              onClick={() => {
+                setAdminTab("GARANTIAS");
+                setSelectedBranchId(null);
+              }}
+              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+                adminTab === "GARANTIAS"
+                  ? "border-[#1B2A4A] text-[#1B2A4A]"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Garantias
+            </button>
+            <button
+              onClick={() => {
+                setAdminTab("SERVICOS");
+                setSelectedBranchId(null);
+              }}
+              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+                adminTab === "SERVICOS"
+                  ? "border-[#1B2A4A] text-[#1B2A4A]"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Serviços
             </button>
             <button
               onClick={() => {
@@ -1441,6 +1623,8 @@ export default function App() {
                 )}
                 {adminTab === "RANKING" && <AdminRanking user={user} branches={processedBranches} />}
                 {adminTab === "HISTORICO" && <AdminHistory user={user} branches={processedBranches} />}
+                {adminTab === "GARANTIAS" && <AdminGarantiasPanel allBranches={processedBranches} />}
+                {adminTab === "SERVICOS" && <AdminServicosPanel allBranches={processedBranches} />}
               </>
             )}
           </div>

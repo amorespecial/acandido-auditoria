@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
+import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser } from "../supabaseService";
+import { supabase } from "../supabaseClient";
 
 const ALMOXARIFADOS_LIST = [
   "Santa Maria JPA",
@@ -276,6 +278,17 @@ export default function AdminConfiguracoes({
         almoxarifados: []
       },
       {
+        name: "Natalice",
+        role: "ADMIN" as const,
+        email: "natalice.auditora@acandidogrupo.com.br",
+        password: "Natalice@Auditora2026",
+        ownerName: "Natalice",
+        group: "A" as const,
+        cargo: "Auditora",
+        status: "ATIVO" as const,
+        almoxarifados: []
+      },
+      {
         name: "Robson",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadojp@acandidotransportes.com.br",
@@ -411,6 +424,63 @@ export default function AdminConfiguracoes({
   });
 
   useEffect(() => {
+    if (!isSupabaseReady()) return;
+
+    const loadRealtimeUsers = async () => {
+      try {
+        const dbUsers = await dbFetchUsers();
+        if (dbUsers && dbUsers.length > 0) {
+          setUsers(dbUsers);
+        }
+      } catch (err) {
+        console.error("Failed to fetch initial users in AdminConfiguracoes:", err);
+      }
+    };
+
+    loadRealtimeUsers();
+
+    const channel = supabase
+      .channel("live-usuarios-config")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "usuarios" },
+        async () => {
+          try {
+            const dbUsers = await dbFetchUsers();
+            if (dbUsers) {
+              setUsers(dbUsers);
+            }
+          } catch (err) {
+            console.error("Error reloading users in realtime subscription:", err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Check if Natalice is missing from current users, and if so, auto-add her to keep everything updated!
+    const hasNatalice = users.some(u => u.email.toLowerCase().trim() === "natalice.auditora@acandidogrupo.com.br");
+    if (!hasNatalice) {
+      const natalice: AppUser = {
+        name: "Natalice",
+        role: "ADMIN" as const,
+        email: "natalice.auditora@acandidogrupo.com.br",
+        password: "Natalice@Auditora2026",
+        ownerName: "Natalice",
+        group: "A" as const,
+        cargo: "Auditora",
+        status: "ATIVO" as const,
+        almoxarifados: []
+      };
+      setUsers(prev => [natalice, ...prev]);
+      return;
+    }
+
     localStorage.setItem("acandido_users", JSON.stringify(users));
     window.dispatchEvent(new Event("storage"));
   }, [users]);
@@ -612,8 +682,18 @@ export default function AdminConfiguracoes({
         cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
       };
 
-      setUsers(prev => [...prev, newUser]);
-      alert("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
+      if (isSupabaseReady()) {
+        dbSaveUser(newUser).then(() => {
+          setUsers(prev => [...prev, newUser]);
+          alert("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
+        }).catch(err => {
+          console.error("Error creating user:", err);
+          alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
+        });
+      } else {
+        setUsers(prev => [...prev, newUser]);
+        alert("Usuário criado com sucesso!");
+      }
     } else {
       // Edit mode
       if (userForm.password && userForm.password !== userForm.confirmPassword) {
@@ -621,43 +701,63 @@ export default function AdminConfiguracoes({
         return;
       }
 
-      setUsers(prev =>
-        prev.map((u) => {
-          if (u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim()) {
-            return {
-              ...u,
-              name: userForm.name.trim(),
-              role: userForm.role,
-              ownerName: userForm.name.trim().split(" ")[0],
-              group: userForm.role === "ADMIN" ? "A" : userForm.group,
-              almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
-              password: userForm.password ? userForm.password : u.password,
-              cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
-            };
-          }
-          return u;
-        })
-      );
-      alert("Dados do usuário atualizados com sucesso!");
+      const updatedUser: AppUser = {
+        name: userForm.name.trim(),
+        role: userForm.role,
+        email: editingUser.email.toLowerCase().trim(),
+        password: userForm.password ? userForm.password : editingUser.password,
+        ownerName: userForm.name.trim().split(" ")[0],
+        group: userForm.role === "ADMIN" ? "A" : userForm.group,
+        almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
+        status: editingUser.status || "ATIVO",
+        cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
+      };
+
+      if (isSupabaseReady()) {
+        dbSaveUser(updatedUser).then(() => {
+          setUsers(prev =>
+            prev.map((u) => u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim() ? updatedUser : u)
+          );
+          alert("Dados do usuário atualizados com sucesso!");
+        }).catch(err => {
+          console.error("Error updating user:", err);
+          alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
+        });
+      } else {
+        setUsers(prev =>
+          prev.map((u) => u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim() ? updatedUser : u)
+        );
+        alert("Dados do usuário atualizados com sucesso!");
+      }
     }
 
     setShowUserModal(false);
   };
 
-  const handleToggleUserStatus = (user: AppUser) => {
-    const isSuspended = user.status === "SUSPENSO";
-    setUsers(prev =>
-      prev.map((u) => {
-        if (u.email === user.email) {
-          return {
-            ...u,
-            status: isSuspended ? ("ATIVO" as const) : ("SUSPENSO" as const)
-          };
-        }
-        return u;
-      })
-    );
-    alert(isSuspended ? `Acesso do usuário ${user.name} reativado!` : `Acesso do usuário ${user.name} suspenso (login bloqueado)!`);
+  const handleToggleUserStatus = (selectedUser: AppUser) => {
+    const isSuspended = selectedUser.status === "SUSPENSO";
+    const nextStatus = isSuspended ? ("ATIVO" as const) : ("SUSPENSO" as const);
+    const updatedUser: AppUser = {
+      ...selectedUser,
+      status: nextStatus
+    };
+
+    if (isSupabaseReady()) {
+      dbSaveUser(updatedUser).then(() => {
+        setUsers(prev =>
+          prev.map((u) => u.email === selectedUser.email ? updatedUser : u)
+        );
+        alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+      }).catch(err => {
+        console.error("Error toggling user status:", err);
+        alert("⚠ Erro de conexão com o banco de dados.");
+      });
+    } else {
+      setUsers(prev =>
+        prev.map((u) => u.email === selectedUser.email ? updatedUser : u)
+      );
+      alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+    }
   };
 
   const handleRequestExcludeUser = (user: AppUser) => {
@@ -676,9 +776,20 @@ export default function AdminConfiguracoes({
       return;
     }
 
-    setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== userToExclude.email.toLowerCase().trim()));
-    alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
-    setUserToExclude(null);
+    if (isSupabaseReady()) {
+      dbDeleteUser(userToExclude.email).then(() => {
+        setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== userToExclude.email.toLowerCase().trim()));
+        alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
+        setUserToExclude(null);
+      }).catch(err => {
+        console.error("Error deleting user:", err);
+        alert("⚠ Erro de conexão com o banco de dados.");
+      });
+    } else {
+      setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== userToExclude.email.toLowerCase().trim()));
+      alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
+      setUserToExclude(null);
+    }
   };
 
   // ================= ALMOXARIFADOS EDIT & TRANSITIONS =================

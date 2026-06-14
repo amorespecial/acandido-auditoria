@@ -323,6 +323,20 @@ export const dbSaveEvaluation = async (
   const mes = monthNameToNum(mesName);
   const ano = Number(anoStr);
 
+  let finalLinks = evaluation.nokEvidenceLinks || [];
+  if (evaluation.nokEvidenceFileData && evaluation.nokEvidenceFileData.trim().length > 0) {
+    try {
+      const ext = evaluation.nokEvidenceFileType?.split('/')?.[1] || 'jpg';
+      const pathName = `evaluations/${almoxarifado}/${criterionId}_evidence_${Date.now()}.${ext}`;
+      const signedUrl = await uploadFile('evidencias-auditor', pathName, evaluation.nokEvidenceFileData);
+      if (signedUrl) {
+        finalLinks = [...finalLinks, signedUrl];
+      }
+    } catch (e) {
+      console.error("Failed to upload evaluation evidence file to Supabase Storage:", e);
+    }
+  }
+
   await supabase.from('avaliacoes').upsert({
     almoxarifado,
     mes,
@@ -334,7 +348,7 @@ export const dbSaveEvaluation = async (
     avaliado_por: evaluatedBy,
     avaliado_em: new Date().toISOString(),
     descricao_evidencia: evaluation.notes || evaluation.evidenceNotes || "",
-    links_evidencia: evaluation.nokEvidenceLinks || []
+    links_evidencia: finalLinks
   }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
 };
 
@@ -759,4 +773,14 @@ export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => 
     cargo: cargo,
     ativo: true
   });
+};
+
+export const dbDeleteUser = async (email: string) => {
+  if (!isSupabaseReady()) {
+    return;
+  }
+  const { error } = await supabase.from('usuarios').delete().eq('email', email);
+  if (error) {
+    throw error;
+  }
 };

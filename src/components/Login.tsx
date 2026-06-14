@@ -16,6 +16,15 @@ export const OFFICIAL_CREDENTIALS = [
     cargo: "Auditor Geral"
   },
   {
+    name: "Natalice",
+    role: "ADMIN" as const,
+    email: "natalice.auditora@acandidogrupo.com.br",
+    password: "Natalice@Auditora2026",
+    ownerName: "Natalice",
+    group: "A" as const,
+    cargo: "Auditora"
+  },
+  {
     name: "Robson",
     role: "ALMOXARIFE" as const,
     email: "almoxarifadojp@acandidotransportes.com.br",

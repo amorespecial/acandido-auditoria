@@ -574,7 +574,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {hasRealHistory ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT 2 COLUMNS: BLOCO 1 & BLOCO 2 */}
           <div className="lg:col-span-2 space-y-6">
             {/* BLOCO 1 - EVOLUÇÃO MENSAL (GRÁFICO DE LINHA INTERATIVO) */}
@@ -1039,6 +1040,17 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
             </div>
           </div>
         </div>
+        ) : (
+          <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-6 text-center shadow-xs space-y-2">
+            <span className="material-symbols-outlined text-amber-500 text-[28px]">info</span>
+            <p className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">Histórico de Fechamento Inexistente</p>
+            <p className="text-[11px] text-slate-500 font-bold max-w-xl mx-auto leading-normal">
+              Este almoxarifado não possui nenhum ciclo fechado neste semestre. Os blocos de 
+              <strong> Evolução do Semestre, Desempenho por Critério, Destaques Positivos, Pontos de Atenção </strong> 
+              e <strong> Comparativo com a Meta </strong> só serão exibidos a partir do momento em que existir pelo menos 1 ciclo fechado real.
+            </p>
+          </div>
+        )}
 
         {/* BLOCO 6 - RESUMO EXECUTIVO */}
         <section className="bg-gradient-to-br from-[#1B2A4A] to-slate-800 text-white rounded-2xl p-5 lg:p-6 shadow-md border border-white/5 space-y-3.5 relative overflow-hidden font-sans">

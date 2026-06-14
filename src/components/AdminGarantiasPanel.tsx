@@ -1,0 +1,415 @@
+import React, { useState, useEffect } from "react";
+import { WarrantyItem, Branch } from "../types";
+import { dbFetchWarranties } from "../supabaseService";
+
+interface AdminGarantiasPanelProps {
+  branch?: Branch; // If provided, locks down to this specific branch!
+  allBranches: Branch[];
+}
+
+export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarantiasPanelProps) {
+  const [warranties, setWarranties] = useState<WarrantyItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Filters
+  const [selectedAlmoxarifado, setSelectedAlmoxarifado] = useState<string>(branch ? branch.name : "TODOS");
+  const [selectedMonth, setSelectedMonth] = useState<string>("TODOS");
+  const [selectedYear, setSelectedYear] = useState<string>("2026");
+  const [selectedManufacturer, setSelectedManufacturer] = useState<string>("TODOS");
+  const [selectedStatus, setSelectedStatus] = useState<string>("TODOS");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Fetch warranties
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const data = await dbFetchWarranties();
+        setWarranties(data || []);
+      } catch (error) {
+        console.error("Erro ao buscar garantias para auditor:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  // Set selected almoxarifado when branch prop changes
+  useEffect(() => {
+    if (branch) {
+      setSelectedAlmoxarifado(branch.name);
+    }
+  }, [branch]);
+
+  // Translate status with rules:
+  // ✅ Vigente: expireDate > today + 30 days
+  // ⚠ Vencendo: expireDate between today and today + 30 days
+  // ❌ Vencida: expireDate < today
+  const getWarrantyStatus = (expiryDateStr: string) => {
+    if (!expiryDateStr) {
+      return {
+        key: "VENCIDA",
+        label: "❌ Vencida (Sem data)",
+        colorClass: "bg-rose-50 text-rose-700 border-rose-200"
+      };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiry = new Date(expiryDateStr + "T00:00:00");
+    const diffTime = expiry.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return {
+        key: "VENCIDA",
+        label: "❌ Vencida",
+        colorClass: "bg-radial from-rose-50 to-rose-100/60 text-rose-700 border border-rose-200"
+      };
+    } else if (diffDays <= 30) {
+      return {
+        key: "VENCENDO",
+        label: `⚠ Vencendo (${diffDays}d)`,
+        colorClass: "bg-radial from-amber-50 to-amber-100/60 text-amber-700 border border-amber-200"
+      };
+    } else {
+      return {
+        key: "VIGENTE",
+        label: "✅ Vigente",
+        colorClass: "bg-radial from-emerald-50 to-emerald-100/60 text-emerald-700 border border-emerald-200"
+      };
+    }
+  };
+
+  // Extract static list options based on data for dropdown selections
+  const availableAlmoxarifados = Array.from(
+    new Set(warranties.map((w) => w.almoxarifado).filter(Boolean))
+  ).sort();
+
+  const availableManufacturers = Array.from(
+    new Set(warranties.map((w) => w.manufacturer).filter(Boolean))
+  ).sort();
+
+  const availableYears = Array.from(
+    new Set<string>(
+      warranties.map((w) => {
+        if (!w.monthYear) return "";
+        const parts = w.monthYear.split(" ");
+        return parts[1] || "";
+      }).filter(Boolean)
+    )
+  ).sort((a: string, b: string) => b.localeCompare(a)); // Descending years
+
+  // Add current base years as fallback if empty
+  if (!availableYears.includes("2026")) availableYears.push("2026");
+  if (!availableYears.includes("2025")) availableYears.push("2025");
+  availableYears.sort((a: string, b: string) => b.localeCompare(a));
+
+  const monthsList = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
+  // Filtering Logic
+  const filteredWarranties = warranties.filter((w) => {
+    // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.name)
+    const targetAlmox = branch ? branch.name : selectedAlmoxarifado;
+    if (targetAlmox !== "TODOS") {
+      // Normalize comparison to prevent minor spacing differences
+      const normalizedWName = (w.almoxarifado || "").toLowerCase().trim();
+      const normalizedTarget = targetAlmox.toLowerCase().trim();
+      if (!normalizedWName.includes(normalizedTarget) && !normalizedTarget.includes(normalizedWName)) {
+        return false;
+      }
+    }
+
+    // 2. Month-Year Split Filters
+    const splitMy = w.monthYear ? w.monthYear.split(" ") : [];
+    const itemMonth = splitMy[0] || "";
+    const itemYear = splitMy[1] || "";
+
+    if (selectedMonth !== "TODOS" && itemMonth.toLowerCase() !== selectedMonth.toLowerCase()) {
+      return false;
+    }
+
+    if (selectedYear !== "TODOS" && itemYear !== selectedYear) {
+      return false;
+    }
+
+    // 3. Manufacturer Filter
+    if (selectedManufacturer !== "TODOS" && w.manufacturer !== selectedManufacturer) {
+      return false;
+    }
+
+    // 4. Status Filter
+    const calcStatus = getWarrantyStatus(w.expiryDate);
+    if (selectedStatus !== "TODOS" && calcStatus.key !== selectedStatus) {
+      return false;
+    }
+
+    // 5. Free Search Query (item description or code)
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      const codeMatch = (w.itemCode || "").toLowerCase().includes(q);
+      const descMatch = (w.itemDescription || "").toLowerCase().includes(q);
+      const manufacturerMatch = (w.manufacturer || "").toLowerCase().includes(q);
+      if (!codeMatch && !descMatch && !manufacturerMatch) {
+         return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Export CSV Functionality
+  const exportToCSV = () => {
+    if (filteredWarranties.length === 0) {
+      alert("Nenhum registro encontrado para exportar.");
+      return;
+    }
+
+    // Header definition
+    const headers = [
+      "Almoxarifado",
+      "Codigo Item",
+      "Descricao Item",
+      "Fabricante",
+      "Vencimento Garantia",
+      "Data Emissao NF",
+      "Referência",
+      "Registrado Em",
+      "Status"
+    ];
+
+    // CSV rows build map
+    const csvRows = [headers.join(";")];
+
+    for (const w of filteredWarranties) {
+      const statusObj = getWarrantyStatus(w.expiryDate);
+      const statusText = statusObj.label.replace(/✅|⚠|❌/, "").trim();
+      
+      const row = [
+        `"${(w.almoxarifado || "").replace(/"/g, '""')}"`,
+        `"${(w.itemCode || "").replace(/"/g, '""')}"`,
+        `"${(w.itemDescription || "").replace(/"/g, '""')}"`,
+        `"${(w.manufacturer || "").replace(/"/g, '""')}"`,
+        `"${w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : ""}"`,
+        `"${w.nfEmissionDate ? new Date(w.nfEmissionDate + 'T00:00:00').toLocaleDateString("pt-BR") : ""}"`,
+        `"${(w.reference || "").replace(/"/g, '""')}"`,
+        `"${w.lastUpdateDate ? new Date(w.lastUpdateDate + 'T00:00:00').toLocaleDateString("pt-BR") : ""}"`,
+        `"${statusText}"`
+      ];
+      csvRows.push(row.join(";"));
+    }
+
+    // BLOB stream execution
+    const csvContent = "\uFEFF" + csvRows.join("\n"); // prepending UTF-8 BOM
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const filename = branch 
+      ? `garantias-${branch.name.toLowerCase().replace(/\s+/g, "-")}.csv`
+      : "garantias-central-geral.csv";
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden" id="central-garantias-view">
+      {/* Header Banner */}
+      <div className="p-6 bg-radial from-slate-900 via-slate-950/95 to-slate-950 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-lg font-black tracking-tight" id="central-garantias-header-title">Central de Garantias</h2>
+          <p className="text-xs text-slate-300 mt-0.5" id="central-garantias-header-subtitle">
+            {branch 
+              ? `Visão consolidada e controle de todos os registros de garantia para a unidade ${branch.name}`
+              : "Visão consolidada e controle de todos os registros de garantia de todos os almoxarifados"}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={exportToCSV}
+          disabled={filteredWarranties.length === 0}
+          className="bg-[#C8A85B] hover:bg-[#B6964E] text-[#1B2A4A] transition-all disabled:opacity-40 disabled:pointer-events-none px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[16px]">download</span>
+          Exportar CSV
+        </button>
+      </div>
+
+      {/* Control Filters Bar */}
+      <div className="p-5 bg-slate-50 border-b border-slate-100 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {/* Almoxarifado Select (Only editable if no branch prop is supplied) */}
+          {!branch ? (
+            <div>
+              <label className="text-[10px] uppercase font-black tracking-wider text-slate-400">Almoxarifado</label>
+              <select
+                value={selectedAlmoxarifado}
+                onChange={(e) => setSelectedAlmoxarifado(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-705 mt-1 focus:ring-1 focus:ring-[#1B2A4A]"
+              >
+                <option value="TODOS">Todos os Almoxarifados</option>
+                {allBranches.map((b) => (
+                  <option key={b.id} value={b.name}>
+                    {b.name.replace("ALMOXARIFADO ", "")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[10px] uppercase font-black tracking-wider text-slate-400">Almoxarifado</label>
+              <div className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-black text-slate-655 mt-1 select-none">
+                📍 {branch.name.replace("ALMOXARIFADO ", "")}
+              </div>
+            </div>
+          )}
+
+          {/* Month Filter */}
+          <div>
+            <label className="text-[10px] uppercase font-black tracking-wider text-slate-400">Mês do Registro</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-705 mt-1 focus:ring-1 focus:ring-[#1B2A4A]"
+            >
+              <option value="TODOS">Todos os meses</option>
+              {monthsList.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label className="text-[10px] uppercase font-black tracking-wider text-slate-400">Ano</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-705 mt-1 focus:ring-1 focus:ring-[#1B2A4A]"
+            >
+              <option value="TODOS">Todos os anos</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Free search input */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <span className="material-symbols-outlined text-slate-400 text-[18px] absolute left-3.5 top-2.5">search</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por código de item, descrição ou fabricante..."
+              className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs font-semibold focus:outline-none focus:border-[#1B2A4A] shadow-3xs"
+            />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-xs font-bold transition-colors"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content Details */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-16 space-y-3">
+          <div className="w-10 h-10 border-4 border-[#1B2A4A]/20 border-t-[#1B2A4A] rounded-full animate-spin"></div>
+          <span className="text-xs font-bold text-slate-500">Buscando garantias em tempo real...</span>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          {filteredWarranties.length > 0 ? (
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">
+                  {!branch && <th className="p-4 pl-6">Almoxarifado</th>}
+                  <th className="p-4">Item (Código / Nome)</th>
+                  <th className="p-4">Fabricante</th>
+                  <th className="p-4">Garantia Até</th>
+                  <th className="p-4">Registrado Em</th>
+                  <th className="p-4">Registrado Por</th>
+                  <th className="p-4 pr-6 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-semibold bg-white">
+                {filteredWarranties.map((w) => {
+                  const status = getWarrantyStatus(w.expiryDate);
+                  return (
+                    <tr key={w.id} className="hover:bg-slate-50/40 transition-colors">
+                      {!branch && (
+                        <td className="p-4 pl-6 font-bold text-[#1B2A4A]">
+                          {w.almoxarifado ? w.almoxarifado.replace("ALMOXARIFADO ", "") : "—"}
+                        </td>
+                      )}
+                      <td className="p-4">
+                        <div className="font-bold text-slate-900">{w.itemCode}</div>
+                        <div className="text-[10px] text-slate-400 font-medium limit-lines-1" title={w.itemDescription}>
+                          {w.itemDescription || "Sem descrição"}
+                        </div>
+                      </td>
+                      <td className="p-4 text-slate-600 font-bold uppercase">{w.manufacturer || "—"}</td>
+                      <td className="p-4 font-mono font-bold text-slate-800">
+                        {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="p-4 font-mono text-slate-550">
+                        {w.lastUpdateDate ? new Date(w.lastUpdateDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="p-4 text-[11px] text-slate-500 font-normal">
+                        Almoxarife
+                      </td>
+                      <td className="p-4 pr-6 text-center whitespace-nowrap">
+                        <span className={`inline-block px-3 py-1 text-[10px] font-extrabold uppercase rounded-full ${status.colorClass}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center py-20 px-4 space-y-4 bg-slate-50/50">
+              <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400 border border-slate-200 shadow-inner select-none">
+                <span className="material-symbols-outlined text-[28px]">search_off</span>
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-800">Nenhum registro de garantia encontrado</h4>
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-normal">
+                  Não existem garantias registradas para os filtros configurados. Tente alterar ou ampliar suas seleções acima.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Row counter info footer */}
+      {!isLoading && (
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
+          <span className="text-[11px] font-black text-slate-500 uppercase tracking-wide">
+            Total de Registros Encontrados: <strong className="text-[#1B2A4A] text-xs font-black font-mono">{filteredWarranties.length}</strong>
+          </span>
+          <span className="text-[10px] font-medium text-slate-400">
+            * Dados sincronizados diretamente com o banco de dados principal de auditoria.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}

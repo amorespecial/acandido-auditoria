@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
+import AdminGarantiasPanel from "./AdminGarantiasPanel";
+import AdminServicosPanel from "./AdminServicosPanel";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -38,6 +40,7 @@ export default function AdminEvaluationDetail({
   const [top10ItemsInput, setTop10ItemsInput] = useState<{ code: string; description: string; qty: number }[]>([]);
   const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
   const [activeLightboxImg, setActiveLightboxImg] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<"AUDITORIA" | "GARANTIAS" | "SERVICOS">("AUDITORIA");
 
   const cycleStateParsed = (() => {
     try {
@@ -796,7 +799,49 @@ export default function AdminEvaluationDetail({
         </div>
       </header>
 
-      {/* Garagem Dupla info box */}
+      {/* Tabs Selector for Auditor/Local Branch Details */}
+      <div className="flex border-b border-slate-200 bg-slate-100/50 p-1.5 rounded-xl gap-2 select-none">
+        <button
+          type="button"
+          onClick={() => setSubTab("AUDITORIA")}
+          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
+            subTab === "AUDITORIA"
+              ? "bg-[#1B2A4A] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[16px]">fact_check</span>
+          Requisitos de Auditoria
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab("GARANTIAS")}
+          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
+            subTab === "GARANTIAS"
+              ? "bg-[#1B2A4A] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[16px]">shield_checkered</span>
+          Garantias Registradas
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab("SERVICOS")}
+          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
+            subTab === "SERVICOS"
+              ? "bg-[#1B2A4A] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[16px]">build</span>
+          Serviços Registrados
+        </button>
+      </div>
+
+      {subTab === "AUDITORIA" && (
+        <>
+          {/* Garagem Dupla info box */}
       {twinBranch && (
         <div className="bg-indigo-50 border border-indigo-150 p-4 sm:p-5 rounded-xl flex items-start gap-3.5 animate-fade-in shadow-sm">
           <span className="material-symbols-outlined text-indigo-650 text-[24px] shrink-0 mt-0.5">difference</span>
@@ -2412,6 +2457,16 @@ export default function AdminEvaluationDetail({
           </div>
         </div>
       )}
+    </>
+  )}
+
+  {subTab === "GARANTIAS" && (
+    <AdminGarantiasPanel branch={branch} allBranches={allBranches} />
+  )}
+
+  {subTab === "SERVICOS" && (
+    <AdminServicosPanel branch={branch} allBranches={allBranches} />
+  )}
 
       {/* FULL SCALE IMAGE AUDIT LIGHTBOX */}
       {activeLightboxImg && (
