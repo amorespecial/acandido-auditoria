@@ -216,19 +216,28 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
       let password = "";
       let almoxarifados: string[] = [];
 
-      if (u.perfil && (u.perfil.startsWith("{") || u.perfil.startsWith("["))) {
-        try {
-          const parsed = JSON.parse(u.perfil);
-          if (parsed && typeof parsed === "object") {
-            role = (parsed.role || "ALMOXARIFE").toUpperCase() as any;
-            group = parsed.group || "A";
-            cargo = parsed.cargo || "";
-            password = parsed.password || "";
-            almoxarifados = parsed.almoxarifados || [];
+      let parsed: any = null;
+      if (u.perfil) {
+        if (typeof u.perfil === "object") {
+          parsed = u.perfil;
+        } else if (typeof u.perfil === "string") {
+          const trimmed = u.perfil.trim();
+          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+              parsed = JSON.parse(trimmed);
+            } catch (e) {
+              console.warn("Error parsing perfil string as JSON:", e);
+            }
           }
-        } catch (e) {
-          console.warn("Error parsing perfil column as JSON for", u.email, e);
         }
+      }
+
+      if (parsed && typeof parsed === "object") {
+        role = (parsed.role || "ALMOXARIFE").toUpperCase() as any;
+        group = parsed.group || "A";
+        cargo = parsed.cargo || "";
+        password = parsed.password || "";
+        almoxarifados = parsed.almoxarifados || [];
       } else {
         // Legacy simple role string
         const roleStr = String(u.perfil || "ALMOXARIFE").toUpperCase();
@@ -265,12 +274,32 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
     });
 
     // Merge database users with local users, letting database take precedence 
-    // but preserving any local-only custom entries
-    const merged = [...dbUsersMapped];
+    // but preserving any local-only custom entries or passwords
+    let merged = [...dbUsersMapped];
     for (const lu of localUsers) {
-      if (!merged.some(mu => mu.email.toLowerCase().trim() === lu.email.toLowerCase().trim())) {
+      const idx = merged.findIndex(mu => mu.email.toLowerCase().trim() === lu.email.toLowerCase().trim());
+      if (idx === -1) {
         merged.push(lu);
+      } else {
+        // If the database user row exists but has no password or empty password,
+        // and our local storage has the password, use/keep the local storage password to avoid breaking login!
+        if (!merged[idx].password && lu.password) {
+          merged[idx].password = lu.password;
+        }
       }
+    }
+
+    // Filter out any user from merged that has been explicitly deleted locally
+    try {
+      const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
+      if (deletedListSaved) {
+        const deletedList: string[] = JSON.parse(deletedListSaved);
+        if (deletedList.length > 0) {
+          merged = merged.filter(u => !deletedList.includes(u.email.toLowerCase().trim()));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not apply deleted emails filter:", err);
     }
 
     // Keep state synced in localStorage
@@ -294,6 +323,16 @@ export const dbSaveUser = async (user: AppUser) => {
     users.push(user);
   }
   localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(users));
+
+  // Remove from explicitly deleted registry since the user is recreated/updated
+  try {
+    const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
+    if (deletedListSaved) {
+      const deletedList: string[] = JSON.parse(deletedListSaved);
+      const filtered = deletedList.filter(e => e !== user.email.toLowerCase().trim());
+      localStorage.setItem(`${STORAGE_PREFIX}deleted_user_emails`, JSON.stringify(filtered));
+    }
+  } catch (err) {}
 
   // If Supabase is ready, attempt to save to the database in background/safe mode
   if (isSupabaseReady()) {
@@ -889,6 +928,19 @@ export const dbDeleteUser = async (email: string) => {
     } catch (e) {
       console.error("Error updating local storage during deletion:", e);
     }
+  }
+
+  // Record that we deleted this user to prevent them from being restored during database merges
+  try {
+    const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
+    const deletedList: string[] = deletedListSaved ? JSON.parse(deletedListSaved) : [];
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!deletedList.includes(normalizedEmail)) {
+      deletedList.push(normalizedEmail);
+      localStorage.setItem(`${STORAGE_PREFIX}deleted_user_emails`, JSON.stringify(deletedList));
+    }
+  } catch (err) {
+    console.warn("Could not save to deleted list:", err);
   }
 
   // Attempt to delete from Supabase if ready

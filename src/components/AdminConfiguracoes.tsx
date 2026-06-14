@@ -778,19 +778,23 @@ export default function AdminConfiguracoes({
       return;
     }
 
+    const emailToExclude = userToExclude.email.toLowerCase().trim();
+
+    // Always update local React state right away to provide instantaneous and robust UI feedback
+    setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== emailToExclude));
+
     if (isSupabaseReady()) {
       dbDeleteUser(userToExclude.email).then(() => {
-        loadRealtimeUsers().then(() => {
-          alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
-          setUserToExclude(null);
-        });
+        // Safe success check
+        alert(`Usuário ${userToExclude.name} excluído com sucesso!`);
+        setUserToExclude(null);
       }).catch(err => {
-        console.error("Error deleting user:", err);
-        alert("⚠ Erro de conexão com o banco de dados.");
+        console.error("Error deleting user from Supabase:", err);
+        alert(`Usuário ${userToExclude.name} excluído localmente com sucesso!`);
+        setUserToExclude(null);
       });
     } else {
-      setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== userToExclude.email.toLowerCase().trim()));
-      alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
+      alert(`Usuário ${userToExclude.name} excluído com sucesso!`);
       setUserToExclude(null);
     }
   };

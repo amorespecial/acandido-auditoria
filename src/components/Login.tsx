@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AppUser } from "../types";
+import { isSupabaseReady, dbFetchUsers } from "../supabaseService";
 
 interface LoginProps {
   onLogin: (user: AppUser) => void;
@@ -139,8 +140,9 @@ export default function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       setErrorMsg("O e-mail é obrigatório.");
@@ -151,40 +153,65 @@ export default function Login({ onLogin }: LoginProps) {
       return;
     }
 
-    // Retrieve dynamically managed list from local storage with prefilled credentials template as backup
-    const saved = localStorage.getItem("acandido_users");
-    let currentUsersList: any[] = OFFICIAL_CREDENTIALS;
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          currentUsersList = parsed;
+    setIsLoading(true);
+    setErrorMsg("");
+
+    try {
+      // Dynamic loading/validation of database users
+      let currentUsersList: any[] = OFFICIAL_CREDENTIALS;
+      if (isSupabaseReady()) {
+        try {
+          const dbUsers = await dbFetchUsers();
+          if (dbUsers && dbUsers.length > 0) {
+            currentUsersList = dbUsers;
+          }
+        } catch (dbErr) {
+          console.warn("Could not sync users from db on login, using local storage/fallback:", dbErr);
+          const saved = localStorage.getItem("acandido_users");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              currentUsersList = parsed;
+            }
+          }
         }
-      } catch (e) {
-        // Safe catch fallback
-      }
-    }
-
-    const matchedUser = currentUsersList.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password
-    );
-
-    if (matchedUser) {
-      if (matchedUser.status === "SUSPENSO") {
-        setErrorMsg("Acesso suspenso. Entre em contato com o auditor Fernando Silva.");
-        return;
+      } else {
+        const saved = localStorage.getItem("acandido_users");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            currentUsersList = parsed;
+          }
+        }
       }
 
-      onLogin({
-        name: matchedUser.name,
-        role: matchedUser.role,
-        email: matchedUser.email,
-        ownerName: matchedUser.ownerName || matchedUser.name.split(" ")[0],
-        group: matchedUser.group || "A",
-        almoxarifados: matchedUser.almoxarifados || []
-      });
-    } else {
-      setErrorMsg("E-mail ou senha incorretos para os dados oficiais.");
+      const matchedUser = currentUsersList.find(
+        (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password
+      );
+
+      if (matchedUser) {
+        if (matchedUser.status === "SUSPENSO") {
+          setErrorMsg("Acesso suspenso. Entre em contato com o auditor Fernando Silva.");
+          setIsLoading(false);
+          return;
+        }
+
+        onLogin({
+          name: matchedUser.name,
+          role: matchedUser.role,
+          email: matchedUser.email,
+          ownerName: matchedUser.ownerName || matchedUser.name.split(" ")[0],
+          group: matchedUser.group || "A",
+          almoxarifados: matchedUser.almoxarifados || []
+        });
+      } else {
+        setErrorMsg("E-mail ou senha incorretos.");
+      }
+    } catch (err) {
+      console.error("Login verification exception:", err);
+      setErrorMsg("Ocorreu um erro ao realizar o login.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -278,9 +305,20 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full bg-[#1B2A4A] active:bg-[#0E172B] text-white font-semibold py-3 rounded-lg shadow-md hover:opacity-95 active:scale-[0.98] transition-all duration-200 text-sm tracking-wide"
+                disabled={isLoading}
+                className="w-full bg-[#1B2A4A] active:bg-[#0E172B] disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg shadow-md hover:opacity-95 active:scale-[0.98] disabled:scale-100 transition-all duration-200 text-sm tracking-wide flex items-center justify-center gap-2"
               >
-                EFETUAR LOGIN
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    VERIFICANDO...
+                  </>
+                ) : (
+                  "EFETUAR LOGIN"
+                )}
               </button>
             </div>
           </form>
