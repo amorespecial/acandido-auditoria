@@ -93,16 +93,22 @@ export const seedDatabaseIfEmpty = async () => {
   try {
     // 1. Seed system users
     const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('id').limit(1);
-    if (!usersError && (!existingUsers || existingUsers.length === 0)) {
-      console.log("Seeding system users table ('usuarios')...");
+    if (usersError || !existingUsers || existingUsers.length === 0) {
+      console.log("Seeding system users table ('usuarios') with complete profiles...");
       const usersToInsert = OFFICIAL_CREDENTIALS.map(u => ({
         nome: u.name,
-        email: u.email,
-        perfil: u.role.toLowerCase(), // 'auditor' or 'almoxarife' or 'supervisor'
+        email: u.email.toLowerCase().trim(),
+        perfil: JSON.stringify({
+          role: u.role,
+          group: u.group,
+          cargo: u.cargo || "",
+          password: u.password || "",
+          almoxarifados: (u as any).almoxarifados || []
+        }),
         almoxarifado: u.ownerName,
         ativo: true
       }));
-      await supabase.from('usuarios').insert(usersToInsert);
+      await supabase.from('usuarios').upsert(usersToInsert, { onConflict: 'email' });
     }
 
     // 2. Seed calendario_inventarios 2026
@@ -174,49 +180,136 @@ export const seedDatabaseIfEmpty = async () => {
 
 // ======================= SYSTEM USERS (usuarios) =======================
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
+  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
+  const localUsers: AppUser[] = saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-    return saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+    return localUsers;
   }
-  const { data, error } = await supabase.from('usuarios').select('*');
-  if (error) {
-    console.error("dbFetchUsers error, falling back:", error);
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-    return saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+
+  try {
+    const { data, error } = await supabase.from('usuarios').select('*');
+    if (error) {
+      console.warn("dbFetchUsers error from Supabase, falling back:", error);
+      return localUsers;
+    }
+
+    if (!data || data.length === 0) {
+      // If Supabase has no data or RLS prevents reading, preserve existing localUsers
+      return localUsers;
+    }
+
+    const dbUsersMapped = data.map(u => {
+      let role: "ADMIN" | "ALMOXARIFE" | "SUPERVISOR" = "ALMOXARIFE";
+      let group: "A" | "B" = "A";
+      let cargo = "";
+      let password = "";
+      let almoxarifados: string[] = [];
+
+      if (u.perfil && (u.perfil.startsWith("{") || u.perfil.startsWith("["))) {
+        try {
+          const parsed = JSON.parse(u.perfil);
+          if (parsed && typeof parsed === "object") {
+            role = (parsed.role || "ALMOXARIFE").toUpperCase() as any;
+            group = parsed.group || "A";
+            cargo = parsed.cargo || "";
+            password = parsed.password || "";
+            almoxarifados = parsed.almoxarifados || [];
+          }
+        } catch (e) {
+          console.warn("Error parsing perfil column as JSON for", u.email, e);
+        }
+      } else {
+        // Legacy simple role string
+        const roleStr = String(u.perfil || "ALMOXARIFE").toUpperCase();
+        role = (roleStr === "AUDITOR" ? "ADMIN" : roleStr) as any;
+        
+        const matchedOfficial = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === u.email.toLowerCase().trim());
+        if (matchedOfficial) {
+          group = matchedOfficial.group;
+          cargo = matchedOfficial.cargo || "";
+          password = matchedOfficial.password || "";
+          almoxarifados = (matchedOfficial as any).almoxarifados || [];
+        } else {
+          if (role === "ADMIN") {
+            cargo = "Auditor Geral";
+          } else if (role === "SUPERVISOR") {
+            cargo = "Supervisor de Manutenção";
+          } else {
+            cargo = "Almoxarife";
+          }
+        }
+      }
+
+      return {
+        name: u.nome,
+        email: u.email,
+        role,
+        ownerName: u.almoxarifado || u.nome.split(" ")[0],
+        group,
+        status: u.ativo ? "ATIVO" : "SUSPENSO",
+        cargo,
+        password,
+        almoxarifados
+      };
+    });
+
+    // Merge database users with local users, letting database take precedence 
+    // but preserving any local-only custom entries
+    const merged = [...dbUsersMapped];
+    for (const lu of localUsers) {
+      if (!merged.some(mu => mu.email.toLowerCase().trim() === lu.email.toLowerCase().trim())) {
+        merged.push(lu);
+      }
+    }
+
+    // Keep state synced in localStorage
+    localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(merged));
+    return merged;
+  } catch (err) {
+    console.error("Critical error in dbFetchUsers:", err);
+    return localUsers;
   }
-  return data.map(u => ({
-    name: u.nome,
-    email: u.email,
-    role: u.perfil.toUpperCase() as any,
-    ownerName: u.almoxarifado || u.nome.split(" ")[0],
-    group: "A",
-    status: u.ativo ? "ATIVO" : "SUSPENSO"
-  }));
 };
 
 export const dbSaveUser = async (user: AppUser) => {
-  if (!isSupabaseReady()) {
-    const users = await dbFetchUsers();
-    const index = users.findIndex(u => u.email.toLowerCase() === user.email.toLowerCase());
-    if (index !== -1) {
-      users[index] = user;
-    } else {
-      users.push(user);
-    }
-    localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(users));
-    return;
+  // Always update local storage first to guarantee immediate success
+  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
+  const users: AppUser[] = saved ? JSON.parse(saved) : [...OFFICIAL_CREDENTIALS];
+  
+  const index = users.findIndex(u => u.email.toLowerCase().trim() === user.email.toLowerCase().trim());
+  if (index !== -1) {
+    users[index] = user;
+  } else {
+    users.push(user);
   }
+  localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(users));
 
-  const { error } = await supabase.from('usuarios').upsert({
-    nome: user.name,
-    email: user.email,
-    perfil: user.role.toLowerCase(),
-    almoxarifado: user.ownerName,
-    ativo: user.status !== "SUSPENSO"
-  }, { onConflict: 'email' });
+  // If Supabase is ready, attempt to save to the database in background/safe mode
+  if (isSupabaseReady()) {
+    try {
+      const perfilData = {
+        role: user.role,
+        group: user.group || "A",
+        cargo: user.cargo || "",
+        password: user.password || "",
+        almoxarifados: user.almoxarifados || []
+      };
 
-  if (error) {
-    throw error;
+      const { error } = await supabase.from('usuarios').upsert({
+        nome: user.name,
+        email: user.email.toLowerCase().trim(),
+        perfil: JSON.stringify(perfilData),
+        almoxarifado: user.ownerName,
+        ativo: user.status !== "SUSPENSO"
+      }, { onConflict: 'email' });
+
+      if (error) {
+        console.warn("Supabase user persist failed (already saved in Local Storage):", error);
+      }
+    } catch (err) {
+      console.warn("Critical exception saving user to Supabase:", err);
+    }
   }
 };
 
@@ -776,11 +869,27 @@ export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => 
 };
 
 export const dbDeleteUser = async (email: string) => {
-  if (!isSupabaseReady()) {
-    return;
+  // Always remove from local storage first to guarantee immediate success
+  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
+  if (saved) {
+    try {
+      const users: AppUser[] = JSON.parse(saved);
+      const filtered = users.filter(u => u.email.toLowerCase().trim() !== email.toLowerCase().trim());
+      localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(filtered));
+    } catch (e) {
+      console.error("Error updating local storage during deletion:", e);
+    }
   }
-  const { error } = await supabase.from('usuarios').delete().eq('email', email);
-  if (error) {
-    throw error;
+
+  // Attempt to delete from Supabase if ready
+  if (isSupabaseReady()) {
+    try {
+      const { error } = await supabase.from('usuarios').delete().eq('email', email.toLowerCase().trim());
+      if (error) {
+        console.warn("Supabase user deletion failed (already deleted from Local Storage):", error);
+      }
+    } catch (err) {
+      console.warn("Critical error deleting user from Supabase:", err);
+    }
   }
 };

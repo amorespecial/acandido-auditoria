@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, uploadFile, dbSubmitAlmoxarifeEvidence } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers } from "./supabaseService";
 import { supabase } from "./supabaseClient";
 
 // View components
@@ -243,6 +243,15 @@ export default function App() {
           } catch (cycleErr) {
             console.error("Failed to load initial cycle state:", cycleErr);
           }
+          try {
+            const dbUsers = await dbFetchUsers();
+            if (dbUsers) {
+              localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
+              window.dispatchEvent(new Event("storage"));
+            }
+          } catch (usersErr) {
+            console.error("Failed to load initial users in App.tsx:", usersErr);
+          }
         }
       } catch (err) {
         console.error("Supabase exception checking connection:", err);
@@ -299,10 +308,31 @@ export default function App() {
       )
       .subscribe();
 
+    const usersChannel = supabase
+      .channel("realtime-usuarios")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "usuarios" },
+        async (payload) => {
+          console.log("Realtime update on usuarios table received:", payload);
+          try {
+            const dbUsers = await dbFetchUsers();
+            if (dbUsers) {
+              localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
+              window.dispatchEvent(new Event("storage"));
+            }
+          } catch (err) {
+            console.error("Error reloading users on database change:", err);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(cyclesChannel);
       supabase.removeChannel(evaluationsChannel);
       supabase.removeChannel(submissionsChannel);
+      supabase.removeChannel(usersChannel);
     };
   }, []);
 

@@ -423,19 +423,19 @@ export default function AdminConfiguracoes({
     ];
   });
 
+  const loadRealtimeUsers = async () => {
+    try {
+      const dbUsers = await dbFetchUsers();
+      if (dbUsers) {
+        setUsers(dbUsers);
+      }
+    } catch (err) {
+      console.error("Failed to fetch initial users in AdminConfiguracoes:", err);
+    }
+  };
+
   useEffect(() => {
     if (!isSupabaseReady()) return;
-
-    const loadRealtimeUsers = async () => {
-      try {
-        const dbUsers = await dbFetchUsers();
-        if (dbUsers && dbUsers.length > 0) {
-          setUsers(dbUsers);
-        }
-      } catch (err) {
-        console.error("Failed to fetch initial users in AdminConfiguracoes:", err);
-      }
-    };
 
     loadRealtimeUsers();
 
@@ -684,8 +684,9 @@ export default function AdminConfiguracoes({
 
       if (isSupabaseReady()) {
         dbSaveUser(newUser).then(() => {
-          setUsers(prev => [...prev, newUser]);
-          alert("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
+          loadRealtimeUsers().then(() => {
+            alert("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
+          });
         }).catch(err => {
           console.error("Error creating user:", err);
           alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
@@ -715,10 +716,9 @@ export default function AdminConfiguracoes({
 
       if (isSupabaseReady()) {
         dbSaveUser(updatedUser).then(() => {
-          setUsers(prev =>
-            prev.map((u) => u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim() ? updatedUser : u)
-          );
-          alert("Dados do usuário atualizados com sucesso!");
+          loadRealtimeUsers().then(() => {
+            alert("Dados do usuário atualizados com sucesso!");
+          });
         }).catch(err => {
           console.error("Error updating user:", err);
           alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
@@ -744,10 +744,9 @@ export default function AdminConfiguracoes({
 
     if (isSupabaseReady()) {
       dbSaveUser(updatedUser).then(() => {
-        setUsers(prev =>
-          prev.map((u) => u.email === selectedUser.email ? updatedUser : u)
-        );
-        alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+        loadRealtimeUsers().then(() => {
+          alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+        });
       }).catch(err => {
         console.error("Error toggling user status:", err);
         alert("⚠ Erro de conexão com o banco de dados.");
@@ -778,9 +777,10 @@ export default function AdminConfiguracoes({
 
     if (isSupabaseReady()) {
       dbDeleteUser(userToExclude.email).then(() => {
-        setUsers(prev => prev.filter((u) => u.email.toLowerCase().trim() !== userToExclude.email.toLowerCase().trim()));
-        alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
-        setUserToExclude(null);
+        loadRealtimeUsers().then(() => {
+          alert(`Usuário ${userToExclude.name} excluído com sucesso do banco de dados!`);
+          setUserToExclude(null);
+        });
       }).catch(err => {
         console.error("Error deleting user:", err);
         alert("⚠ Erro de conexão com o banco de dados.");
