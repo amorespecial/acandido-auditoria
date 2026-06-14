@@ -1,12 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 
 // Retrieve Supabase URL and Key from environment variables.
-// Use type casting to prevent TypeScript compilation issues with import.meta in some configurations.
-const meta = import.meta as any;
-const env = meta.env || {};
+// Use direct import.meta.env lines to allow Vite's bundler to perform static replacement during production build.
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://placeholder-project-id.supabase.co";
 
-const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project-id.supabase.co";
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_key";
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_key";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
