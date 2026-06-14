@@ -181,7 +181,17 @@ export const seedDatabaseIfEmpty = async () => {
 // ======================= SYSTEM USERS (usuarios) =======================
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
   const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-  const localUsers: AppUser[] = saved ? JSON.parse(saved) : OFFICIAL_CREDENTIALS;
+  let localUsers: AppUser[] = OFFICIAL_CREDENTIALS;
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        localUsers = parsed;
+      }
+    } catch (e) {
+      console.warn("Error parsing saved users in dbFetchUsers:", e);
+    }
+  }
 
   if (!isSupabaseReady()) {
     return localUsers;

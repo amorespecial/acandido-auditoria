@@ -157,7 +157,7 @@ export default function Login({ onLogin }: LoginProps) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           currentUsersList = parsed;
         }
       } catch (e) {
