@@ -153,7 +153,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
   const getHistoricalMonths = (entry: UnifiedEntry) => {
     // Current active month is the dynamic/active month, calculated from the average of its branches' currentScores
     const activeScore = entry.branches.length > 0
-      ? Math.round((entry.branches.reduce((sum, b) => sum + b.currentScore, 0) / entry.branches.length) / 5) * 5
+      ? entry.branches.reduce((sum, b) => sum + b.currentScore, 0)
       : 80;
 
     // Load actual history to build values dynamically

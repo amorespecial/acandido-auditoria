@@ -1018,7 +1018,7 @@ export default function App() {
         }
       }
 
-      const finalScore = Math.round(ratio / 5) * 5;
+      const finalScore = obtained;
       const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
 
       return {
