@@ -895,65 +895,98 @@ export default function App() {
             const twinC = twinBranch.criteria.find((tc) => tc.id === c.id);
             if (!twinC) return c;
 
+            const isShared = c.id === "6" || c.id === "10";
+
+            if (!isShared) {
+              // Individual criterion: completely independent
+              return {
+                ...c,
+                pointsObtained: c.status === "OK" ? c.pointsPossible : (c.id === "1" ? c.pointsObtained : 0)
+              };
+            }
+
+            // Shared criterion: rule 2 (RESUMO CONSOLIDADO DA DUPLA)
             const baseResult = {
               ...c,
               rawStatus: c.status,
               rawPointsObtained: c.pointsObtained
             };
 
-            if (c.status === "NOK" || twinC.status === "NOK") {
+            const isOursNok = c.status === "NOK";
+            const isTwinNok = twinC.status === "NOK";
+
+            if (isOursNok || isTwinNok) {
+              // Se Unidade A = NOK ou Unidade B = NOK -> Resultado consolidado = NOK (não pontua para nenhuma das duas)
               return {
                 ...baseResult,
                 status: "NOK" as const,
                 pointsObtained: 0,
-                notes: c.notes || `[Meta Garagem Dupla] Penalizado: O outro almoxarifado no mesmo local físico ("${twinBranch.name.replace("ALMOXARIFADO ", "")}") está NOK neste critério.`
+                notes: c.notes || `[Garagem Dupla] Penalizado: Para pontuar neste critério compartilhado, ambos os almoxarifados devem estar em conformidade (OK). Atualmente, uma ou ambas as unidades estão NOK.`
               };
             }
 
-            if (c.status === "OK" && twinC.status === "OK") {
+            const isOursOk = c.status === "OK";
+            const isTwinOk = twinC.status === "OK";
+
+            if (isOursOk && isTwinOk) {
+              // Se Unidade A = OK e Unidade B = OK -> Resultado consolidado = OK (pontua)
               return {
                 ...baseResult,
+                status: "OK" as const,
                 pointsObtained: c.pointsPossible
               };
             }
 
-            if (c.isAguardandoRealizacao || twinC.isAguardandoRealizacao || c.isAguardandoFechamento || twinC.isAguardandoFechamento) {
-              return {
-                ...baseResult,
-                pointsObtained: c.pointsObtained
-              };
-            }
-
-            if (c.id === "1" || c.id === "10") {
-              return {
-                ...baseResult,
-                pointsObtained: c.pointsObtained
-              };
-            }
-
+            // If one is OK and the other is pending (not NOK, not OK, e.g. PENDENTE, ENVIADO, AGUARDANDO ENVIO, etc.)
+            // Then they do NOT pontuate yet.
             return {
               ...baseResult,
               pointsObtained: 0,
-              notes: c.notes || `[Meta Garagem Dupla] Aguardando aprovação mútua: Esta unidade está ${c.status}, e a outra unidade no mesmo local físico está ${twinC.status}. Só pontuam quando ambos estiverem OK.`
+              notes: c.notes || `[Garagem Dupla] Aguardando aprovação mútua: Esta unidade está ${c.status} e a outra está ${twinC.status}. Só pontuam quando ambas estiverem OK.`
             };
           });
         }
+      } else {
+        // Individual branch: completely independent
+        activeCriteria = b.criteria.map((c) => {
+          return {
+            ...c,
+            pointsObtained: c.status === "OK" ? c.pointsPossible : (c.id === "1" ? c.pointsObtained : 0)
+          };
+        });
       }
 
       const monthlyCriteria = activeCriteria.filter((c) => c.id !== "1" && c.id !== "10");
       const monthlyObtained = monthlyCriteria.reduce((sum, c) => sum + (c.pointsObtained || 0), 0);
-      const monthlyPossible = monthlyCriteria.reduce((sum, c) => sum + (c.pointsPossible || 0), 0); // usually 75
+      const monthlyPossible = 75; // 8 fixed monthly criteria is always 75
 
       const invCrit = activeCriteria.find((c) => c.id === "1");
-      const isInventarioEvaluated = invCrit ? (invCrit.status === "OK" || invCrit.status === "NOK") : false;
-      const includeInventario = isInventarioEvaluated && !!b.isInventarioScheduledThisMonth;
-      const invObtained = includeInventario ? (invCrit?.pointsObtained || 0) : 0;
-      const invPossible = includeInventario ? 20 : 0;
+      const invObtained = b.isInventarioScheduledThisMonth ? (invCrit?.pointsObtained || 0) : 0;
+      const invPossible = b.isInventarioScheduledThisMonth ? 20 : 0;
 
       const matCrit = activeCriteria.find((c) => c.id === "10");
-      const isMaterialSemMovEvaluated = matCrit ? (matCrit.status === "OK" || matCrit.status === "NOK") : false;
-      const matObtained = isMaterialSemMovEvaluated ? (matCrit?.pointsObtained || 0) : 0;
-      const matPossible = isMaterialSemMovEvaluated ? 5 : 0;
+      let hasMaterials = false;
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem(`acandido_materials_parados_${b.id}`);
+        if (saved) {
+          try {
+            const list = JSON.parse(saved);
+            if (Array.isArray(list) && list.length > 0) {
+              hasMaterials = true;
+            }
+          } catch {}
+        } else {
+          const defaultMap: Record<string, boolean> = {
+            "unitrans-jp": true, "santa-maria-jp": true, "expresso-nacional": true, "acandido-cg": true,
+            "fretamento-jaboatao": true, "rodoviario-jaboatao": true, "fretamento-maracanau": true,
+            "rodoviario-fortaleza": true, "fretamento-pb": true, "fretamento-goiana": true,
+            "trans-cg-bayeux": true, "rodoviario-cabedelo": true, "unissana-rn": true, "reunidas-nat": true
+          };
+          hasMaterials = !!defaultMap[b.id];
+        }
+      }
+      const matObtained = hasMaterials ? (matCrit?.pointsObtained || 0) : 0;
+      const matPossible = hasMaterials ? 5 : 0;
 
       const obtained = monthlyObtained + invObtained + matObtained;
       const maxAuditable = monthlyPossible + invPossible + matPossible;
@@ -1130,6 +1163,57 @@ export default function App() {
     });
 
     handleUpdateCriteria(activeBranchId, updatedCriteria);
+
+    const twinPairs = [
+      ["unitrans-jp", "santa-maria-jp"],
+      ["expresso-nacional", "acandido-cg"],
+      ["fretamento-jaboatao", "rodoviario-jaboatao"],
+      ["trans-cg-bayeux", "rodoviario-cabedelo"],
+      ["fretamento-maracanau", "rodoviario-fortaleza"]
+    ];
+
+    const pair = twinPairs.find((p) => p.includes(activeBranchId));
+    const twinId = pair ? (pair[0] === activeBranchId ? pair[1] : pair[0]) : null;
+    const isShared = criterionId === "6" || criterionId === "10";
+
+    if (isShared && twinId) {
+      const twinBranch = branches.find((b) => b.id === twinId);
+      if (twinBranch) {
+        const twinUpdatedCriteria = twinBranch.criteria.map((c) => {
+          if (c.id === criterionId) {
+            const now = new Date();
+            const formattedDate = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
+            return {
+              ...c,
+              status: "ENVIADO" as const,
+              evidenceNotes: comments + ` (Compartilhado via ${currentBranch.name.replace("ALMOXARIFADO ", "")})`,
+              submittedPhotos: processedPhotos,
+              top10AlmoxarifeQuantities: top10Quantities,
+              submittedAt: formattedDate,
+            };
+          }
+          return c;
+        });
+
+        handleUpdateCriteria(twinId, twinUpdatedCriteria);
+
+        if (isSupabaseReady()) {
+          try {
+            await dbSubmitAlmoxarifeEvidence(
+              twinBranch.name,
+              activeMonth,
+              activeYear,
+              criterionId,
+              user?.name || "Almoxarife",
+              comments + ` (Compartilhado via ${currentBranch.name.replace("ALMOXARIFADO ", "")})`,
+              processedPhotos
+            );
+          } catch (err) {
+            console.error("Failed to insert twin into envios_almoxarife:", err);
+          }
+        }
+      }
+    }
 
     if (isSupabaseReady()) {
       try {

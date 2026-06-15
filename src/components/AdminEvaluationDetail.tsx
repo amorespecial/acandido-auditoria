@@ -385,6 +385,22 @@ export default function AdminEvaluationDetail({
     }
   };
 
+  const handleRemoveMaterial = (code: string) => {
+    if (!window.confirm("Tem certeza que deseja remover este item?")) {
+      return;
+    }
+    const updated = branchMaterials.filter((m) => m.code !== code);
+    setBranchMaterials(updated);
+    localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
+
+    const anyNok = updated.some((m) => m.status === "NOK");
+    if (anyNok) {
+      handleStatusChange("NOK");
+    } else {
+      handleStatusChange("OK");
+    }
+  };
+
   // Determine twin branch linkage for double warehouse rules
   const twinPairs = [
     ["unitrans-jp", "santa-maria-jp"],
@@ -761,6 +777,34 @@ export default function AdminEvaluationDetail({
     });
 
     onUpdateCriteria(branch.id, updated);
+
+    const isShared = selectedCriterion.id === "6" || selectedCriterion.id === "10";
+    if (isShared && twinBranch) {
+      const twinUpdated = twinBranch.criteria.map((c) => {
+        if (c.id === selectedCriterion.id) {
+          return {
+            ...c,
+            status: enforcedStatus,
+            pointsObtained: enforcedStatus === "OK" ? c.pointsPossible : 0,
+            notes: notesInput ? (notesInput + ` (Avaliado na unidade par ${branch.name.replace("ALMOXARIFADO ", "")})`) : `Avaliado no almoxarifado par ${branch.name.replace("ALMOXARIFADO ", "")}.`,
+            evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
+            submittedPhotos: selectedCriterion.auditMode === "Presencial" 
+              ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
+              : c.submittedPhotos,
+            submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
+            nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
+            nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+            nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
+            nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
+            nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
+            nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+          };
+        }
+        return c;
+      });
+      onUpdateCriteria(twinBranch.id, twinUpdated);
+    }
+
     setSelectedCriterion(null);
   };
 
@@ -1490,89 +1534,65 @@ export default function AdminEvaluationDetail({
                       Materiais Sem Movimentação — {branch.name.replace("ALMOXARIFADO ", "")}
                     </span>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Cada almoxarifado possui sua própria lista independente. Adicione novos itens ou selecione para avaliar individualmente.
+                      Cada almoxarifado possui sua própria lista independente. Adicione novos itens abaixo e mude a conformidade diretamente na tabela.
                     </p>
                   </div>
-
-                  {/* Dropdown de Seleção de Material para Avaliar */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">
-                      Selecionar Material para Avaliação Individual
-                    </label>
-                    <select
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700 focus:outline-none focus:border-indigo-500 font-medium"
-                      onChange={(e) => {
-                        const code = e.target.value;
-                        if (!code) return;
-                        setSelectedMaterialCode(code);
-                      }}
-                      value={selectedMaterialCode || ""}
-                    >
-                      <option value="">-- Selecione um material --</option>
-                      {branchMaterials.map(m => (
-                        <option key={m.code} value={m.code}>
-                          {m.code} - {m.name} ({m.status})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Visualização e Edição do Item Selecionado */}
-                  {selectedMaterialCode && (() => {
-                    const mat = branchMaterials.find(m => m.code === selectedMaterialCode);
-                    if (!mat) return null;
-                    return (
-                      <div className="bg-white border border-[#C8A84B]/20 p-3.5 rounded-lg space-y-2.5 shadow-2xs">
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded uppercase font-mono">{mat.code}</span>
-                            <p className="text-xs font-black text-[#1B2A4A] mt-1">{mat.name}</p>
-                          </div>
-                          
-                          {/* Botões de status para este material individual */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {(["OK", "NOK"] as const).map(st => {
-                              const active = mat.status === st;
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateMaterialStatus(mat.code, st)}
-                                  key={st}
-                                  className={`px-2.5 py-1 text-[10px] rounded-md font-black border transition-all ${
-                                    active
-                                      ? st === "OK" ? "bg-emerald-500 text-white border-emerald-500" : "bg-red-500 text-white border-red-500"
-                                      : "bg-[#FFF] text-slate-600 border-slate-200 hover:bg-slate-50"
-                                  }`}
-                                >
-                                  {st}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
 
                   {/* Lista Completa Cadastrada para a unidade */}
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Lista de Itens Avaliados nesta Unidade ({branchMaterials.length})</p>
-                    <div className="bg-white border border-slate-100 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-40 overflow-y-auto pr-1">
-                      {branchMaterials.map(m => (
-                        <div key={m.code} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50">
-                          <div className="min-w-0 pr-2">
-                            <p className="font-extrabold text-[#1B2A4A] truncate">
-                              <span className="font-mono text-slate-400 mr-1.5 text-[10px] font-normal">[{m.code}]</span>
-                              {m.name}
-                            </p>
+                    <div className="bg-white border border-slate-100 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
+                      {branchMaterials.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400 italic">Nenhum material cadastrado nesta unidade.</div>
+                      ) : (
+                        branchMaterials.map(m => (
+                          <div key={m.code} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50 gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-extrabold text-[#1B2A4A] truncate">
+                                <span className="font-mono text-slate-400 mr-1.5 text-[10px] font-normal">[{m.code}]</span>
+                                {m.name}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* OK/NOK status toggle */}
+                              <div className="flex border border-slate-200 rounded overflow-hidden shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateMaterialStatus(m.code, "OK")}
+                                  className={`px-2 py-0.5 text-[10px] font-black transition-colors ${
+                                    m.status === "OK"
+                                      ? "bg-emerald-500 text-white"
+                                      : "bg-white text-slate-400 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  OK
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateMaterialStatus(m.code, "NOK")}
+                                  className={`px-2 py-0.5 text-[10px] font-black transition-colors ${
+                                    m.status === "NOK"
+                                      ? "bg-red-500 text-white"
+                                      : "bg-white text-slate-400 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  NOK
+                                </button>
+                              </div>
+
+                              {/* Remover icon */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMaterial(m.code)}
+                                        className="text-slate-400 hover:text-red-500 font-extrabold px-1.5 py-0.5 hover:bg-rose-50 rounded transition-colors shrink-0"
+                                title="Remover item permanentemente"
+                              >
+                                <span className="material-symbols-outlined text-[16px] leading-none align-middle">delete</span>
+                              </button>
+                            </div>
                           </div>
-                          <span className={`px-2 py-0.5 rounded text-[9.5px] font-mono leading-none block font-black border ${
-                            m.status === "OK" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
-                          }`}>
-                            {m.status}
-                          </span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
 
