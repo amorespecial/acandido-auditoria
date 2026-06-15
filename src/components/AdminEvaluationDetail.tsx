@@ -953,38 +953,10 @@ export default function AdminEvaluationDetail({
         <button
           type="button"
           onClick={() => setSubTab("AUDITORIA")}
-          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
-            subTab === "AUDITORIA"
-              ? "bg-[#1B2A4A] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-          }`}
+          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 bg-[#1B2A4A] text-white shadow-xs`}
         >
           <span className="material-symbols-outlined text-[16px]">fact_check</span>
           Requisitos de Auditoria
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab("GARANTIAS")}
-          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
-            subTab === "GARANTIAS"
-              ? "bg-[#1B2A4A] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-          }`}
-        >
-          <span className="material-symbols-outlined text-[16px]">shield_checkered</span>
-          Garantias Registradas
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab("SERVICOS")}
-          className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${
-            subTab === "SERVICOS"
-              ? "bg-[#1B2A4A] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-          }`}
-        >
-          <span className="material-symbols-outlined text-[16px]">build</span>
-          Serviços Registrados
         </button>
       </div>
 
@@ -2704,14 +2676,6 @@ export default function AdminEvaluationDetail({
         </div>
       )}
     </>
-  )}
-
-  {subTab === "GARANTIAS" && (
-    <AdminGarantiasPanel branch={branch} allBranches={allBranches} />
-  )}
-
-  {subTab === "SERVICOS" && (
-    <AdminServicosPanel branch={branch} allBranches={allBranches} />
   )}
 
       {/* FULL SCALE IMAGE AUDIT LIGHTBOX */}
