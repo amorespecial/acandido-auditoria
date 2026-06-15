@@ -930,18 +930,22 @@ export default function AdminEvaluationDetail({
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Score Calculado</p>
             <p className="text-3xl font-extrabold text-[#1B2A4A] mt-1 font-mono">
-              {branch.currentScore}
-              <span className="text-sm text-slate-400 font-medium font-sans">/100</span>
+              {branch.pointsObtainedSum ?? branch.currentScore}
+              <span className="text-sm text-slate-400 font-medium font-sans">/{branch.maxAuditablePoints ?? 75} pts</span>
             </p>
           </div>
           <div className="text-right">
             <span
               className={`text-xs font-black uppercase px-2.5 py-1 rounded-full ${
-                branch.currentScore >= 80
-                  ? "bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200"
-                  : branch.currentScore >= 60
-                  ? "bg-amber-50 text-amber-700 font-extrabold border border-amber-200"
-                  : "bg-rose-50 text-rose-700 font-extrabold border border-rose-200"
+                branch.scoreCategory === "Excelente"
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : branch.scoreCategory === "Bom"
+                  ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                  : branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio"
+                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                  : branch.scoreCategory === "Parcial"
+                  ? "bg-slate-100 text-slate-600 border border-slate-300 font-bold"
+                  : "bg-rose-50 text-rose-700 border border-rose-200"
               }`}
             >
               {branch.scoreCategory}
@@ -1299,8 +1303,15 @@ export default function AdminEvaluationDetail({
                       {/* Score point label */}
                       <div className="text-left md:text-right min-w-[70px]">
                         <p className="text-sm font-extrabold text-[#1B2A4A] font-mono leading-none">
-                          {pointsToDisplay}
-                          <span className="text-[10px] text-slate-400 font-medium font-sans">/{crit.pointsPossible} pts</span>
+                          {(crit.id === "1" && !branch.isInventarioScheduledThisMonth) || 
+                           (crit.id === "10" && (crit.status === "PENDENTE" || crit.status === "AGUARDANDO ENVIO" || crit.status === "ENVIADO")) ? (
+                            "—"
+                          ) : (
+                            <>
+                              {pointsToDisplay}
+                              <span className="text-[10px] text-slate-400 font-medium font-sans">/{crit.pointsPossible} pts</span>
+                            </>
+                          )}
                         </p>
                         <span className="text-[9px] text-slate-400 font-bold uppercase block mt-1 tracking-wider leading-none">Consolidado</span>
                       </div>

@@ -34,11 +34,12 @@ export interface Branch {
   currentScore: number;
   meta: number;
   status: "OK" | "PENDENTE" | "NOK";
-  scoreCategory: "Excelente" | "Médio" | "Bom" | "Crítico" | "Abaixo da Meta";
+  scoreCategory: "Excelente" | "Médio" | "Bom" | "Crítico" | "Abaixo da Meta" | "Parcial" | "Regular";
   criteria: CriterionState[];
   ownerName: string;
   group: "A" | "B";
   semestralScore: number;
+  isInventarioScheduledThisMonth?: boolean;
   pointsObtainedSum?: number;
   maxAuditablePoints?: number;
 }

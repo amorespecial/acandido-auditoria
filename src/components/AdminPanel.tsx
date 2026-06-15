@@ -362,13 +362,19 @@ export default function AdminPanel({
           let progressWidth = 0;
 
           if (hasRegisteredEvaluation) {
-            progressWidth = Math.min(((branch.pointsObtainedSum ?? branch.currentScore) / (branch.maxAuditablePoints ?? 100)) * 100, 100);
-            if (branch.currentScore >= 85) {
+            progressWidth = Math.min(((branch.pointsObtainedSum ?? branch.currentScore) / (branch.maxAuditablePoints ?? 75)) * 100, 100);
+            if (branch.scoreCategory === "Excelente") {
               scoreTextClass = "text-emerald-600 font-extrabold";
               progressBgClass = "bg-emerald-500";
-            } else if (branch.currentScore >= 70) {
+            } else if (branch.scoreCategory === "Bom") {
+              scoreTextClass = "text-indigo-600 font-extrabold";
+              progressBgClass = "bg-indigo-500";
+            } else if (branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio") {
               scoreTextClass = "text-amber-500 font-extrabold";
               progressBgClass = "bg-amber-500";
+            } else if (branch.scoreCategory === "Parcial") {
+              scoreTextClass = "text-slate-500 font-bold uppercase tracking-wider";
+              progressBgClass = "bg-slate-400";
             } else {
               scoreTextClass = "text-red-500 font-extrabold";
               progressBgClass = "bg-red-500";

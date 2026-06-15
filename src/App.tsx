@@ -833,7 +833,8 @@ export default function App() {
 
       return {
         ...b,
-        criteria: currentCriteria
+        criteria: currentCriteria,
+        isInventarioScheduledThisMonth
       };
     });
 
@@ -883,146 +884,113 @@ export default function App() {
       }
 
       const pair = twinPairs.find((p) => p.includes(b.id));
+      let activeCriteria = b.criteria;
 
-      if (!pair) {
-        // Individual single branch scoring
-        const activeCriteria = b.criteria;
-        const obtained = activeCriteria.reduce((sum, c) => sum + c.pointsObtained, 0);
+      if (pair) {
+        const twinId = pair[0] === b.id ? pair[1] : pair[0];
+        const twinBranch = tempBranches.find((t) => t.id === twinId);
 
-        // Max possible in the month
-        const maxAuditable = activeCriteria.reduce((sum, c) => sum + c.pointsPossible, 0);
+        if (twinBranch) {
+          activeCriteria = b.criteria.map((c) => {
+            const twinC = twinBranch.criteria.find((tc) => tc.id === c.id);
+            if (!twinC) return c;
 
-        // Normalize score category calculation based on the dynamic max auditable points
-        const ratio = maxAuditable > 0 ? (obtained / maxAuditable) * 100 : 100;
+            const baseResult = {
+              ...c,
+              rawStatus: c.status,
+              rawPointsObtained: c.pointsObtained
+            };
 
-        let scoreCategory: Branch["scoreCategory"] = "Excelente";
-        let status: Branch["status"] = "OK";
-        if (ratio >= 85) { scoreCategory = "Excelente"; status = "OK"; }
-        else if (ratio >= 70) { scoreCategory = "Bom"; status = "PENDENTE"; }
-        else if (ratio >= 60) { scoreCategory = "Médio"; status = "PENDENTE"; }
-        else { scoreCategory = "Abaixo da Meta"; status = "NOK"; }
+            if (c.status === "NOK" || twinC.status === "NOK") {
+              return {
+                ...baseResult,
+                status: "NOK" as const,
+                pointsObtained: 0,
+                notes: c.notes || `[Meta Garagem Dupla] Penalizado: O outro almoxarifado no mesmo local físico ("${twinBranch.name.replace("ALMOXARIFADO ", "")}") está NOK neste critério.`
+              };
+            }
 
-        // Round score to multiple of 5
-        const finalScore = Math.round(obtained / 5) * 5;
+            if (c.status === "OK" && twinC.status === "OK") {
+              return {
+                ...baseResult,
+                pointsObtained: c.pointsPossible
+              };
+            }
 
-        // Cumulative active evaluation score is only added if cycle is active
-        const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
+            if (c.isAguardandoRealizacao || twinC.isAguardandoRealizacao || c.isAguardandoFechamento || twinC.isAguardandoFechamento) {
+              return {
+                ...baseResult,
+                pointsObtained: c.pointsObtained
+              };
+            }
 
-        return {
-          ...b,
-          currentScore: finalScore,
-          semestralScore: dynamicSemScore + liveActiveScore,
-          scoreCategory,
-          status,
-          maxAuditablePoints: maxAuditable,
-          pointsObtainedSum: obtained
-        };
+            if (c.id === "1" || c.id === "10") {
+              return {
+                ...baseResult,
+                pointsObtained: c.pointsObtained
+              };
+            }
+
+            return {
+              ...baseResult,
+              pointsObtained: 0,
+              notes: c.notes || `[Meta Garagem Dupla] Aguardando aprovação mútua: Esta unidade está ${c.status}, e a outra unidade no mesmo local físico está ${twinC.status}. Só pontuam quando ambos estiverem OK.`
+            };
+          });
+        }
       }
 
-      // Twins evaluation logic
-      const twinId = pair[0] === b.id ? pair[1] : pair[0];
-      const twinBranch = tempBranches.find((t) => t.id === twinId);
+      const monthlyCriteria = activeCriteria.filter((c) => c.id !== "1" && c.id !== "10");
+      const monthlyObtained = monthlyCriteria.reduce((sum, c) => sum + (c.pointsObtained || 0), 0);
+      const monthlyPossible = monthlyCriteria.reduce((sum, c) => sum + (c.pointsPossible || 0), 0); // usually 75
 
-      if (!twinBranch) {
-        // Fallback
-        const activeCriteria = b.criteria;
-        const obtained = activeCriteria.reduce((sum, c) => sum + c.pointsObtained, 0);
-        const maxAuditable = activeCriteria.reduce((sum, c) => sum + c.pointsPossible, 0);
-        const ratio = maxAuditable > 0 ? (obtained / maxAuditable) * 100 : 100;
+      const invCrit = activeCriteria.find((c) => c.id === "1");
+      const isInventarioEvaluated = invCrit ? (invCrit.status === "OK" || invCrit.status === "NOK") : false;
+      const includeInventario = isInventarioEvaluated && !!b.isInventarioScheduledThisMonth;
+      const invObtained = includeInventario ? (invCrit?.pointsObtained || 0) : 0;
+      const invPossible = includeInventario ? 20 : 0;
 
-        let scoreCategory: Branch["scoreCategory"] = "Excelente";
-        let status: Branch["status"] = "OK";
-        if (ratio >= 85) { scoreCategory = "Excelente"; status = "OK"; }
-        else if (ratio >= 70) { scoreCategory = "Bom"; status = "PENDENTE"; }
-        else if (ratio >= 60) { scoreCategory = "Médio"; status = "PENDENTE"; }
-        else { scoreCategory = "Abaixo da Meta"; status = "NOK"; }
+      const matCrit = activeCriteria.find((c) => c.id === "10");
+      const isMaterialSemMovEvaluated = matCrit ? (matCrit.status === "OK" || matCrit.status === "NOK") : false;
+      const matObtained = isMaterialSemMovEvaluated ? (matCrit?.pointsObtained || 0) : 0;
+      const matPossible = isMaterialSemMovEvaluated ? 5 : 0;
 
-        const finalScore = Math.round(obtained / 5) * 5;
-        const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
+      const obtained = monthlyObtained + invObtained + matObtained;
+      const maxAuditable = monthlyPossible + invPossible + matPossible;
 
-        return {
-          ...b,
-          currentScore: finalScore,
-          semestralScore: dynamicSemScore + liveActiveScore,
-          scoreCategory,
-          status,
-          maxAuditablePoints: maxAuditable,
-          pointsObtainedSum: obtained
-        };
-      }
+      const pendingMonthly = monthlyCriteria.filter((c) => c.status !== "OK" && c.status !== "NOK");
+      const hasPendingMonthly = pendingMonthly.length > 0;
 
-      // Check aligned statuses
-      const cooperativeCriteria = b.criteria.map((c) => {
-        const twinC = twinBranch.criteria.find((tc) => tc.id === c.id);
-        if (!twinC) return c;
-
-        // Save original raw inputs to allow display and non-destructive re-evaluations
-        const baseResult = {
-          ...c,
-          rawStatus: c.status,
-          rawPointsObtained: c.pointsObtained
-        };
-
-        // Rule: If either is NOK -> both are NOK and none score points (ptsObtained = 0)
-        if (c.status === "NOK" || twinC.status === "NOK") {
-          return {
-            ...baseResult,
-            status: "NOK" as const,
-            pointsObtained: 0,
-            notes: c.notes || `[Meta Garagem Dupla] Penalizado: O outro almoxarifado no mesmo local físico (${twinBranch.name.replace("ALMOXARIFADO ", "")}) está NOK neste critério.`
-          };
-        }
-
-        // Rule: Only scores if BOTH are OK
-        if (c.status === "OK" && twinC.status === "OK") {
-          return {
-            ...baseResult,
-            pointsObtained: c.pointsPossible
-          };
-        }
-
-        // Pending/Aguardando shouldn't be penalized
-        if (c.isAguardandoRealizacao || twinC.isAguardandoRealizacao || c.isAguardandoFechamento || twinC.isAguardandoFechamento) {
-          // Keep raw average points if there's any evaluated
-          return {
-            ...baseResult,
-            pointsObtained: c.pointsObtained // keep raw points without penalty!
-          };
-        }
-
-        // Mixed / Pending status: No point awarded yet unless is propagated semestral score
-        if (c.id === "1" || c.id === "10") {
-          return {
-            ...baseResult,
-            pointsObtained: c.pointsObtained
-          };
-        }
-
-        return {
-          ...baseResult,
-          pointsObtained: 0,
-          notes: c.notes || `[Meta Garagem Dupla] Aguardando aprovação mútua: Esta unidade está ${c.status}, e a outra unidade no mesmo local físico está ${twinC.status}. Só pontuam quando ambos estiverem OK.`
-        };
-      });
-
-      const activeCriteria = cooperativeCriteria;
-      const obtained = activeCriteria.reduce((sum, c) => sum + c.pointsObtained, 0);
-      const maxAuditable = activeCriteria.reduce((sum, c) => sum + c.pointsPossible, 0);
       const ratio = maxAuditable > 0 ? (obtained / maxAuditable) * 100 : 100;
 
       let scoreCategory: Branch["scoreCategory"] = "Excelente";
       let status: Branch["status"] = "OK";
-      if (ratio >= 85) { scoreCategory = "Excelente"; status = "OK"; }
-      else if (ratio >= 70) { scoreCategory = "Bom"; status = "PENDENTE"; }
-      else if (ratio >= 60) { scoreCategory = "Médio"; status = "PENDENTE"; }
-      else { scoreCategory = "Abaixo da Meta"; status = "NOK"; }
 
-      const finalScore = Math.round(obtained / 5) * 5;
+      if (hasPendingMonthly) {
+        scoreCategory = "Parcial";
+        status = "PENDENTE";
+      } else {
+        if (ratio >= 85) {
+          scoreCategory = "Excelente";
+          status = "OK";
+        } else if (ratio >= 70) {
+          scoreCategory = "Bom";
+          status = "PENDENTE";
+        } else if (ratio >= 60) {
+          scoreCategory = "Regular";
+          status = "PENDENTE";
+        } else {
+          scoreCategory = "Abaixo da Meta";
+          status = "NOK";
+        }
+      }
+
+      const finalScore = Math.round(ratio / 5) * 5;
       const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
 
       return {
         ...b,
-        criteria: cooperativeCriteria,
+        criteria: activeCriteria,
         currentScore: finalScore,
         semestralScore: dynamicSemScore + liveActiveScore,
         scoreCategory,
