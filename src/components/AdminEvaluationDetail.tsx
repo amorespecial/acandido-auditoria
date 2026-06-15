@@ -606,7 +606,20 @@ export default function AdminEvaluationDetail({
   const handleUpdateCalendarItemStatus = (itemId: string, newStatus: any) => {
     setBranchCalendar(prev => prev.map(item => {
       if (item.id === itemId) {
-        return { ...item, status: newStatus };
+        return { 
+          ...item, 
+          status: newStatus,
+          nokEvidenceLink: newStatus === "NOK" ? (item.nokEvidenceLink || "") : ""
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleUpdateCalendarItemLink = (itemId: string, link: string) => {
+    setBranchCalendar(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return { ...item, nokEvidenceLink: link };
       }
       return item;
     }));
@@ -686,6 +699,13 @@ export default function AdminEvaluationDetail({
 
     // Custom Save for Inventário (ID "1")
     if (selectedCriterion.id === "1") {
+      // Validate that every Inventário item with NOK has a Link da Evidência
+      const missingLinkItem = branchCalendar.find(b => b.status === "NOK" && !b.nokEvidenceLink?.trim());
+      if (missingLinkItem) {
+        alert("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
+        return;
+      }
+
       let globalCalendar: any[] = [];
       try {
         const saved = localStorage.getItem("acandido_calendario_inventarios");
@@ -695,7 +715,11 @@ export default function AdminEvaluationDetail({
       globalCalendar = globalCalendar.map(g => {
         const match = branchCalendar.find(b => b.id === g.id);
         if (match) {
-          return { ...g, status: match.status };
+          return { 
+            ...g, 
+            status: match.status,
+            nokEvidenceLink: match.status === "NOK" ? (match.nokEvidenceLink || "").trim() : ""
+          };
         }
         return g;
       });
@@ -709,13 +733,10 @@ export default function AdminEvaluationDetail({
       if (okCount === totalCount) finalStatus = "OK";
       else if (okCount === 0) finalStatus = "NOK";
 
-      if (finalStatus === "NOK") {
-        const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
-        if (!isNokLinkValid) {
-          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
-          return;
-        }
-      }
+      const parentNokEvidenceLinks = branchCalendar
+        .filter(b => b.status === "NOK" && b.nokEvidenceLink?.trim())
+        .map(b => b.nokEvidenceLink.trim());
+      const parentNokEvidenceLink = parentNokEvidenceLinks[0] || undefined;
 
       const updated = branch.criteria.map((c) => {
         if (c.id === "1") {
@@ -725,12 +746,12 @@ export default function AdminEvaluationDetail({
             pointsObtained: pointsObtained,
             notes: notesInput || `Média semestral: ${okCount} de ${totalCount} OK.`,
             isAguardandoRealizacao: totalCount > 0 && branchCalendar.every(b => !b.status || b.status === "PENDENTE"),
-            nokEvidenceLink: finalStatus === "NOK" ? nokLink1Input.trim() : undefined,
-            nokEvidenceDescription: finalStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-            nokEvidenceFileName: finalStatus === "NOK" ? "Link" : undefined,
-            nokEvidenceFileType: finalStatus === "NOK" ? "url" : undefined,
-            nokEvidenceFileData: finalStatus === "NOK" ? "" : undefined,
-            nokEvidenceLinks: finalStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+            nokEvidenceLink: parentNokEvidenceLink,
+            nokEvidenceDescription: parentNokEvidenceLink ? "Link de Evidência de Inconformidade do Inventário" : undefined,
+            nokEvidenceFileName: parentNokEvidenceLink ? "Link" : undefined,
+            nokEvidenceFileType: parentNokEvidenceLink ? "url" : undefined,
+            nokEvidenceFileData: parentNokEvidenceLink ? "" : undefined,
+            nokEvidenceLinks: parentNokEvidenceLinks.length > 0 ? parentNokEvidenceLinks : undefined
           };
         }
         return c;
@@ -1481,44 +1502,63 @@ export default function AdminEvaluationDetail({
                         const dateFormatted = item.data_agendada 
                           ? item.data_agendada.split("-").reverse().join("/")
                           : "--/--/----";
+                        const isNok = item.status === "NOK";
 
                         return (
                           <div 
                             key={item.id} 
-                            className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between gap-4 shadow-2xs hover:border-[#C8A84B]/20 transition-all"
+                            className="p-3 bg-white border border-slate-100 rounded-xl flex flex-col gap-3 shadow-2xs hover:border-[#C8A84B]/20 transition-all"
                           >
-                            <div>
-                              <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
-                                Inventário Semestral #{idx + 1}
-                              </span>
-                              <span className="text-xs font-black text-[#1B2A4A] mt-0.5 block">
-                                Agendado: {dateFormatted}
-                              </span>
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                                  Inventário Semestral #{idx + 1}
+                                </span>
+                                <span className="text-xs font-black text-[#1B2A4A] mt-0.5 block">
+                                  Agendado: {dateFormatted}
+                                </span>
+                              </div>
+
+                              {/* Status controls */}
+                              <div className="flex items-center gap-1">
+                                {(["OK", "NOK", "PENDENTE"] as const).map(st => {
+                                  const active = item.status === st || (!item.status && st === "PENDENTE");
+                                  let btnClass = "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
+                                  if (active) {
+                                    if (st === "OK") btnClass = "bg-emerald-500 text-white border-emerald-500 font-extrabold shadow-sm";
+                                    if (st === "NOK") btnClass = "bg-rose-500 text-white border-rose-500 font-extrabold shadow-sm";
+                                    if (st === "PENDENTE") btnClass = "bg-amber-500 text-white border-amber-500 font-extrabold shadow-sm";
+                                  }
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateCalendarItemStatus(item.id, st)}
+                                      key={st}
+                                      className={`px-2.5 py-1 text-[10px] rounded-md font-bold uppercase transition-all ${btnClass}`}
+                                    >
+                                      {st}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
 
-                            {/* Status controls */}
-                            <div className="flex items-center gap-1">
-                              {(["OK", "NOK", "PENDENTE"] as const).map(st => {
-                                const active = item.status === st || (!item.status && st === "PENDENTE");
-                                let btnClass = "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
-                                if (active) {
-                                  if (st === "OK") btnClass = "bg-emerald-500 text-white border-emerald-500 font-extrabold shadow-sm";
-                                  if (st === "NOK") btnClass = "bg-rose-500 text-white border-rose-500 font-extrabold shadow-sm";
-                                  if (st === "PENDENTE") btnClass = "bg-amber-500 text-white border-amber-500 font-extrabold shadow-sm";
-                                }
-
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateCalendarItemStatus(item.id, st)}
-                                    key={st}
-                                    className={`px-2.5 py-1 text-[10px] rounded-md font-bold uppercase transition-all ${btnClass}`}
-                                  >
-                                    {st}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            {/* Link evidence input directly below if NOK */}
+                            {isNok && (
+                              <div className="pt-2.5 border-t border-slate-100 space-y-1">
+                                <label className="block text-[10px] font-black text-rose-700 uppercase tracking-wide">
+                                  Link da Evidência (obrigatório para NOK) <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={item.nokEvidenceLink || ""}
+                                  onChange={(e) => handleUpdateCalendarItemLink(item.id, e.target.value)}
+                                  placeholder="Cole aqui o link da evidência..."
+                                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-rose-500 focus:border-rose-500"
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })

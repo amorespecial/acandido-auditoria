@@ -182,6 +182,49 @@ const isSemestralMonth = (monthYear: string) => {
   return m.includes("janeiro") || m.includes("junho") || m.includes("dezembro") || m.includes("semestral");
 };
 
+const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
+  let localCalendar: any[] = [];
+  try {
+    const saved = localStorage.getItem("acandido_calendario_inventarios");
+    localCalendar = saved ? JSON.parse(saved) : [];
+  } catch (e) {}
+
+  const MONTH_MAP: Record<string, number> = {
+    "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+    "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+  };
+  const pts = monthYear.split(" ");
+  const monthName = pts[0]?.toLowerCase() || "";
+  const activeYearNum = parseInt(pts[1]) || 2026;
+  const activeMonthNum = MONTH_MAP[monthName] || 6;
+  const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+
+  const matchBranch = (almoxName: string, bId: string) => {
+    const name = almoxName.toLowerCase().trim();
+    const bIdNorm = bId.toLowerCase().trim();
+    if (name.includes("santa maria")) return bIdNorm === "santa-maria-jp";
+    if (name.includes("a.candido") || name.includes("a.cândido")) return bIdNorm === "acandido-cg";
+    if (name === "trans cg" || name === "expresso nacional") return bIdNorm === "expresso-nacional";
+    if (name.includes("bayeux")) return bIdNorm === "trans-cg-bayeux";
+    if (name.includes("cabedelo")) return bIdNorm === "rodoviario-cabedelo";
+    if (name.includes("goiana")) return bIdNorm === "fretamento-goiana";
+    if (name.includes("fret pb") || name.includes("fretamento pb")) return bIdNorm === "fretamento-pb";
+    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return bIdNorm === "fretamento-jaboatao";
+    if (name.includes("rod ce") || name.includes("fortaleza")) return bIdNorm === "rodoviario-fortaleza";
+    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return bIdNorm === "rodoviario-jaboatao";
+    if (name.includes("transnacional rn") || name.includes("reunidas")) return bIdNorm === "reunidas-nat";
+    if (name.includes("unissanta") || name.includes("unissana")) return bIdNorm === "unissana-rn";
+    if (name.includes("unitrans")) return bIdNorm === "unitrans-jp";
+    return false;
+  };
+
+  return localCalendar.filter(item =>
+    matchBranch(item.almoxarifado, branchId) &&
+    item.ano === activeYearNum &&
+    item.semestre === activeSemestre
+  );
+};
+
 const getScheduledInventoryDate = (branchName: string, monthYear: string) => {
   let localCalendar: any[] = [];
   try {
@@ -1605,6 +1648,68 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
                                       </p>
                                     </div>
                                   )}
+
+                                  {(() => {
+                                    if (c.id !== "1" || !selectedEntry) return null;
+                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear);
+                                    if (calItems.length === 0) return null;
+
+                                    return (
+                                      <div className="mt-4 p-3 bg-white border border-slate-200/60 rounded-xl space-y-2 select-text">
+                                        <h5 className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1.5">
+                                          <span className="material-symbols-outlined text-[#C8A84B] text-[14px]">calendar_month</span>
+                                          Detalhamento dos Inventários Agendados
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                          {calItems.map((item, idx) => {
+                                            const itemStatus = item.status || "PENDENTE";
+                                            const dateFormatted = item.data_agendada 
+                                              ? item.data_agendada.split("-").reverse().join("/")
+                                              : "--/--/----";
+                                            
+                                            let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                                            if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                            if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+
+                                            return (
+                                              <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100/85 rounded-lg text-xs flex flex-col gap-1.5 shadow-3xs">
+                                                <div className="flex items-center justify-between">
+                                                  <div>
+                                                    <span className="text-[10px] font-extrabold text-slate-600 block">
+                                                      Inventário Semestral #{idx + 1}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-400 font-mono">
+                                                      Agendado: {dateFormatted}
+                                                    </span>
+                                                  </div>
+                                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border leading-none ${badgeColor}`}>
+                                                    {itemStatus}
+                                                  </span>
+                                                </div>
+
+                                                {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                                  <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1">
+                                                    <span className="font-extrabold uppercase tracking-wider text-rose-700 flex items-center gap-1 leading-none">
+                                                      <span className="material-symbols-outlined text-[11px] leading-none text-rose-600 font-bold">link</span>
+                                                      <span>Evidência:</span>
+                                                    </span>
+                                                    <a
+                                                      href={item.nokEvidenceLink}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="text-indigo-600 hover:text-indigo-850 hover:underline font-black truncate block"
+                                                    >
+                                                      {item.nokEvidenceLink} ↗
+                                                    </a>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
 
                                 {/* Right Column (Visual Evidence Thumbnail) */}

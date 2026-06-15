@@ -82,6 +82,49 @@ export default function AlmoxarifeHome({
   const twinId = pair ? (pair[0] === branch.id ? pair[1] : pair[0]) : null;
   const twinBranch = twinId ? allBranches?.find((b) => b.id === twinId) : null;
 
+  const getBranchCalendar = () => {
+    let localCalendar: any[] = [];
+    try {
+      const saved = localStorage.getItem("acandido_calendario_inventarios");
+      localCalendar = saved ? JSON.parse(saved) : [];
+    } catch (e) {}
+
+    const MONTH_MAP: Record<string, number> = {
+      "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+      "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+    };
+    const activeMonthNum = MONTH_MAP[activeMonth.toLowerCase()] || 6;
+    const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+    const activeYearNum = parseInt(activeYear) || 2026;
+
+    const matchBranch = (almoxName: string, bId: string) => {
+      const name = almoxName.toLowerCase().trim();
+      const branchId = bId.toLowerCase().trim();
+      if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+      if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+      if (name === "trans cg" || name === "expresso nacional") return branchId === "expresso-nacional";
+      if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+      if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+      if (name.includes("goiana")) return branchId === "fretamento-goiana";
+      if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+      if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+      if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return branchId === "rodoviario-jaboatao";
+      if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+      if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+      if (name.includes("unitrans")) return branchId === "unitrans-jp";
+      return false;
+    };
+
+    return localCalendar.filter(item =>
+      matchBranch(item.almoxarifado, branch.id) &&
+      item.ano === activeYearNum &&
+      item.semestre === activeSemestre
+    );
+  };
+
+  const calItems = getBranchCalendar();
+
   return (
     <div className="space-y-6 max-w-md mx-auto">
       {/* USER PROFILE WELCOME BANNER */}
@@ -214,6 +257,60 @@ export default function AlmoxarifeHome({
                     </div>
                   </div>
 
+                  {/* Dynamic Scheduled Inventories display for Criterion 1 */}
+                  {crit.id === "1" && calItems.length > 0 && (
+                    <div className="mt-2.5 space-y-2 border-t border-slate-100 pt-2.5">
+                      <p className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider block mb-1">
+                        Detalhamento do Calendário Semestral:
+                      </p>
+                      {calItems.map((item, idx) => {
+                        const dateFormatted = item.data_agendada 
+                          ? item.data_agendada.split("-").reverse().join("/")
+                          : "--/--/----";
+                        const itemStatus = item.status || "PENDENTE";
+                        
+                        let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                        if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                        if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+
+                        return (
+                          <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-600 block">
+                                  Inventário Semestral #{idx + 1}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-mono">
+                                  Agendado: {dateFormatted}
+                                </span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
+                                {itemStatus}
+                              </span>
+                            </div>
+
+                            {itemStatus === "NOK" && item.nokEvidenceLink && (
+                              <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
+                                <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
+                                  <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>
+                                  <span>Evidência da Inconformidade:</span>
+                                </div>
+                                <a
+                                  href={item.nokEvidenceLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-indigo-600 hover:text-[#1B2A4A] hover:underline font-black truncate max-w-full block"
+                                >
+                                  {item.nokEvidenceLink} ↗
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* If OK: Visual confirmation */}
                   {!isAguardando && displayStatus === "OK" && (
                     <div className="bg-emerald-50/40 border border-emerald-100/50 p-2.5 rounded-lg flex items-center gap-2 text-[11px] text-emerald-800 leading-normal font-sans shadow-3xs">
@@ -317,7 +414,7 @@ export default function AlmoxarifeHome({
               displayStatus = "PENDENTE";
             }
 
-            let displayStatusText = displayStatus;
+            let displayStatusText: string = displayStatus;
             let statusBadge = "bg-stone-100 text-stone-600 border-stone-200";
 
             if (["2", "4", "6"].includes(crit.id) && displayStatus === "ENVIADO") {
@@ -410,7 +507,7 @@ export default function AlmoxarifeHome({
                     )}
 
                     {crit.id === "6" && (() => {
-                      const storageKey = user.branchId ? "acandido_certificates_" + user.branchId : "acandido_certificates_default";
+                      const storageKey = branch.id ? "acandido_certificates_" + branch.id : "acandido_certificates_default";
                       const saved = localStorage.getItem(storageKey);
                       if (saved) {
                         try {

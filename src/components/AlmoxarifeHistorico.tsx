@@ -36,6 +36,49 @@ const normalizeStr = (str: string) => {
     .replace(/\s+/g, "");
 };
 
+const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
+  let localCalendar: any[] = [];
+  try {
+    const saved = localStorage.getItem("acandido_calendario_inventarios");
+    localCalendar = saved ? JSON.parse(saved) : [];
+  } catch (e) {}
+
+  const MONTH_MAP: Record<string, number> = {
+    "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+    "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+  };
+  const pts = monthYear.split(" ");
+  const monthName = pts[0]?.toLowerCase() || "";
+  const activeYearNum = parseInt(pts[1]) || 2026;
+  const activeMonthNum = MONTH_MAP[monthName] || 6;
+  const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+
+  const matchBranch = (almoxName: string, bId: string) => {
+    const name = almoxName.toLowerCase().trim();
+    const bIdNorm = bId.toLowerCase().trim();
+    if (name.includes("santa maria")) return bIdNorm === "santa-maria-jp";
+    if (name.includes("a.candido") || name.includes("a.cândido")) return bIdNorm === "acandido-cg";
+    if (name === "trans cg" || name === "expresso nacional") return bIdNorm === "expresso-nacional";
+    if (name.includes("bayeux")) return bIdNorm === "trans-cg-bayeux";
+    if (name.includes("cabedelo")) return bIdNorm === "rodoviario-cabedelo";
+    if (name.includes("goiana")) return bIdNorm === "fretamento-goiana";
+    if (name.includes("fret pb") || name.includes("fretamento pb")) return bIdNorm === "fretamento-pb";
+    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return bIdNorm === "fretamento-jaboatao";
+    if (name.includes("rod ce") || name.includes("fortaleza")) return bIdNorm === "rodoviario-fortaleza";
+    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return bIdNorm === "rodoviario-jaboatao";
+    if (name.includes("transnacional rn") || name.includes("reunidas")) return bIdNorm === "reunidas-nat";
+    if (name.includes("unissanta") || name.includes("unissana")) return bIdNorm === "unissana-rn";
+    if (name.includes("unitrans")) return bIdNorm === "unitrans-jp";
+    return false;
+  };
+
+  return localCalendar.filter(item =>
+    matchBranch(item.almoxarifado, branchId) &&
+    item.ano === activeYearNum &&
+    item.semestre === activeSemestre
+  );
+};
+
 // Map of names for suggestions & explanations
 const defaultCriteriaInfo: Record<string, { desc: string; reasons: string[]; suggestions: string[] }> = {
   "1": {
@@ -571,6 +614,59 @@ export default function AlmoxarifeHistorico({
                           <span className="text-[9px] text-slate-400 font-medium block italic mt-0.5" title={c.notes}>
                             {c.notes}
                           </span>
+
+                          {/* Dynamic Scheduled Inventories display for Criterion 1 inside Historical Report */}
+                          {c.id === "1" && (() => {
+                            const calItems = getBranchCalendarForEntry(activeBranch.id, viewingReport.monthYear);
+                            if (calItems.length === 0) return null;
+                            return (
+                              <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2 font-sans select-text">
+                                <p className="text-[8.5px] font-black text-slate-500 uppercase tracking-wider block mb-1">
+                                  Detalhamento do Calendário Semestral:
+                                </p>
+                                {calItems.map((item, idx) => {
+                                  const dateFormatted = item.data_agendada 
+                                    ? item.data_agendada.split("-").reverse().join("/")
+                                    : "--/--/----";
+                                  const itemStatus = item.status || "PENDENTE";
+                                  
+                                  let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                                  if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                  if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+
+                                  return (
+                                    <div key={item.id} className="p-1.5 bg-slate-50 border border-slate-100 rounded text-[9.5px] flex flex-col gap-1">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-black text-slate-600">
+                                          #{idx + 1} — {dateFormatted}
+                                        </span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[7px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
+                                          {itemStatus}
+                                        </span>
+                                      </div>
+
+                                      {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                        <div className="bg-white border border-rose-100 p-1 text-[8px] text-rose-800 flex flex-col gap-0.5">
+                                          <div className="flex items-center gap-1 font-extrabold text-[7px] uppercase text-rose-700 leading-none">
+                                            <span className="material-symbols-outlined text-[9px] leading-none text-rose-600 font-bold">link</span>
+                                            <span>Evidência:</span>
+                                          </div>
+                                          <a
+                                            href={item.nokEvidenceLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-indigo-600 hover:text-indigo-850 hover:underline font-bold truncate block"
+                                          >
+                                            {item.nokEvidenceLink} ↗
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-3 text-center text-slate-500 font-mono">{c.pointsPossible} pts</td>
                         <td className="p-3 text-center">
