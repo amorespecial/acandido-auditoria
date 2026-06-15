@@ -716,7 +716,7 @@ export default function App() {
         invPointsPossible = 0;
         invPointsObtained = 0;
         invStatus = "PENDENTE";
-        invNotes = "Sem inventários agendados para este semestre.";
+        invNotes = "Nenhuma data de inventário agendada";
       } else if (isAnyInventarioEvaluated) {
         // Semestral Rule: If any is NOK, whole semester is NOK (0 pts). Else if evaluated OK, whole semester is OK (20 pts).
         const hasNok = evaluatedInventories.some(it => it.status === "NOK");
@@ -748,12 +748,12 @@ export default function App() {
         if (minScheduledMonth !== null && activeMonthNum < minScheduledMonth) {
           invPointsPossible = 0;
           invPointsObtained = 0;
-          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Aguardando realização";
+          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Nenhuma data de inventário agendada";
         } else {
           // M is in or after scheduled month, but not evaluated yet
           invPointsPossible = 20;
           invPointsObtained = 0;
-          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Aguardando realização";
+          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Nenhuma data de inventário agendada";
         }
       }
 
@@ -848,14 +848,18 @@ export default function App() {
     ];
 
     return tempBranches.map((b) => {
-      // Calculate dynamic semester score based strictly on actual closed months in history of the current semester
+      const pair = twinPairs.find((p) => p.includes(b.id));
       let dynamicSemScore = 0;
+
       if (typeof window !== "undefined") {
         const savedHistVal = localStorage.getItem("acandido_history");
         if (savedHistVal) {
           try {
             const hList = JSON.parse(savedHistVal);
             if (Array.isArray(hList)) {
+              const semesterMonths = activeSemestre === 1 
+                ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+                : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
               const activeSemMonths = activeSemestre === 1 
                 ? [1, 2, 3, 4, 5, 6] 
                 : [7, 8, 9, 10, 11, 12];
@@ -864,15 +868,34 @@ export default function App() {
                 "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
               };
 
-              hList.forEach((h: any) => {
-                if (h.branchId === b.id) {
+              const branchIdsToSub = pair ? pair : [b.id];
+
+              semesterMonths.forEach((mName, mIdx) => {
+                const monthNum = activeSemMonths[mIdx];
+                const matchingHList = hList.filter((h: any) => {
                   const pts = h.monthYear.split(" ");
-                  if (pts.length >= 2) {
-                    const hYear = parseInt(pts[1]) || 2026;
-                    const hMonthIndex = monthIndices[pts[0].toLowerCase()] || 1;
-                    if (hYear === activeYearNum && activeSemMonths.includes(hMonthIndex)) {
-                      dynamicSemScore += h.score || 0;
-                    }
+                  const hYear = parseInt(pts[1]) || 2026;
+                  const hMonthIndex = monthIndices[pts[0].toLowerCase()] || 1;
+                  return branchIdsToSub.includes(h.branchId) && hYear === activeYearNum && hMonthIndex === monthNum;
+                });
+
+                if (matchingHList.length > 0) {
+                  if (branchIdsToSub.length === 2 && matchingHList.length === 2) {
+                    // Twin branches: both must be evaluated to score, apply AND logic to each criterion
+                    let monthConsolidatedScore = 0;
+                    b.criteria.forEach((cRef) => {
+                      const allOk = matchingHList.every((hRecord) => {
+                        const crit = hRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
+                        return crit && crit.status === "OK";
+                      });
+                      if (allOk) {
+                        monthConsolidatedScore += cRef.pointsPossible;
+                      }
+                    });
+                    dynamicSemScore += monthConsolidatedScore;
+                  } else {
+                    // Single branch (or incomplete twin record)
+                    dynamicSemScore += matchingHList.reduce((sum, h) => sum + (h.score || 0), 0);
                   }
                 }
               });
@@ -883,7 +906,6 @@ export default function App() {
         }
       }
 
-      const pair = twinPairs.find((p) => p.includes(b.id));
       let activeCriteria = b.criteria;
 
       if (pair) {
@@ -895,17 +917,6 @@ export default function App() {
             const twinC = twinBranch.criteria.find((tc) => tc.id === c.id);
             if (!twinC) return c;
 
-            const isShared = c.id === "6" || c.id === "10";
-
-            if (!isShared) {
-              // Individual criterion: completely independent
-              return {
-                ...c,
-                pointsObtained: c.status === "OK" ? c.pointsPossible : (c.id === "1" ? c.pointsObtained : 0)
-              };
-            }
-
-            // Shared criterion: rule 2 (RESUMO CONSOLIDADO DA DUPLA)
             const baseResult = {
               ...c,
               rawStatus: c.status,
@@ -921,7 +932,7 @@ export default function App() {
                 ...baseResult,
                 status: "NOK" as const,
                 pointsObtained: 0,
-                notes: c.notes || `[Garagem Dupla] Penalizado: Para pontuar neste critério compartilhado, ambos os almoxarifados devem estar em conformidade (OK). Atualmente, uma ou ambas as unidades estão NOK.`
+                notes: c.notes || `[Garagem Dupla] Penalizado: Para pontuar neste critério, ambos os almoxarifados devem estar em conformidade (OK). Atualmente, uma ou ambas as unidades estão NOK.`
               };
             }
 
@@ -1174,7 +1185,7 @@ export default function App() {
 
     const pair = twinPairs.find((p) => p.includes(activeBranchId));
     const twinId = pair ? (pair[0] === activeBranchId ? pair[1] : pair[0]) : null;
-    const isShared = criterionId === "6" || criterionId === "10";
+    const isShared = criterionId === "10";
 
     if (isShared && twinId) {
       const twinBranch = branches.find((b) => b.id === twinId);

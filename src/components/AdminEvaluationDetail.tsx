@@ -778,7 +778,7 @@ export default function AdminEvaluationDetail({
 
     onUpdateCriteria(branch.id, updated);
 
-    const isShared = selectedCriterion.id === "6" || selectedCriterion.id === "10";
+    const isShared = selectedCriterion.id === "10";
     if (isShared && twinBranch) {
       const twinUpdated = twinBranch.criteria.map((c) => {
         if (c.id === selectedCriterion.id) {
@@ -1106,7 +1106,9 @@ export default function AdminEvaluationDetail({
                 let pointsToDisplay: number = crit.pointsObtained;
                 let isJointlyPenalized = false;
                 
-                if (twinBranch && twinCrit) {
+                const isShared = true;
+                
+                if (twinBranch && twinCrit && isShared) {
                   const isThisOursNok = crit.status === "NOK";
                   const isTwinNok = (twinCrit.rawStatus || twinCrit.status) === "NOK";
                   

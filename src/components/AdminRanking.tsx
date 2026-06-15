@@ -103,9 +103,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
 
     const entries: UnifiedEntry[] = Object.entries(ownersMap).map(([ownerName, config]) => {
       // Combined semestralScore logic:
-      // If there are multiple branches (twins), we sum their semestralScores, which perfectly represents
-      // their actual pre-calculated joint semestral score in the mock data (e.g. 280+262 = 542, 186+186 = 372).
-      const score = config.branches.reduce((sum, b) => sum + b.semestralScore, 0);
+      // If there are multiple branches (twins), they already share identical pre-calculated consolidated semestral score.
+      const score = config.branches.length > 0 ? config.branches[0].semestralScore : 0;
       return {
         id: ownerName.toLowerCase(),
         name: config.name,
@@ -149,11 +148,11 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
   const currentSemester = activeMonthNum <= 6 ? 1 : 2;
   const visibleCount = currentSemester === 1 ? activeMonthNum : activeMonthNum - 6;
 
-  // Monthly values for each of the 9 unified entries that sum perfectly to their semestralScore
+  // Monthly values for each of the 9 unified entries that perfectly match their semestralScore
   const getHistoricalMonths = (entry: UnifiedEntry) => {
-    // Current active month is the dynamic/active month, calculated from the average of its branches' currentScores
+    // Current active month is the dynamic/active month, calculated from its branches' consolidated currentScore
     const activeScore = entry.branches.length > 0
-      ? entry.branches.reduce((sum, b) => sum + b.currentScore, 0)
+      ? entry.branches[0].currentScore
       : 80;
 
     // Load actual history to build values dynamically
@@ -178,6 +177,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       ? { "JAN": "Janeiro", "FEV": "Fevereiro", "MAR": "Março", "ABR": "Abril", "MAI": "Maio", "JUN": "Junho" }
       : { "JUL": "Julho", "AGO": "Agosto", "SET": "Setembro", "OUT": "Outubro", "NOV": "Novembro", "DEZ": "Dezembro" };
 
+    const referenceCriteria = entry.branches.length > 0 ? entry.branches[0].criteria : [];
+
     return months.map((m) => {
       const fullMonthName = semMonthsMap[m];
 
@@ -194,9 +195,24 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       );
 
       if (matchingEntries.length > 0) {
-        // Since we combined twin branches' semestral scores as the sum, we sum branch scores for that month too
-        const sumScore = matchingEntries.reduce((sum, h) => sum + (h.score || 0), 0);
-        return { month: m, val: sumScore };
+        if (entry.branches.length === 2 && matchingEntries.length === 2) {
+          // Twin branches: Both must be evaluated to score, apply AND logic to each criterion
+          let consolidatedScore = 0;
+          referenceCriteria.forEach((cRef) => {
+            const allOk = matchingEntries.every((mRecord) => {
+              const crit = mRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
+              return crit && crit.status === "OK";
+            });
+            if (allOk) {
+              consolidatedScore += cRef.pointsPossible;
+            }
+          });
+          return { month: m, val: consolidatedScore };
+        } else {
+          // Single branch
+          const sumScore = matchingEntries.reduce((sum, h) => sum + (h.score || 0), 0);
+          return { month: m, val: sumScore };
+        }
       }
 
       // Default: no history and not active month -> 0 pts
@@ -375,6 +391,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         // Calculate active month unified status to show current live status
         let liveStatus = "PENDENTE";
         let livePoints = 0;
+        const totalPointsPossible = cRef.pointsPossible;
+
         if (entry.branches.length === 2) {
           const b1 = entry.branches[0];
           const b2 = entry.branches[1];
@@ -383,15 +401,15 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           if (c1 && c2) {
             const isNok = c1.status === "NOK" || c2.status === "NOK";
             const isBothOk = c1.status === "OK" && c2.status === "OK";
-            liveStatus = isNok ? "NOK" : isBothOk ? "OK" : c1.status;
-            livePoints = isBothOk ? cRef.pointsPossible : 0;
+            liveStatus = isNok ? "NOK" : isBothOk ? "OK" : (c1.status === "ENVIADO" || c2.status === "ENVIADO" ? "ENVIADO" : "PENDENTE");
+            livePoints = isBothOk ? totalPointsPossible : (cRef.id === "1" && isBothOk ? (c1.pointsObtained || 0) : 0);
           }
         } else {
           const b = entry.branches[0];
           const matchCrit = b.criteria.find((cr) => cr.id === cRef.id);
           if (matchCrit) {
             liveStatus = matchCrit.status;
-            livePoints = matchCrit.status === "OK" ? cRef.pointsPossible : 0;
+            livePoints = matchCrit.status === "OK" ? cRef.pointsPossible : (matchCrit.id === "1" ? (matchCrit.pointsObtained || 0) : 0);
           }
         }
 
@@ -399,7 +417,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           id: cRef.id,
           name: cRef.name,
           recurrence: cRef.recurrence,
-          pointsPossible: cRef.pointsPossible,
+          pointsPossible: totalPointsPossible,
           status: liveStatus,
           pointsObtained: livePoints,
           okMonths,
@@ -523,18 +541,54 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                 <tbody>
                   {selectedEntry.branches[0].criteria.map((c1) => {
                     const c2 = selectedEntry.branches[1].criteria.find((tc) => tc.id === c1.id) || c1;
-                    const isNok = c1.status === "NOK" || c2.status === "NOK";
-                    const isBothOk = c1.status === "OK" && c2.status === "OK";
+                    const isShared = c1.id === "10";
+                    let unifiedStatusText = "";
+                    let unifiedStatusColor = "";
+
+                    const pts1 = c1.status === "OK" ? c1.pointsPossible : (c1.id === "1" ? (c1.pointsObtained || 0) : 0);
+                    const pts2 = c2.status === "OK" ? c2.pointsPossible : (c2.id === "1" ? (c2.pointsObtained || 0) : 0);
+                    
+                    if (isShared) {
+                      const isNok = c1.status === "NOK" || c2.status === "NOK";
+                      const isBothOk = c1.status === "OK" && c2.status === "OK";
+                      if (isBothOk) {
+                        unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
+                        unifiedStatusColor = "bg-emerald-500 text-white";
+                      } else if (isNok) {
+                        unifiedStatusText = "NOK (0 pts)";
+                        unifiedStatusColor = "bg-rose-600 text-white";
+                      } else {
+                        unifiedStatusText = "Pendente (0 pts)";
+                        unifiedStatusColor = "bg-amber-400 text-slate-900";
+                      }
+                    } else {
+                      const totalPtsObtained = pts1 + pts2;
+                      const maxPts = c1.pointsPossible + c2.pointsPossible;
+                      
+                      if (c1.status === "OK" && c2.status === "OK") {
+                        unifiedStatusText = `OK (${totalPtsObtained} pts)`;
+                        unifiedStatusColor = "bg-emerald-500 text-white";
+                      } else if (c1.status === "NOK" && c2.status === "NOK") {
+                        unifiedStatusText = "NOK (0 pts)";
+                        unifiedStatusColor = "bg-rose-600 text-white";
+                      } else if (c1.status === "PENDENTE" && c2.status === "PENDENTE") {
+                        unifiedStatusText = "Pendente (0 pts)";
+                        unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
+                      } else {
+                        unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
+                        unifiedStatusColor = "bg-indigo-500 text-white";
+                      }
+                    }
 
                     return (
                       <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                         <td className="py-3">
                           <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
-                          <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible} pts max</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * (selectedEntry.branches.length)} pts max</p>
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                            c1.status === "OK" ? "bg-emerald-55 bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                            c1.status === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                             c1.status === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
                             "bg-amber-50 text-amber-700 border border-amber-200"
                           }`}>
@@ -543,7 +597,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                            c2.status === "OK" ? "bg-emerald-55 bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                            c2.status === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                             c2.status === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
                             "bg-amber-50 text-amber-700 border border-amber-200"
                           }`}>
@@ -551,19 +605,9 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                           </span>
                         </td>
                         <td className="py-3 text-right">
-                          {isBothOk ? (
-                            <span className="bg-emerald-500 text-white font-black px-3 py-1 rounded text-xs shadow-xs">
-                              OK ({c1.pointsPossible} pts)
-                            </span>
-                          ) : isNok ? (
-                            <span className="bg-rose-600 text-white font-black px-3 py-1 rounded text-xs shadow-xs">
-                              NOK (0 pts)
-                            </span>
-                          ) : (
-                            <span className="bg-amber-400 text-slate-900 font-bold px-3 py-1 rounded text-xs shadow-xs">
-                              Pendente (0 pts)
-                            </span>
-                          )}
+                          <span className={`inline-block px-3 py-1 rounded text-xs font-black shadow-xs ${unifiedStatusColor}`}>
+                            {unifiedStatusText}
+                          </span>
                         </td>
                       </tr>
                     );

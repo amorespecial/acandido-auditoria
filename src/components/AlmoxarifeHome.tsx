@@ -317,12 +317,21 @@ export default function AlmoxarifeHome({
               displayStatus = "PENDENTE";
             }
 
+            let displayStatusText = displayStatus;
             let statusBadge = "bg-stone-100 text-stone-600 border-stone-200";
-            if (displayStatus === "OK") statusBadge = "bg-emerald-50 text-emerald-700 border-emerald-200";
-            if (displayStatus === "NOK") statusBadge = "bg-rose-50 text-rose-700 border-rose-200";
-            if (displayStatus === "PENDENTE") statusBadge = "bg-amber-50 text-amber-700 border-amber-200";
-            if (displayStatus === "ENVIADO") statusBadge = "bg-violet-50 text-violet-700 border-violet-200 animate-pulse";
-            if (displayStatus === "AGUARDANDO ENVIO") statusBadge = "bg-blue-50 text-blue-700 border-blue-200";
+
+            if (["2", "4", "6"].includes(crit.id) && displayStatus === "ENVIADO") {
+              displayStatusText = "AGUARDANDO AVALIAÇÃO DO AUDITOR";
+              statusBadge = "bg-violet-50 text-violet-700 border-violet-150 animate-pulse font-black";
+            } else {
+              if (displayStatus === "OK") statusBadge = "bg-emerald-50 text-emerald-700 border-emerald-200";
+              if (displayStatus === "NOK") statusBadge = "bg-rose-50 text-rose-700 border-rose-200";
+              if (displayStatus === "PENDENTE") statusBadge = "bg-amber-50 text-amber-700 border-amber-200";
+              if (displayStatus === "ENVIADO") statusBadge = "bg-violet-50 text-violet-700 border-violet-200 animate-pulse";
+              if (displayStatus === "AGUARDANDO ENVIO") statusBadge = "bg-blue-50 text-blue-700 border-blue-200";
+            }
+
+            const isSingleSubmited = ["2", "4", "6"].includes(crit.id) && (crit.status === "ENVIADO" || crit.status === "OK" || crit.status === "NOK");
 
             return (
               <div
@@ -341,7 +350,7 @@ export default function AlmoxarifeHome({
                   </div>
 
                   <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border leading-none shrink-0 ${statusBadge}`}>
-                    {displayStatus}
+                    {displayStatusText}
                   </span>
                 </div>
 
@@ -371,8 +380,59 @@ export default function AlmoxarifeHome({
                   </div>
                 )}
 
-                {/* Evidences notes if any */}
-                {crit.evidenceNotes && crit.status === "ENVIADO" && !crit.auditMode && (
+                {/* Show Submitted Evidence inline for single-submission criteria (TOP 10, LayOut, Unimobin) when processed */}
+                {isSingleSubmited && (
+                  <div className="mt-2.5 p-3 bg-slate-50 border border-slate-100 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
+                    <div className="flex items-center gap-1 text-slate-500 font-extrabold text-[9px] uppercase tracking-wider">
+                      <span className="material-symbols-outlined text-[13px] text-indigo-500 font-black">visibility</span>
+                      <span>Evidências Enviadas (Visualização)</span>
+                    </div>
+
+                    {crit.evidenceNotes && (
+                      <p className="text-slate-600 font-medium italic bg-white p-2 rounded border border-slate-200/50">
+                        "{crit.evidenceNotes}"
+                      </p>
+                    )}
+
+                    {crit.submittedPhotos && crit.submittedPhotos.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {crit.submittedPhotos.map((photo, i) => (
+                          <div key={i} className="relative aspect-square rounded-md overflow-hidden border border-slate-200 bg-white shadow-3xs">
+                            <img
+                              src={photo}
+                              referrerPolicy="no-referrer"
+                              alt="Evidência fotográfica enviada"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {crit.id === "6" && (() => {
+                      const storageKey = user.branchId ? "acandido_certificates_" + user.branchId : "acandido_certificates_default";
+                      const saved = localStorage.getItem(storageKey);
+                      if (saved) {
+                        try {
+                          const certsList = JSON.parse(saved);
+                          if (Array.isArray(certsList)) {
+                            const uploaded = certsList.filter(c => c.status === "Certificado enviado");
+                            return (
+                              <div className="text-[10px] text-indigo-700 font-bold bg-[#eff6ff] p-2 rounded border border-blue-100 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[13px] text-blue-600">verified</span>
+                                <span>{uploaded.length} de {certsList.length} certificados enviados.</span>
+                              </div>
+                            );
+                          }
+                        } catch (e) {}
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+
+                {/* Evidences notes if any for non-single-submission or while not yet audited */}
+                {!isSingleSubmited && crit.evidenceNotes && crit.status === "ENVIADO" && !crit.auditMode && (
                   <div className="mt-2 bg-violet-50/40 p-2 rounded text-[10px] text-violet-800 border border-violet-100/30">
                     <span className="font-extrabold uppercase mr-1">Enviado em {crit.submittedAt}:</span>
                     {crit.evidenceNotes}
@@ -419,7 +479,7 @@ export default function AlmoxarifeHome({
                     </div>
                   </div>
                 ) : (
-                  route && actionLabel && (
+                  !isSingleSubmited && route && actionLabel && (
                     <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between gap-4">
                       <span className="text-[10px] font-bold text-slate-400 font-mono">
                         Nota Atual: {crit.pointsObtained}/{crit.pointsPossible} pts
