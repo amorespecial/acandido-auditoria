@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
+import { dbFetchTop10Config, isSupabaseReady } from "../supabaseService";
 
 interface AlmoxarifeContagemProps {
   onBack: () => void;
-  onSubmitEvidence: (criterionId: string, comments: string, photos: string[]) => void;
+  onSubmitEvidence: (criterionId: string, comments: string, photos: string[], top10Quantities?: number[]) => void;
   criterionState?: CriterionState;
   top10?: Array<{ code: string; name: string }>;
   branchId: string;
@@ -24,12 +25,38 @@ export default function AlmoxarifeContagem({
   onBack,
   onSubmitEvidence,
   criterionState,
+  top10,
   branchId,
   activeMonth,
   activeYear
 }: AlmoxarifeContagemProps) {
-  // 1. Fetch monthly top 10 configurations
+  const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
+
+  // 1. Fetch monthly top 10 configurations from database on mount/change
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        if (branchId && isSupabaseReady()) {
+          const remoteConfig = await dbFetchTop10Config(
+            branchId,
+            activeMonth,
+            activeYear
+          );
+          if (remoteConfig?.itens) {
+            const key = `acandido_top10_config_${branchId}_${activeMonth}_${activeYear}`;
+            localStorage.setItem(key, JSON.stringify({ itens: remoteConfig.itens }));
+            setTop10ConfigUpdatedCount((prev) => prev + 1);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching remote Top 10 config in AlmoxarifeContagem:", error);
+      }
+    };
+    loadConfig();
+  }, [branchId, activeMonth, activeYear]);
+
   const monthlyConfig = (() => {
+    const _dummy = top10ConfigUpdatedCount;
     if (!branchId) return null;
     const key = `acandido_top10_config_${branchId}_${activeMonth}_${activeYear}`;
     const saved = localStorage.getItem(key);
@@ -44,7 +71,11 @@ export default function AlmoxarifeContagem({
     return null;
   })();
 
-  const items = monthlyConfig?.itens || [];
+  const items = monthlyConfig?.itens || top10?.map(it => ({
+    code: it.code,
+    description: it.name,
+    qty: 1
+  })) || [];
   const totalItemsCount = items.length;
 
   // 2. Local state for photos upload
@@ -60,6 +91,48 @@ export default function AlmoxarifeContagem({
     return initial;
   });
 
+  // State for quantities entered by the almoxarife
+  const [quantities, setQuantities] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    if (criterionState?.top10AlmoxarifeQuantities && items.length > 0) {
+      items.forEach((item: any, idx: number) => {
+        if (criterionState.top10AlmoxarifeQuantities?.[idx] !== undefined) {
+          initial[item.code] = String(criterionState.top10AlmoxarifeQuantities[idx]);
+        }
+      });
+    }
+    return initial;
+  });
+
+  // Sync uploaded photos and quantities when items or state changes dynamically
+  useEffect(() => {
+    if (items.length > 0) {
+      setUploadedPhotos((prev) => {
+        const next = { ...prev };
+        let updated = false;
+        items.forEach((item: any, idx: number) => {
+          if (!next[item.code] && criterionState?.submittedPhotos?.[idx]) {
+            next[item.code] = criterionState.submittedPhotos[idx];
+            updated = true;
+          }
+        });
+        return updated ? next : prev;
+      });
+
+      setQuantities((prev) => {
+        const next = { ...prev };
+        let updated = false;
+        items.forEach((item: any, idx: number) => {
+          if (next[item.code] === undefined && criterionState?.top10AlmoxarifeQuantities?.[idx] !== undefined) {
+            next[item.code] = String(criterionState.top10AlmoxarifeQuantities[idx]);
+            updated = true;
+          }
+        });
+        return updated ? next : prev;
+      });
+    }
+  }, [items, criterionState]);
+
   const [commentsInput, setCommentsInput] = useState(() => {
     return criterionState?.evidenceNotes || "";
   });
@@ -70,7 +143,8 @@ export default function AlmoxarifeContagem({
   const [isDragging, setIsDragging] = useState<Record<string, boolean>>({});
 
   const filledPhotosCount = items.filter((it: any) => !!uploadedPhotos[it.code]).length;
-  const isSubmitBtnAllowed = totalItemsCount > 0 && filledPhotosCount === totalItemsCount;
+  const isSubmitBtnAllowed = totalItemsCount > 0 && 
+    items.every((it: any) => !!uploadedPhotos[it.code] && quantities[it.code] !== undefined && quantities[it.code] !== "");
 
   // Handle local File conversions to Base64
   const processFile = (itemCode: string, file: File) => {
@@ -135,8 +209,9 @@ export default function AlmoxarifeContagem({
       const finalComment = commentsInput.trim() || `Evidências fotográficas do TOP 10 concluídas para o ciclo de ${activeMonth} de ${activeYear}.`;
       // Map photos in the strict order of items
       const orderedPhotos = items.map((it: any) => uploadedPhotos[it.code] || "");
+      const orderedQuantities = items.map((it: any) => Number(quantities[it.code]) || 0);
 
-      onSubmitEvidence("2", finalComment, orderedPhotos);
+      onSubmitEvidence("2", finalComment, orderedPhotos, orderedQuantities);
       setIsSubmitting(false);
       onBack();
     }, 1200);
@@ -277,10 +352,32 @@ export default function AlmoxarifeContagem({
                   const pImg = criterionState?.submittedPhotos?.[idx];
                   return (
                     <div key={item.code} className="p-3.5 flex items-center justify-between gap-4 bg-white font-medium">
-                      <div className="space-y-0.5">
+                      <div className="space-y-1">
                         <span className="text-[9px] font-mono font-bold text-slate-400">Nº {idx + 1} • CÓD. {item.code}</span>
                         <p className="font-extrabold text-[#1B2A4A] text-xs leading-snug">{item.description}</p>
-                        <span className="text-[10px] text-slate-500 font-bold">Quantidade mínima exigida: <strong className="text-slate-700 font-bold">{item.qty} un</strong></span>
+                        <div className="space-y-0.5 text-[10px] block">
+                          <p className="text-slate-605 text-slate-600 font-bold">
+                            📦 Qtd Almoxarife: <strong className="text-[#1B2A4A] font-extrabold">{criterionState?.top10AlmoxarifeQuantities?.[idx] ?? 0} un</strong>
+                          </p>
+                          {(criterionState?.status === "OK" || criterionState?.status === "NOK") && criterionState?.top10AuditorQuantities?.[idx] !== undefined && (
+                            <>
+                              <p className="text-slate-605 text-slate-600 font-bold">
+                                🖥️ Qtd Auditor (Transnet): <strong className="text-[#1B2A4A] font-extrabold">{criterionState.top10AuditorQuantities[idx]} un</strong>
+                              </p>
+                              {(() => {
+                                const diff = (criterionState?.top10AlmoxarifeQuantities?.[idx] ?? 0) - criterionState.top10AuditorQuantities[idx];
+                                return (
+                                  <p className="font-black">
+                                    Divergência:{" "}
+                                    <span className={diff === 0 ? "text-emerald-600 font-extrabold" : "text-rose-600 font-extrabold"}>
+                                      {diff === 0 ? "0 (Sem divergência - OK)" : `${diff} un (Divergente)`}
+                                    </span>
+                                  </p>
+                                );
+                              })()}
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div className="shrink-0">
                         {pImg ? (
@@ -358,21 +455,41 @@ export default function AlmoxarifeContagem({
                         : "bg-white border-slate-150 shadow-2xs hover:border-slate-300"
                     }`}
                   >
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <span className="text-[9.5px] font-black text-slate-400 font-mono uppercase tracking-wider block">
-                          Nº {idx + 1} — CÓD. {item.code}
-                        </span>
-                        <h4 className="text-xs font-black text-[#1B2A4A] mt-0.5 leading-snug">
-                          {item.description}
-                        </h4>
-                        <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] bg-slate-100 border border-slate-200 font-extrabold px-1.5 py-0.5 rounded text-indigo-900">
-                          Quantidade mínima exigida: <strong className="text-indigo-950 px-0.5">{item.qty} un</strong>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <span className="text-[9.5px] font-black text-slate-400 font-mono uppercase tracking-wider block">
+                            Nº {idx + 1} — CÓD. {item.code}
+                          </span>
+                          <h4 className="text-xs font-black text-[#1B2A4A] mt-0.5 leading-snug">
+                            {item.description}
+                          </h4>
+                        </div>
+
+                        {/* Physical Quantity Field */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                            Qtd Física no Estoque:
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Digite a quantidade encontrada"
+                            value={quantities[item.code] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuantities((prev) => ({
+                                ...prev,
+                                [item.code]: val
+                              }));
+                            }}
+                            className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs focus:outline-none focus:border-[#1B2A4A] font-bold"
+                          />
                         </div>
                       </div>
 
                       {/* Right panel - Thumb or Button */}
-                      <div className="shrink-0">
+                      <div className="shrink-0 pt-1">
                         {photoData ? (
                           <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-250 bg-slate-50 group shadow-xs">
                             <img src={photoData} alt="Thumb" className="w-full h-full object-cover" />
@@ -400,15 +517,6 @@ export default function AlmoxarifeContagem({
                                 className="hidden"
                               />
                             </label>
-
-                            {/* Simulation for testing convenience */}
-                            <button
-                              type="button"
-                              onClick={() => handleSimulatePhoto(item.code, idx)}
-                              className="text-[9px] font-bold text-slate-400 hover:text-slate-600 underline font-mono cursor-pointer"
-                            >
-                              [Simular Foto 📷]
-                            </button>
                           </div>
                         )}
                       </div>

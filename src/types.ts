@@ -12,6 +12,8 @@ export interface CriterionState {
   evidenceNotes?: string;
   submittedAt?: string;
   submittedPhotos?: string[];
+  top10AlmoxarifeQuantities?: number[];
+  top10AuditorQuantities?: number[];
   rawStatus?: EvaluationStatus;
   rawPointsObtained?: number;
   auditMode?: "Presencial" | "A_Distancia";

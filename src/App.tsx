@@ -1113,7 +1113,7 @@ export default function App() {
   };
 
   // Almoxarife submit files/evidence to dynamic state
-  const handleAlmoxarifeSubmitEvidence = async (criterionId: string, comments: string, photos: string[]) => {
+  const handleAlmoxarifeSubmitEvidence = async (criterionId: string, comments: string, photos: string[], top10Quantities?: number[]) => {
     if (cycleState.status !== "ABERTO") {
       alert("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
       return;
@@ -1147,12 +1147,15 @@ export default function App() {
 
     const updatedCriteria = currentBranch.criteria.map((c) => {
       if (c.id === criterionId) {
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
         return {
           ...c,
           status: "ENVIADO" as const, // Sent to auditor for evaluation review
           evidenceNotes: comments,
           submittedPhotos: processedPhotos,
-          submittedAt: new Date().toLocaleDateString("pt-BR"),
+          top10AlmoxarifeQuantities: top10Quantities,
+          submittedAt: formattedDate,
         };
       }
       return c;

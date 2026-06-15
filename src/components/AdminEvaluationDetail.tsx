@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady } from "../supabaseService";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -56,6 +57,29 @@ export default function AdminEvaluationDetail({
     } catch (e) {}
     return { activeMonth: "Maio", activeYear: "2026", status: "ABERTO" };
   })();
+
+  // Synchronically load remote configuration on branch/cycle change
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        if (isSupabaseReady()) {
+          const remoteConfig = await dbFetchTop10Config(
+            branch.id,
+            cycleStateParsed.activeMonth,
+            cycleStateParsed.activeYear
+          );
+          if (remoteConfig?.itens) {
+            const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
+            localStorage.setItem(key, JSON.stringify({ itens: remoteConfig.itens }));
+            setTop10ConfigUpdatedCount((prev) => prev + 1);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching Top 10 configuration:", error);
+      }
+    };
+    loadConfig();
+  }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
 
   const layoutConfig = (() => {
     const _dummy = layoutConfigUpdatedCount;
@@ -132,7 +156,7 @@ export default function AdminEvaluationDetail({
     setShowTop10ConfigModal(true);
   };
 
-  const handleSaveTop10Config = () => {
+  const handleSaveTop10Config = async () => {
     if (top10ItemsInput.length === 0) {
       alert("Por favor, adicione pelo menos 1 item na lista antes de salvar.");
       return;
@@ -143,19 +167,44 @@ export default function AdminEvaluationDetail({
     }
     for (let i = 0; i < top10ItemsInput.length; i++) {
       const item = top10ItemsInput[i];
-      if (!item.code.trim() || !item.description.trim() || !item.qty) {
-        alert(`Por favor, preencha todos os campos do item Nº ${i + 1}.`);
+      if (!item.code.trim() || !item.description.trim()) {
+        alert(`Por favor, preencha o código e a descrição do item Nº ${i + 1}.`);
         return;
       }
     }
     const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    localStorage.setItem(key, JSON.stringify({
-      itens: top10ItemsInput.map(it => ({
-        code: it.code.trim(),
-        description: it.description.trim(),
-        qty: Math.max(1, Math.round(Number(it.qty)) || 1)
-      }))
+    const mappedItems = top10ItemsInput.map(it => ({
+      code: it.code.trim(),
+      description: it.description.trim(),
+      qty: 1
     }));
+
+    localStorage.setItem(key, JSON.stringify({
+      itens: mappedItems
+    }));
+
+    let userName = "Auditor";
+    try {
+      const su = localStorage.getItem("acandido_app_user");
+      if (su) {
+        userName = JSON.parse(su).name || "Auditor";
+      }
+    } catch (e) {}
+
+    try {
+      if (isSupabaseReady()) {
+        await dbSaveTop10Config(
+          branch.id,
+          cycleStateParsed.activeMonth,
+          cycleStateParsed.activeYear,
+          mappedItems,
+          userName
+        );
+      }
+    } catch (error) {
+      console.error("Failed to save Top 10 config to database:", error);
+    }
+
     setTop10ConfigUpdatedCount(prev => prev + 1);
     setShowTop10ConfigModal(false);
     window.dispatchEvent(new Event("storage"));
@@ -192,6 +241,7 @@ export default function AdminEvaluationDetail({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCriterion, setSelectedCriterion] = useState<CriterionState | null>(null);
+  const [top10AuditorQuantitiesInput, setTop10AuditorQuantitiesInput] = useState<Record<string, string>>({});
 
   const [warranties] = useState<any[]>(() => {
     try {
@@ -503,6 +553,18 @@ export default function AdminEvaluationDetail({
     setNotesInput(crit.notes || "");
     setEvidenceNotesInput(crit.evidenceNotes || "");
     setPhotosInput(crit.submittedPhotos?.join(", ") || "");
+
+    const initialAuditorQ: Record<string, string> = {};
+    if (crit.id === "2" && top10Config?.itens) {
+      top10Config.itens.forEach((row: any, idx: number) => {
+        if (crit.top10AuditorQuantities?.[idx] !== undefined) {
+          initialAuditorQ[row.code] = String(crit.top10AuditorQuantities[idx]);
+        } else {
+          initialAuditorQ[row.code] = "";
+        }
+      });
+    }
+    setTop10AuditorQuantitiesInput(initialAuditorQ);
     setNokEvidenceLinkInput(crit.nokEvidenceLink || "");
     setNokLink1Input(crit.nokEvidenceLinks?.[0] || "");
     setNokLink2Input(crit.nokEvidenceLinks?.[1] || "");
@@ -539,6 +601,73 @@ export default function AdminEvaluationDetail({
 
     if (isCycleClosed) {
       alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas alterações.");
+      return;
+    }
+
+    // Custom Save for TOP 10 (ID "2")
+    if (selectedCriterion.id === "2" && top10Config?.itens) {
+      const answers = top10Config.itens.map((item: any, idx: number) => {
+        const qtyAlmoxarife = selectedCriterion.top10AlmoxarifeQuantities?.[idx] ?? 0;
+        const qtyAuditorStr = top10AuditorQuantitiesInput[item.code] ?? "";
+        const qtyAuditor = qtyAuditorStr === "" ? 0 : Number(qtyAuditorStr);
+        return {
+          code: item.code,
+          qtyAlmoxarife,
+          qtyAuditor,
+          divergent: qtyAlmoxarife !== qtyAuditor || qtyAuditorStr === ""
+        };
+      });
+
+      const hasEmpty = top10Config.itens.some((item: any) => {
+        return top10AuditorQuantitiesInput[item.code] === undefined || top10AuditorQuantitiesInput[item.code] === "";
+      });
+
+      if (hasEmpty) {
+        alert("Erro de Validação: Por favor, digite a 'Qtd Auditor' de todos os itens antes de salvar a avaliação.");
+        return;
+      }
+
+      const anyNok = answers.some(a => a.divergent);
+      const computedStatus = anyNok ? "NOK" : "OK";
+
+      if (computedStatus === "NOK") {
+        if (!nokEvidenceFileData.trim()) {
+          alert("Erro de Validação: Como há itens com divergência (NOK), você deve fornecer obrigatoriamente um arquivo de evidência por upload direto.");
+          return;
+        }
+        if (!notesInput.trim()) {
+          alert("Erro de Validação: Como há itens com divergência (NOK), você deve redigir obrigatoriamente uma justificativa com as recomendações de ajuste nas anotações.");
+          return;
+        }
+      }
+
+      // Prepare quantities to persist on CriterionState
+      const finalQuantitiesList = top10Config.itens.map((item: any) => {
+        return Number(top10AuditorQuantitiesInput[item.code]) || 0;
+      });
+
+      const updated = branch.criteria.map((c) => {
+        if (c.id === "2") {
+          return {
+            ...c,
+            status: computedStatus as any,
+            pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
+            top10AuditorQuantities: finalQuantitiesList,
+            notes: notesInput,
+            nokEvidenceLink: computedStatus === "NOK" ? nokEvidenceFileName : undefined,
+            nokEvidenceDescription: computedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+            nokEvidenceFileName: computedStatus === "NOK" ? nokEvidenceFileName : undefined,
+            nokEvidenceFileType: computedStatus === "NOK" ? nokEvidenceFileType : undefined,
+            nokEvidenceFileData: computedStatus === "NOK" ? nokEvidenceFileData : undefined,
+            nokEvidenceLinks: computedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+          };
+        }
+        return c;
+      });
+
+      onUpdateCriteria(branch.id, updated);
+      setSelectedCriterion(null);
+      alert(`Avaliação do TOP 10 concluída com sucesso! Status Geral: ${computedStatus === "OK" ? "✓ CONFORME (OK)" : "❌ DIVERGENTE (NOK)"}`);
       return;
     }
 
@@ -642,6 +771,26 @@ export default function AdminEvaluationDetail({
 
     onUpdateCriteria(branch.id, updated);
     setSelectedCriterion(null);
+  };
+
+  const handleAuditorQtyChange = (itemCode: string, value: string, itemsList: any[]) => {
+    const nextQtys = {
+      ...top10AuditorQuantitiesInput,
+      [itemCode]: value
+    };
+    setTop10AuditorQuantitiesInput(nextQtys);
+
+    // Dynamic Overall Status calculation
+    const hasAnyDivergence = itemsList.some((item: any, idx: number) => {
+      const qAlmoxarife = selectedCriterion?.top10AlmoxarifeQuantities?.[idx] ?? 0;
+      const qAuditorStr = nextQtys[item.code] ?? "";
+      const qAuditor = qAuditorStr === "" ? 0 : Number(qAuditorStr);
+      return qAlmoxarife !== qAuditor;
+    });
+
+    const nextStatus = hasAnyDivergence ? "NOK" : "OK";
+    setStatusInput(nextStatus);
+    setPtsInput(nextStatus === "OK" ? (selectedCriterion?.pointsPossible ?? 0) : 0);
   };
 
   const handleToggleAuditMode = (criterionId: string, newMode: "Presencial" | "A_Distancia") => {
@@ -1231,7 +1380,11 @@ export default function AdminEvaluationDetail({
       {/* EVALUATION MODAL / BOTTOM SHEET */}
       {selectedCriterion && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 transition-opacity">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+          <div className={`bg-white rounded-xl shadow-2xl w-full overflow-hidden border border-slate-100 flex flex-col transition-all duration-200 ${
+            selectedCriterion.id === "2" 
+              ? "max-w-[900px] w-[90vw] max-h-[85vh]"
+              : "max-w-lg max-h-[90vh]"
+          }`}>
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#1B2A4A] text-white flex justify-between items-center bg-gradient-to-r from-[#1B2A4A] to-[#21355c]">
               <div>
@@ -1613,11 +1766,11 @@ export default function AdminEvaluationDetail({
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
                   <div>
                     <span className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-blue-600">star</span>
-                      Configuração do TOP 10 — {branch.name.replace("ALMOXARIFADO ", "")}
+                      <span className="material-symbols-outlined text-[16px] text-[#1B2A4A]">star</span>
+                      Avaliação do TOP 10 — {branch.name.replace("ALMOXARIFADO ", "")}
                     </span>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Itens selecionados para auditagem no mês de {cycleStateParsed.activeMonth} {cycleStateParsed.activeYear}.
+                      Verifique as fotos enviadas pelo almoxarife, preencha as quantidades encontradas no sistema Transnet e valide divergências.
                     </p>
                   </div>
 
@@ -1631,46 +1784,149 @@ export default function AdminEvaluationDetail({
                       ⚠️ Nenhum item configurado para este mês por enquanto.
                     </div>
                   ) : (
-                    <div className="bg-white border border-slate-150 rounded-xl overflow-hidden font-sans">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black text-slate-400 uppercase">
-                            <th className="p-2.5 w-10 text-center">Nº</th>
-                            <th className="p-2.5">Código</th>
-                            <th className="p-2.5">Descrição</th>
-                            <th className="p-2.5 text-center">Qtd</th>
-                            <th className="p-2.5 text-right">Foto</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium">
-                          {top10Config.itens.map((item: any, idx: number) => {
-                            const photo = selectedCriterion.submittedPhotos?.[idx];
-                            return (
-                              <tr key={idx} className="hover:bg-slate-50/50">
-                                <td className="p-2.5 text-center font-mono font-bold text-slate-400">{idx + 1}</td>
-                                <td className="p-2.5 font-mono text-slate-700 font-bold">{item.code}</td>
-                                <td className="p-2.5 text-slate-700">{item.description}</td>
-                                <td className="p-2.5 text-center font-mono font-bold text-[#1B2A4A]">{item.qty}º</td>
-                                <td className="p-2.5 text-right">
-                                  {photo ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setActiveLightboxImg(photo)}
-                                      className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-violet-105 bg-violet-100 border border-violet-200 text-violet-700 text-[10px] font-extrabold uppercase rounded hover:bg-violet-200 transition"
-                                    >
-                                      👁 Ver Foto
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] font-semibold text-amber-600 font-mono italic">
-                                      Pendente
+                    <div className="space-y-2">
+                      <div className="overflow-x-auto w-full rounded-lg border border-slate-205 border-slate-200 shadow-2xs" style={{ WebkitOverflowScrolling: "touch" }}>
+                        <table className="min-w-[700px] w-full border-collapse text-left text-xs bg-white font-sans">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                              <th className="p-2.5 text-center text-slate-400 border-r border-slate-200" style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>Nº</th>
+                              <th className="p-2.5 text-left text-slate-400 border-r border-slate-200" style={{ width: '200px', minWidth: '200px' }}>Material</th>
+                              <th className="p-2.5 text-center text-slate-400 border-r border-slate-200" style={{ width: '90px', minWidth: '90px', maxWidth: '90px' }}>Foto</th>
+                              <th className="p-2.5 text-center text-slate-400 border-r border-slate-200" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>Qtd Alm</th>
+                              <th className="p-2.5 text-center text-slate-400 border-r border-slate-200" style={{ width: '140px', minWidth: '140px', maxWidth: '140px' }}>Qtd Aud (Transnet)</th>
+                              <th className="p-2.5 text-center text-slate-400" style={{ width: '100px', minWidth: '100px', maxWidth: '100px' }}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150 font-medium">
+                            {top10Config.itens.map((item: any, idx: number) => {
+                              const photo = selectedCriterion.submittedPhotos?.[idx];
+                              const qtyAlmoxarife = selectedCriterion.top10AlmoxarifeQuantities?.[idx] ?? 0;
+                              const qtyAuditorStr = top10AuditorQuantitiesInput[item.code] ?? "";
+                              const qtyAuditor = qtyAuditorStr === "" ? 0 : Number(qtyAuditorStr);
+                              const diff = qtyAlmoxarife - qtyAuditor;
+
+                              let statusBadge = (
+                                <span className="px-2 py-1 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 block text-center uppercase tracking-wide">
+                                  Digitar Qtd
+                                </span>
+                              );
+
+                              if (qtyAuditorStr !== "") {
+                                if (diff === 0) {
+                                  statusBadge = (
+                                    <span className="px-2 py-1 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-250 block text-center uppercase tracking-wide">
+                                      OK
                                     </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                  );
+                                } else {
+                                  statusBadge = (
+                                    <span className="px-2 py-1 rounded text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-250 block text-center uppercase tracking-wide">
+                                      NOK ({diff})
+                                    </span>
+                                  );
+                                }
+                              }
+
+                              return (
+                                <tr key={idx} className="hover:bg-slate-55/50 hover:bg-slate-50/50 transition">
+                                  <td className="p-2.5 text-center font-mono font-bold text-slate-400 border-r border-slate-200" style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>
+                                    {idx + 1}
+                                  </td>
+                                  <td className="p-2.5 border-r border-slate-200" style={{ width: '200px', minWidth: '200px' }}>
+                                    <span className="text-[9.5px] font-mono font-bold text-slate-400 block uppercase">CÓD. {item.code}</span>
+                                    <span className="text-slate-800 font-extrabold text-[#1B2A4A] text-xs block leading-tight">{item.description}</span>
+                                    {selectedCriterion.submittedAt && (
+                                      <span className="text-[9px] font-mono text-slate-400 block mt-1" title="Data/Hora do envio do Almoxarife">
+                                        📅 {selectedCriterion.submittedAt}
+                                      </span>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Foto Column */}
+                                  <td className="p-2.5 text-center border-r border-slate-200 align-middle" style={{ width: '90px', minWidth: '90px', maxWidth: '90px' }}>
+                                    {photo ? (
+                                      <div className="flex flex-col items-center gap-1.5 justify-center">
+                                        {/* Miniatura clicável */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveLightboxImg(photo)}
+                                          className="group relative w-12 h-12 block rounded-lg overflow-hidden border border-slate-200 hover:border-indigo-600 shadow-3xs transition cursor-pointer"
+                                          title="Clique para ver no lightbox"
+                                        >
+                                          <img src={photo} alt="Envio" className="w-full h-full object-cover group-hover:scale-110 transition duration-150" referrerPolicy="no-referrer" />
+                                          <div className="absolute inset-0 bg-indigo-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[9px] font-bold uppercase">
+                                            Zoom
+                                          </div>
+                                        </button>
+                                        
+                                        {/* Badge "Ver foto" verde clicável que abre em nova aba */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const newTab = window.open();
+                                            if (newTab) {
+                                              newTab.document.write(
+                                                `<html><head><title>Visualizar Material - CÓD. ${item.code}</title></head>` +
+                                                `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #111; color: white; font-family: sans-serif;">` +
+                                                `<div style="text-align: center; padding: 20px;">` +
+                                                `<p style="margin-bottom: 12px; font-weight: bold; font-size: 14px; color: #ccc;">Item: ${item.description} (CÓD. ${item.code})</p>` +
+                                                `<img src="${photo}" style="max-width: 100%; max-height: 85vh; object-fit: contain; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-radius: 8px;" />` +
+                                                `</div>` +
+                                                `</body></html>`
+                                              );
+                                              newTab.document.close();
+                                            }
+                                          }}
+                                          className="w-full text-[9px] font-black text-emerald-700 hover:text-emerald-805 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1 py-0.5 rounded cursor-pointer transition uppercase select-none tracking-tight block text-center"
+                                        >
+                                          Ver foto ↗
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 italic">
+                                        Pendente
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Qtd Almoxarife Column */}
+                                  <td className="p-2.5 text-center font-mono font-extrabold text-[#1B2A4A] text-xs bg-slate-50/10 border-r border-slate-200 align-middle" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                    {qtyAlmoxarife} un
+                                  </td>
+
+                                  {/* Qtd Auditor Column */}
+                                  <td className="p-2.5 text-center border-r border-slate-200 bg-indigo-50/10 align-middle" style={{ width: '140px', minWidth: '140px', maxWidth: '140px' }}>
+                                    <div className="flex justify-center flex-row">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        placeholder="Qtd Transnet"
+                                        value={qtyAuditorStr}
+                                        onChange={(e) => {
+                                          handleAuditorQtyChange(item.code, e.target.value, top10Config.itens);
+                                        }}
+                                        className="w-24 border border-slate-200 bg-white rounded-md px-2 py-1 text-xs text-center font-bold font-mono text-[#1B2A4A] focus:border-[#1B2A4A] focus:outline-none focus:ring-1 focus:ring-[#1B2A4A]/20"
+                                      />
+                                    </div>
+                                  </td>
+
+                                  {/* Status Column */}
+                                  <td className="p-2.5 text-center align-middle" style={{ width: '100px', minWidth: '100px', maxWidth: '100px' }}>
+                                    {statusBadge}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Indicator of scrollable on mobile */}
+                      <div className="block sm:hidden text-center mt-2 animate-fade-in animate-duration-300">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full uppercase tracking-wider animate-pulse font-mono select-none">
+                          ← deslize para ver mais →
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2370,9 +2626,8 @@ export default function AdminEvaluationDetail({
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     <div className="grid grid-cols-12 gap-2 text-[10px] font-black text-slate-400 uppercase font-mono px-2">
                       <div className="col-span-1 text-center">Nº</div>
-                      <div className="col-span-3">Código do Item</div>
-                      <div className="col-span-5">Descrição</div>
-                      <div className="col-span-2 text-center">Qtd</div>
+                      <div className="col-span-4">Código do Item</div>
+                      <div className="col-span-6">Descrição</div>
                       <div className="col-span-1 text-right"></div>
                     </div>
 
@@ -2381,7 +2636,7 @@ export default function AdminEvaluationDetail({
                         <div className="col-span-1 text-center font-mono font-bold text-slate-400 text-xs">
                           {idx + 1}
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-4">
                           <input
                             type="text"
                             placeholder="Código"
@@ -2390,22 +2645,13 @@ export default function AdminEvaluationDetail({
                             className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-bold font-mono focus:outline-none focus:border-[#1B2A4A]"
                           />
                         </div>
-                        <div className="col-span-5">
+                        <div className="col-span-6">
                           <input
                             type="text"
                             placeholder="Descrição do material"
                             value={row.description}
                             onChange={(e) => handleUpdateTop10Row(idx, "description", e.target.value)}
                             className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#1B2A4A]"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.qty}
-                            onChange={(e) => handleUpdateTop10Row(idx, "qty", parseInt(e.target.value) || 1)}
-                            className="w-full border border-slate-200 bg-white rounded-md p-1.5 text-xs text-center text-slate-805 font-bold font-mono focus:outline-none focus:border-[#1B2A4A]"
                           />
                         </div>
                         <div className="col-span-1 text-right">
