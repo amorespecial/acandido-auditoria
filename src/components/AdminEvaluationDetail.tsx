@@ -636,10 +636,6 @@ export default function AdminEvaluationDetail({
           alert("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
-        if (!notesInput.trim()) {
-          alert("Erro de Validação: Como há itens com divergência (NOK), você deve redigir obrigatoriamente uma justificativa com as recomendações de ajuste nas anotações.");
-          return;
-        }
       }
 
       // Prepare quantities to persist on CriterionState
@@ -703,10 +699,6 @@ export default function AdminEvaluationDetail({
           alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
-        if (!notesInput.trim()) {
-          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), você deve redigir obrigatoriamente uma justificativa com as recomendações de ajuste nas anotações.");
-          return;
-        }
       }
 
       const updated = branch.criteria.map((c) => {
@@ -741,10 +733,6 @@ export default function AdminEvaluationDetail({
       const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
       if (!isNokLinkValid) {
         alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
-        return;
-      }
-      if (!notesInput.trim()) {
-        alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), você deve redigir obrigatoriamente uma justificativa com as recomendações de ajuste nas anotações.");
         return;
       }
     }
@@ -2348,19 +2336,7 @@ export default function AdminEvaluationDetail({
                 </div>
               )}
 
-              {/* Comment / notes */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                  Anotações / Recomendações
-                </label>
-                <textarea
-                  rows={3}
-                  value={notesInput}
-                  onChange={(e) => setNotesInput(e.target.value)}
-                  placeholder="Justificativa da nota, inconformidades encontradas ou recomendações para melhoria..."
-                  className="w-full border border-slate-200 rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
-                ></textarea>
-              </div>
+              {/* Comment / notes removed */}
             </div>
 
             {/* Modal Footer */}
