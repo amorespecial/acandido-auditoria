@@ -631,8 +631,9 @@ export default function AdminEvaluationDetail({
       const computedStatus = anyNok ? "NOK" : "OK";
 
       if (computedStatus === "NOK") {
-        if (!nokEvidenceFileData.trim()) {
-          alert("Erro de Validação: Como há itens com divergência (NOK), você deve fornecer obrigatoriamente um arquivo de evidência por upload direto.");
+        const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
+        if (!isNokLinkValid) {
+          alert("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
         if (!notesInput.trim()) {
@@ -654,11 +655,11 @@ export default function AdminEvaluationDetail({
             pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
             top10AuditorQuantities: finalQuantitiesList,
             notes: notesInput,
-            nokEvidenceLink: computedStatus === "NOK" ? nokEvidenceFileName : undefined,
+            nokEvidenceLink: computedStatus === "NOK" ? nokLink1Input.trim() : undefined,
             nokEvidenceDescription: computedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-            nokEvidenceFileName: computedStatus === "NOK" ? nokEvidenceFileName : undefined,
-            nokEvidenceFileType: computedStatus === "NOK" ? nokEvidenceFileType : undefined,
-            nokEvidenceFileData: computedStatus === "NOK" ? nokEvidenceFileData : undefined,
+            nokEvidenceFileName: computedStatus === "NOK" ? "Link" : undefined,
+            nokEvidenceFileType: computedStatus === "NOK" ? "url" : undefined,
+            nokEvidenceFileData: computedStatus === "NOK" ? "" : undefined,
             nokEvidenceLinks: computedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
           };
         }
@@ -697,8 +698,9 @@ export default function AdminEvaluationDetail({
       else if (okCount === 0) finalStatus = "NOK";
 
       if (finalStatus === "NOK") {
-        if (!nokEvidenceFileData.trim()) {
-          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), você deve fornecer obrigatoriamente um arquivo de evidência por upload direto.");
+        const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
+        if (!isNokLinkValid) {
+          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
         if (!notesInput.trim()) {
@@ -715,11 +717,11 @@ export default function AdminEvaluationDetail({
             pointsObtained: pointsObtained,
             notes: notesInput || `Média semestral: ${okCount} de ${totalCount} OK.`,
             isAguardandoRealizacao: totalCount > 0 && branchCalendar.every(b => !b.status || b.status === "PENDENTE"),
-            nokEvidenceLink: finalStatus === "NOK" ? nokEvidenceFileName : undefined,
+            nokEvidenceLink: finalStatus === "NOK" ? nokLink1Input.trim() : undefined,
             nokEvidenceDescription: finalStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-            nokEvidenceFileName: finalStatus === "NOK" ? nokEvidenceFileName : undefined,
-            nokEvidenceFileType: finalStatus === "NOK" ? nokEvidenceFileType : undefined,
-            nokEvidenceFileData: finalStatus === "NOK" ? nokEvidenceFileData : undefined,
+            nokEvidenceFileName: finalStatus === "NOK" ? "Link" : undefined,
+            nokEvidenceFileType: finalStatus === "NOK" ? "url" : undefined,
+            nokEvidenceFileData: finalStatus === "NOK" ? "" : undefined,
             nokEvidenceLinks: finalStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
           };
         }
@@ -736,8 +738,9 @@ export default function AdminEvaluationDetail({
     const enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
 
     if (enforcedStatus === "NOK") {
-      if (!nokEvidenceFileData.trim()) {
-        alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), você deve fornecer obrigatoriamente um arquivo de evidência por upload direto.");
+      const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
+      if (!isNokLinkValid) {
+        alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
         return;
       }
       if (!notesInput.trim()) {
@@ -758,11 +761,11 @@ export default function AdminEvaluationDetail({
             ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
             : c.submittedPhotos,
           submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
-          nokEvidenceLink: enforcedStatus === "NOK" ? nokEvidenceFileName : undefined,
+          nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
           nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-          nokEvidenceFileName: enforcedStatus === "NOK" ? nokEvidenceFileName : undefined,
-          nokEvidenceFileType: enforcedStatus === "NOK" ? nokEvidenceFileType : undefined,
-          nokEvidenceFileData: enforcedStatus === "NOK" ? nokEvidenceFileData : undefined,
+          nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
+          nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
+          nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
           nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
         };
       }
@@ -1257,7 +1260,7 @@ export default function AdminEvaluationDetail({
                               </span>
                             )}
                             {crit.nokEvidenceLinks && crit.nokEvidenceLinks.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 items-center ml-2 border-l border-rose-200/50 pl-2">
+                              <div className="flex flex-wrap gap-1.5 items-center ml-2 border-l border-rose-200/50 pl-2 font-sans">
                                 {crit.nokEvidenceLinks.map((link, lIdx) => (
                                   <a
                                     key={lIdx}
@@ -1265,9 +1268,9 @@ export default function AdminEvaluationDetail({
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="text-indigo-600 hover:text-indigo-850 hover:underline font-extrabold text-[10px]"
+                                    className="inline-flex items-center gap-1.5 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-black transition-all shadow-2xs hover:scale-102"
                                   >
-                                    [Link {lIdx + 1} ↗]
+                                    <span>🔗 Ver evidência {lIdx + 1}</span>
                                   </a>
                                 ))}
                               </div>
@@ -2205,141 +2208,68 @@ export default function AdminEvaluationDetail({
                 </div>
               )}
 
-              {/* NOK Evidence Block with Direct Upload */}
+              {/* NOK Evidence Block with Links Only */}
               {(statusInput === "NOK" || (selectedCriterion?.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio"))) && (
-                <div className="p-4 border border-[#F7C1C1] bg-[#FCEBEB] rounded-xl space-y-3 shadow-2xs animate-fade-in duration-300">
+                <div className="p-4 border border-[#F7C1C1] bg-[#FCEBEB] rounded-xl space-y-4 shadow-2xs animate-fade-in duration-300">
                   <div className="flex items-center gap-1.5 text-red-900 font-extrabold text-xs">
                     <span className="material-symbols-outlined text-[16px] text-red-700">warning</span>
-                    <span>⚠ Evidência obrigatória para NOK (Regra Ativa)</span>
-                  </div>
-                  
-                  <div className="space-y-1 bg-[#FDF4F4] p-3 rounded-lg border border-[#F3B3B3]">
-                    <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block mb-1">
-                      Anexar Evidência (Direct Upload)
-                    </label>
-
-                    {nokEvidenceFileData ? (
-                      <div className="flex items-center justify-between bg-white border border-[#E9A1A1] p-2 rounded-lg text-xs">
-                        <div className="flex items-center gap-2 text-slate-800 min-w-0 font-bold">
-                          {nokEvidenceFileType?.startsWith("image/") ? (
-                            <span className="material-symbols-outlined text-[18px] text-red-650 shrink-0">image</span>
-                          ) : (
-                            <span className="material-symbols-outlined text-[18px] text-red-650 shrink-0">picture_as_pdf</span>
-                          )}
-                          <span className="truncate font-mono text-[10.5px]" title={nokEvidenceFileName}>
-                            {nokEvidenceFileName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newTab = window.open();
-                              if (newTab) {
-                                newTab.document.write(
-                                  `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                  `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                  `${nokEvidenceFileType?.startsWith("image/") 
-                                      ? `<img src="${nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                      : `<iframe src="${nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                   }` +
-                                  `</body></html>`
-                                );
-                                newTab.document.close();
-                              }
-                            }}
-                            className="py-1 px-2.5 bg-[#FCEBEB] text-slate-800 hover:bg-[#F3D6D6] border border-[#E9A1A1] rounded text-[9.5px] font-black"
-                          >
-                            Visualizar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNokEvidenceFileName("");
-                              setNokEvidenceFileType("");
-                              setNokEvidenceFileData("");
-                            }}
-                            className="p-1 text-red-600 hover:bg-red-100 rounded"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">close</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="border border-dashed border-[#F3B3B3] rounded-lg p-3 bg-white text-center flex flex-col items-center justify-center space-y-1.5">
-                        <span className="material-symbols-outlined text-[18px] text-red-400">attach_file</span>
-                        <div className="text-[10px] text-slate-500 font-semibold leading-normal">
-                          <p className="font-bold text-slate-700">Anexar evidência do auditor (clipe)</p>
-                          <p className="text-slate-400 text-[9px]">JPG, PNG ou PDF • máx. 10 MB</p>
-                        </div>
-                        <label className="cursor-pointer bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block">
-                          Escolher arquivo
-                          <input
-                            type="file"
-                            accept=".jpg,.jpeg,.png,.pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size > 10 * 1024 * 1024) {
-                                  alert("Erro: O arquivo excede o limite máximo de 10 MB.");
-                                  return;
-                                }
-                                const reader = new FileReader();
-                                reader.onload = (re) => {
-                                  const base64 = re.target?.result as string;
-                                  setNokEvidenceFileName(file.name);
-                                  setNokEvidenceFileType(file.type);
-                                  setNokEvidenceFileData(base64);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                    )}
+                    <span>⚠ Evidência obrigatória para NOK</span>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
-                      Descrição do problema (opcional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={nokEvidenceDescriptionInput}
-                      onChange={(e) => setNokEvidenceDescriptionInput(e.target.value)}
-                      placeholder="Descreva o problema encontrado..."
-                      className="w-full bg-white border border-[#F7C1C1] rounded-lg p-2.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400"
-                    />
-                  </div>
-
-                  <div className="space-y-2 border-t border-[#F2C7C7] pt-2.5">
-                    <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px]">link</span>
-                      🔗 Links de Evidência (opcional)
-                    </label>
-                    <div className="space-y-2">
+                  <div className="space-y-4">
+                    {/* Link 1 - OBRIGATÓRIO */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
+                        LINK 1 (OBRIGATÓRIO) *
+                      </label>
                       <input
                         type="url"
                         value={nokLink1Input}
                         onChange={(e) => setNokLink1Input(e.target.value)}
-                        placeholder="Link 1: https://drive.google.com/..."
+                        placeholder="https://drive.google.com/..."
                         className="w-full bg-white border border-[#F7C1C1] rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400 font-mono"
                       />
+                    </div>
+
+                    {/* Link 2 - OPCIONAL */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
+                        LINK 2 (OPCIONAL)
+                      </label>
                       <input
                         type="url"
                         value={nokLink2Input}
                         onChange={(e) => setNokLink2Input(e.target.value)}
-                        placeholder="Link 2: https://drive.google.com/..."
+                        placeholder="https://drive.google.com/..."
                         className="w-full bg-white border border-[#F7C1C1] rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400 font-mono"
                       />
+                    </div>
+
+                    {/* Link 3 - OPCIONAL */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
+                        LINK 3 (OPCIONAL)
+                      </label>
                       <input
                         type="url"
                         value={nokLink3Input}
                         onChange={(e) => setNokLink3Input(e.target.value)}
-                        placeholder="Link 3: https://drive.google.com/..."
+                        placeholder="https://drive.google.com/..."
                         className="w-full bg-white border border-[#F7C1C1] rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
+
+                    {/* Descrição do problema - OPCIONAL */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
+                        DESCRIÇÃO DO PROBLEMA (OPCIONAL)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={nokEvidenceDescriptionInput}
+                        onChange={(e) => setNokEvidenceDescriptionInput(e.target.value)}
+                        placeholder="Descreva o problema encontrado (opcional)..."
+                        className="w-full bg-white border border-[#F7C1C1] rounded-lg p-2.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
@@ -2434,7 +2364,7 @@ export default function AdminEvaluationDetail({
               {(() => {
                 const hasAnyNokCollab = selectedCriterion?.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
                 const isNok = statusInput === "NOK" || hasAnyNokCollab;
-                const isFileEmpty = !nokEvidenceFileData.trim();
+                const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
 
                 const handleSaveClick = () => {
                   if (!selectedCriterion) return;
@@ -2452,10 +2382,10 @@ export default function AdminEvaluationDetail({
                   return (
                     <button
                       type="button"
-                      disabled={isFileEmpty}
+                      disabled={!isNokLinkValid}
                       onClick={handleSaveClick}
                       className={`px-5 py-2 text-white rounded-md text-xs font-extrabold shadow transition-all ${
-                        isFileEmpty
+                        !isNokLinkValid
                           ? "bg-slate-300 text-slate-500 cursor-not-allowed"
                           : "bg-red-600 hover:bg-red-700 active:scale-95"
                       }`}

@@ -825,8 +825,15 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
             doc.setFont("Helvetica", "normal");
             doc.setFontSize(7.5);
             doc.setTextColor(127, 29, 29);
-            doc.text(`Desvio: ${evidence.reasonNok}`, 18, y + 9);
-            doc.text(`Nota: "${evidence.obsNok}"`, 18, y + 13);
+            
+            const cAny = c as any;
+            const desvioText = cAny.nokEvidenceDescription ? `Desvio: ${cAny.nokEvidenceDescription}` : `Desvio: ${evidence.reasonNok}`;
+            doc.text(doc.splitTextToSize(desvioText, 172)[0] || "", 18, y + 9);
+            
+            const linksStr = cAny.nokEvidenceLinks && cAny.nokEvidenceLinks.length > 0 
+              ? `Evidências: ${cAny.nokEvidenceLinks.join(" | ")}` 
+              : `Nota: "${evidence.obsNok}"`;
+            doc.text(doc.splitTextToSize(linksStr, 172)[0] || "", 18, y + 13);
 
             doc.setFillColor(255, 255, 255);
             doc.rect(18, y + 15, 174, 5.5, "F");
@@ -1187,33 +1194,50 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
                           }`}>
                             {c.status}
                           </span>
-                          {c.status === "NOK" && (c.nokEvidenceLink || c.nokEvidenceFileData) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (c.nokEvidenceFileData) {
-                                  const newTab = window.open();
-                                  if (newTab) {
-                                    newTab.document.write(
-                                      `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                      `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                      `${c.nokEvidenceFileType?.startsWith("image/") 
-                                          ? `<img src="${c.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                          : `<iframe src="${c.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                       }` +
-                                      `</body></html>`
-                                    );
-                                    newTab.document.close();
-                                  }
-                                } else if (c.nokEvidenceLink) {
-                                  window.open(c.nokEvidenceLink, "_blank", "noopener,noreferrer");
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
-                            >
-                              <span>📎 Ver evidência</span>
-                            </button>
+                          {c.status === "NOK" && (
+                            <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
+                              {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
+                                (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
+                                  <a
+                                    key={lIdx}
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1.5 text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-black transition-all shadow-3xs"
+                                  >
+                                    <span>🔗 Ver evidência {lIdx + 1}</span>
+                                  </a>
+                                ))
+                              ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if ((c as any).nokEvidenceFileData) {
+                                      const newTab = window.open();
+                                      if (newTab) {
+                                        newTab.document.write(
+                                          `<html><head><title>Visualizar Evidência - NOK</title></head>` +
+                                          `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
+                                          `${(c as any).nokEvidenceFileType?.startsWith("image/") 
+                                              ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                              : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
+                                           }` +
+                                          `</body></html>`
+                                        );
+                                        newTab.document.close();
+                                      }
+                                    } else if ((c as any).nokEvidenceLink) {
+                                      window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
+                                >
+                                  <span>📎 Ver evidência</span>
+                                </button>
+                              ) : null}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -1497,33 +1521,50 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
                               }`}>
                                 {c.status}
                               </span>
-                              {c.status === "NOK" && (c.nokEvidenceLink || c.nokEvidenceFileData) && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (c.nokEvidenceFileData) {
-                                      const newTab = window.open();
-                                      if (newTab) {
-                                        newTab.document.write(
-                                          `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                          `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                          `${c.nokEvidenceFileType?.startsWith("image/") 
-                                              ? `<img src="${c.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                              : `<iframe src="${c.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                           }` +
-                                          `</body></html>`
-                                        );
-                                        newTab.document.close();
-                                      }
-                                    } else if (c.nokEvidenceLink) {
-                                      window.open(c.nokEvidenceLink, "_blank", "noopener,noreferrer");
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
-                                >
-                                  <span>📎 Ver evidência</span>
-                                </button>
+                              {c.status === "NOK" && (
+                                <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
+                                  {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
+                                    (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
+                                      <a
+                                        key={lIdx}
+                                        href={link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1.5 text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-black transition-all shadow-3xs"
+                                      >
+                                        <span>🔗 Ver evidência {lIdx + 1}</span>
+                                      </a>
+                                    ))
+                                  ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if ((c as any).nokEvidenceFileData) {
+                                          const newTab = window.open();
+                                          if (newTab) {
+                                            newTab.document.write(
+                                              `<html><head><title>Visualizar Evidência - NOK</title></head>` +
+                                              `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
+                                              `${(c as any).nokEvidenceFileType?.startsWith("image/") 
+                                                  ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                                  : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
+                                               }` +
+                                              `</body></html>`
+                                            );
+                                            newTab.document.close();
+                                          }
+                                        } else if ((c as any).nokEvidenceLink) {
+                                          window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
+                                    >
+                                      <span>📎 Ver evidência</span>
+                                    </button>
+                                  ) : null}
+                                </div>
                               )}
                             </div>
                           </td>
