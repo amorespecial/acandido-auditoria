@@ -370,13 +370,13 @@ export const dbSaveUser = async (user: AppUser) => {
 export interface CycleState {
   activeMonth: string;
   activeYear: string;
-  status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM";
+  status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
   openedAt?: string;
   openedBy?: string;
 }
 
 export const dbFetchCycleState = async (): Promise<CycleState> => {
-  const defaultState: CycleState = { activeMonth: "Maio", activeYear: "2026", status: "NENHUM" };
+  const defaultState: CycleState = { activeMonth: "Janeiro", activeYear: "2026", status: "ABERTO", openedAt: "01/01/2026", openedBy: "Fernando Silva" };
   if (!isSupabaseReady()) {
     const saved = localStorage.getItem("acandido_cycle_state_manual");
     return saved ? JSON.parse(saved) : defaultState;
@@ -388,9 +388,9 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   }
 
   const current = data[0];
-  let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM" = "ABERTO";
+  let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
   if (current.status === 'bloqueado') statusStr = "AGUARDANDO_FECHAMENTO";
-  else if (current.status === 'fechado') statusStr = "NENHUM";
+  else if (current.status === 'fechado') statusStr = "FECHADO";
 
   return {
     activeMonth: monthNumToName(current.mes),
@@ -416,8 +416,29 @@ export const dbSaveCycleState = async (cycle: CycleState) => {
     ano: Number(cycle.activeYear),
     status: statusDb,
     iniciado_por: cycle.openedBy || "Fernando Silva",
-    fechado_em: cycle.status === "NENHUM" ? new Date().toISOString() : null
+    fechado_em: cycle.status === "NENHUM" || cycle.status === "FECHADO" ? new Date().toISOString() : null
   }, { onConflict: 'mes,ano' });
+};
+
+export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
+  if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_all_cycles_list");
+    return saved ? JSON.parse(saved) : [];
+  }
+  const { data, error } = await supabase.from('ciclos').select('*');
+  if (error || !data) return [];
+  return data.map(item => {
+    let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
+    if (item.status === 'bloqueado') statusStr = "AGUARDANDO_FECHAMENTO";
+    else if (item.status === 'fechado') statusStr = "FECHADO";
+    return {
+      activeMonth: monthNumToName(item.mes),
+      activeYear: String(item.ano),
+      status: statusStr,
+      openedAt: item.iniciado_em,
+      openedBy: item.iniciado_por
+    };
+  });
 };
 
 // ======================= CRITERIA EVALUATIONS (avaliacoes) =======================

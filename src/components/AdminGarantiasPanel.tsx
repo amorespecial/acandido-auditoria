@@ -114,6 +114,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
 
   // Filtering Logic
   const filteredWarranties = warranties.filter((w) => {
+    if (w.monthYear && (w.monthYear.startsWith("Fevereiro") || w.monthYear.startsWith("Julho") || w.monthYear.startsWith("Agosto"))) return false;
     // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.name)
     const targetAlmox = branch ? branch.name : selectedAlmoxarifado;
     if (targetAlmox !== "TODOS") {

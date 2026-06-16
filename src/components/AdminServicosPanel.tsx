@@ -145,6 +145,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
     }
 
     const { month, year } = getServiceMonthAndYear(occ.date);
+    if (month && ["fevereiro", "julho", "agosto"].includes(month.toLowerCase())) return false;
 
     // 2. Month-year Filter
     if (selectedMonth !== "TODOS" && month.toLowerCase() !== selectedMonth.toLowerCase()) {

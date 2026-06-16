@@ -132,6 +132,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   // Dynamic filter logic
   const filteredOccurrences = occurrences.filter((occ) => {
+    if (["Fevereiro", "Julho", "Agosto"].includes(selectedMonth)) return false;
     // Filter specifically by active branchId
     if (occ.branchId && occ.branchId !== branchId) return false;
 

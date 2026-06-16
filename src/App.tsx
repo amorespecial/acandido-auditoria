@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers } from "./supabaseService";
 import { supabase } from "./supabaseClient";
 
 // View components
@@ -23,13 +23,50 @@ import AlmoxarifeGarantia from "./components/AlmoxarifeGarantia";
 import AlmoxarifeHistorico from "./components/AlmoxarifeHistorico";
 import SupervisorPanel from "./components/SupervisorPanel";
 
+const getInitialAuditMode = (branchId: string, ownerName: string, criterionId: string): "Presencial" | "A_Distancia" => {
+  const bId = branchId.toLowerCase();
+  const owner = ownerName.toLowerCase();
+  const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
+  if (isRobsonOrLucas && (criterionId === "2" || criterionId === "4")) {
+    return "Presencial";
+  }
+  return "A_Distancia";
+};
+
+const getCleanDefaultBranches = () => {
+  return initialBranches.map((b) => ({
+    ...b,
+    currentScore: 0,
+    status: "PENDENTE" as const,
+    scoreCategory: "Sem Nota Inicial" as const,
+    criteria: b.criteria.map((c) => ({
+      ...c,
+      status: "AGUARDANDO ENVIO" as const,
+      pointsObtained: 0,
+      evidenceNotes: "",
+      submittedPhotos: [],
+      submittedAt: undefined,
+      notes: "",
+      nokEvidenceLinks: [],
+      nokEvidenceLink: undefined,
+      nokEvidenceDescription: undefined,
+      top10AuditorQuantities: undefined,
+      nokEvidenceFileName: undefined,
+      nokEvidenceFileType: undefined,
+      nokEvidenceFileData: undefined,
+      auditMode: getInitialAuditMode(b.id, b.ownerName, c.id)
+    }))
+  }));
+};
+
 export default function App() {
   // Absolute General Reset of demonstration data to prepare for real cycles
   if (typeof window !== "undefined") {
-    const resetKey = "acandido_general_clean_reset_v9";
+    const resetKey = "acandido_general_clean_reset_v10_real";
     if (localStorage.getItem(resetKey) !== "true") {
       const savedUser = localStorage.getItem("acandido_app_user");
       const savedUsersList = localStorage.getItem("acandido_users");
+      const savedJaneiroEvals = localStorage.getItem("acandido_evaluations_Janeiro_2026");
       
       // Clear all mock data keys
       localStorage.removeItem("acandido_branches");
@@ -38,6 +75,7 @@ export default function App() {
       localStorage.removeItem("acandido_warranties");
       localStorage.removeItem("acandido_occurrences");
       localStorage.removeItem("acandido_cycle_state_manual");
+      localStorage.removeItem("acandido_all_cycles_list");
       localStorage.removeItem("acandido_calendario_inventarios");
       localStorage.removeItem("acandido_all_collab_profiles");
       
@@ -49,8 +87,29 @@ export default function App() {
         }
       }
 
+      // Preserve only acandido_evaluations_Janeiro_2026 and delete all other evaluations
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("acandido_evaluations_") && k !== "acandido_evaluations_Janeiro_2026") {
+          localStorage.removeItem(k);
+          i--;
+        }
+      }
+
       if (savedUser) localStorage.setItem("acandido_app_user", savedUser);
       if (savedUsersList) localStorage.setItem("acandido_users", savedUsersList);
+      if (savedJaneiroEvals) localStorage.setItem("acandido_evaluations_Janeiro_2026", savedJaneiroEvals);
+      
+      // Seed Janeiro 2026 as unique active open cycle
+      const initialCycle = {
+        activeMonth: "Janeiro",
+        activeYear: "2026",
+        status: "ABERTO",
+        openedAt: "01/01/2026",
+        openedBy: "Fernando Silva"
+      };
+      localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(initialCycle));
+      localStorage.setItem("acandido_all_cycles_list", JSON.stringify([initialCycle]));
       
       localStorage.setItem("acandido_localstorage_cleared", "true");
       localStorage.setItem(resetKey, "true");
@@ -65,18 +124,20 @@ export default function App() {
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
-    const getInitialAuditMode = (branchId: string, ownerName: string, criterionId: string): "Presencial" | "A_Distancia" => {
-      const bId = branchId.toLowerCase();
-      const owner = ownerName.toLowerCase();
-      const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
-      if (isRobsonOrLucas && (criterionId === "2" || criterionId === "4")) {
-        return "Presencial";
-      }
-      return "A_Distancia";
-    };
-
     try {
-      const saved = localStorage.getItem("acandido_branches");
+      let initM = "Janeiro";
+      let initY = "2026";
+      const savedManual = localStorage.getItem("acandido_cycle_state_manual");
+      if (savedManual) {
+        const parsed = JSON.parse(savedManual);
+        if (parsed.activeMonth) initM = parsed.activeMonth;
+        if (parsed.activeYear) initY = parsed.activeYear;
+      }
+      if (["Fevereiro", "Julho", "Agosto"].includes(initM) && initY === "2026") {
+        return getCleanDefaultBranches();
+      }
+      const specificKey = `acandido_evaluations_${initM}_${initY}`;
+      const saved = localStorage.getItem(specificKey) || localStorage.getItem("acandido_branches");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length === initialBranches.length) {
@@ -112,24 +173,51 @@ export default function App() {
     } catch (e) {
       console.error("Local storage branches parsed failed, resetting:", e);
     }
-    return initialBranches.map((b) => ({
-      ...b,
-      criteria: b.criteria.map((c) => ({
-        ...c,
-        auditMode: getInitialAuditMode(b.id, b.ownerName, c.id)
-      }))
-    }));
+    return getCleanDefaultBranches();
+  });
+
+  const [allCycles, setAllCycles] = useState<Record<string, {
+    activeMonth: string;
+    activeYear: string;
+    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
+    openedAt?: string;
+    openedBy?: string;
+  }>>(() => {
+    try {
+      const saved = localStorage.getItem("acandido_all_cycles_list");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const map: Record<string, any> = {};
+          parsed.forEach((c) => {
+            if (c.activeMonth && c.activeYear) {
+              map[`${c.activeMonth}_${c.activeYear}`] = c;
+            }
+          });
+          return map;
+        }
+      }
+    } catch (e) {}
+    return {
+      "Janeiro_2026": {
+        activeMonth: "Janeiro",
+        activeYear: "2026",
+        status: "ABERTO",
+        openedAt: "01/01/2026",
+        openedBy: "Fernando Silva"
+      }
+    };
   });
 
   // Admin routing states
   const [adminTab, setAdminTab] = useState<"PAINEL" | "RANKING" | "HISTORICO" | "CONFIGURI" | "GARANTIAS" | "SERVICOS">("PAINEL");
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
-  // Centralized cycle state for Fernando Silva (default to NENHUM for Junho 2026 on first load)
+  // Centralized cycle state for Fernando Silva (default to ABERTO for Janeiro 2026 on first load)
   const [cycleState, setCycleState] = useState<{
     activeMonth: string;
     activeYear: string;
-    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM";
+    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
     openedAt?: string;
     openedBy?: string;
   }>(() => {
@@ -140,9 +228,11 @@ export default function App() {
       } catch (e) {}
     }
     return {
-      activeMonth: "Junho",
+      activeMonth: "Janeiro",
       activeYear: "2026",
-      status: "NENHUM"
+      status: "ABERTO",
+      openedAt: "01/01/2026",
+      openedBy: "Fernando Silva"
     };
   });
 
@@ -154,7 +244,7 @@ export default function App() {
         if (parsed.activeMonth) return parsed.activeMonth;
       } catch (e) {}
     }
-    return "Junho";
+    return "Janeiro";
   });
 
   const [activeYear, setActiveYear] = useState<string>(() => {
@@ -167,6 +257,68 @@ export default function App() {
     }
     return "2026";
   });
+
+  const [loadedPeriod, setLoadedPeriod] = useState<{ month: string; year: string } | null>(null);
+
+  const handleUpdateCycleState = async (newStateOrFn: any) => {
+    let next: any;
+    if (typeof newStateOrFn === "function") {
+      next = newStateOrFn(cycleState);
+    } else {
+      next = newStateOrFn;
+    }
+
+    setCycleState(next);
+
+    // 1. Sync activeMonth/activeYear to match updated cycle if it is currently selected
+    if (next.activeMonth) setActiveMonth(next.activeMonth);
+    if (next.activeYear) setActiveYear(next.activeYear);
+
+    // 2. Also update allCycles map!
+    const key = `${next.activeMonth}_${next.activeYear}`;
+    setAllCycles((prev) => {
+      const updatedAll = { ...prev, [key]: next };
+      const list = Object.values(updatedAll);
+      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
+      return updatedAll;
+    });
+
+    // 3. Save to database
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveCycleState(next);
+      } catch (err) {
+        console.error("Failed to sync cycle state to Supabase on explicit update:", err);
+        setDbConnectionError(true);
+      }
+    }
+  };
+
+  // Dynamic cycleState derivation effect to react to month and year filter changes
+  useEffect(() => {
+    const key = `${activeMonth}_${activeYear}`;
+    const match = allCycles[key];
+    const targetStatus = match ? match.status : "NENHUM";
+    
+    setCycleState((prev) => {
+      if (
+        prev.activeMonth === activeMonth &&
+        prev.activeYear === activeYear &&
+        prev.status === targetStatus &&
+        prev.openedAt === match?.openedAt &&
+        prev.openedBy === match?.openedBy
+      ) {
+        return prev;
+      }
+      return {
+        activeMonth,
+        activeYear,
+        status: targetStatus,
+        openedAt: match?.openedAt,
+        openedBy: match?.openedBy
+      };
+    });
+  }, [activeMonth, activeYear, allCycles]);
 
   // Cycle configuration state map: key is "Mês_Ano" e.g. "Junho_2026"
   const [cycleConfigs, setCycleConfigs] = useState<Record<string, {
@@ -236,9 +388,23 @@ export default function App() {
         } else {
           setDbConnectionError(false);
           try {
+            const dbCycles = await dbFetchAllCycles();
+            if (dbCycles && dbCycles.length > 0) {
+              const map: Record<string, any> = {};
+              dbCycles.forEach((c) => {
+                map[`${c.activeMonth}_${c.activeYear}`] = c;
+              });
+              setAllCycles(map);
+            }
+          } catch (listErr) {
+            console.error("Failed to load initial cycle list:", listErr);
+          }
+          try {
             const dbCycle = await dbFetchCycleState();
             if (dbCycle && dbCycle.status) {
               setCycleState(dbCycle);
+              if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
+              if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
             }
           } catch (cycleErr) {
             console.error("Failed to load initial cycle state:", cycleErr);
@@ -273,9 +439,18 @@ export default function App() {
         async (payload) => {
           console.log("Realtime ciclos update received:", payload);
           try {
+            const dbCycles = await dbFetchAllCycles();
+            if (dbCycles) {
+              const map: Record<string, any> = {};
+              dbCycles.forEach((c) => {
+                map[`${c.activeMonth}_${c.activeYear}`] = c;
+              });
+              setAllCycles(map);
+            }
             const dbCycle = await dbFetchCycleState();
             if (dbCycle) {
-              setCycleState(dbCycle);
+              const key = `${dbCycle.activeMonth}_${dbCycle.activeYear}`;
+              setAllCycles((prev) => ({ ...prev, [key]: dbCycle }));
             }
           } catch (err) {
             console.error("Error reloading cycle state on realtime payload:", err);
@@ -351,53 +526,107 @@ export default function App() {
   // Dynamic Supabase ratings loader for current month & year
   useEffect(() => {
     const fetchEvaluationsFromSupabase = async () => {
-      if (!isSupabaseReady()) return;
-      try {
-        const updatedBranches = await Promise.all(
-          branches.map(async (branch) => {
-            const dbEvaluations = await dbFetchEvaluations(branch.name, activeMonth, activeYear);
-            if (Object.keys(dbEvaluations).length === 0) {
-              return branch; // No rows for this month yet
-            }
-
-            // Merge items
-            const mergedCriteria = branch.criteria.map((crt) => {
-              const matchedDb = dbEvaluations[crt.id];
-              if (matchedDb) {
-                return {
-                  ...crt,
-                  status: matchedDb.status || crt.status,
-                  pointsObtained: matchedDb.pointsObtained !== undefined ? matchedDb.pointsObtained : crt.pointsObtained,
-                  notes: matchedDb.notes || crt.notes,
-                  evidenceNotes: matchedDb.evidenceNotes || crt.evidenceNotes,
-                  nokEvidenceLinks: matchedDb.nokEvidenceLinks || crt.nokEvidenceLinks
-                };
-              }
-              return crt;
-            });
-
-            const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
-
-            return {
-              ...branch,
-              criteria: mergedCriteria,
-              currentScore: score,
-              status,
-              scoreCategory
-            };
-          })
-        );
-
-        // Simple checker to prevent loops
-        const currentJson = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        const updatedJson = JSON.stringify(updatedBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        
-        if (currentJson !== updatedJson) {
-          setBranches(updatedBranches);
+      const defaultBranches = getCleanDefaultBranches();
+      
+      if (["Fevereiro", "Julho", "Agosto"].includes(activeMonth) && activeYear === "2026") {
+        const briefBranches = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        const briefDefault = JSON.stringify(defaultBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        if (briefBranches !== briefDefault) {
+          setBranches(defaultBranches);
         }
-      } catch (err) {
-        console.error("Failed to fetch evaluations from Supabase:", err);
+        setLoadedPeriod({ month: activeMonth, year: activeYear });
+        return;
       }
+
+      let evaluationsMap: Record<string, any> = {};
+      let loadedFromSupabase = false;
+
+      if (isSupabaseReady()) {
+        try {
+          const results = await Promise.all(
+            defaultBranches.map(async (branch) => {
+              const dbVals = await dbFetchEvaluations(branch.name, activeMonth, activeYear);
+              return { branchName: branch.name, evals: dbVals };
+            })
+          );
+          results.forEach(({ branchName, evals }) => {
+            if (Object.keys(evals).length > 0) {
+              evaluationsMap[branchName] = evals;
+              loadedFromSupabase = true;
+            }
+          });
+        } catch (err) {
+          console.error("Failed to fetch evaluations from Supabase:", err);
+        }
+      }
+
+      if (!loadedFromSupabase) {
+        try {
+          const lKey = `acandido_evaluations_${activeMonth}_${activeYear}`;
+          const savedLocal = localStorage.getItem(lKey);
+          if (savedLocal) {
+            const parsedLocal = JSON.parse(savedLocal);
+            if (Array.isArray(parsedLocal) && parsedLocal.length === defaultBranches.length) {
+              const currentBrief = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+              const localBrief = JSON.stringify(parsedLocal.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+              if (currentBrief !== localBrief) {
+                setBranches(parsedLocal);
+              }
+              setLoadedPeriod({ month: activeMonth, year: activeYear });
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Local storage active evaluations parse error:", e);
+        }
+      }
+
+      const updatedBranches = defaultBranches.map((branch) => {
+        const dbEvaluations = evaluationsMap[branch.name];
+        if (!dbEvaluations || Object.keys(dbEvaluations).length === 0) {
+          return branch;
+        }
+
+        const mergedCriteria = branch.criteria.map((crt) => {
+          const matchedDb = dbEvaluations[crt.id];
+          if (matchedDb) {
+            return {
+              ...crt,
+              status: matchedDb.status || crt.status,
+              pointsObtained: matchedDb.pointsObtained !== undefined ? matchedDb.pointsObtained : crt.pointsObtained,
+              notes: matchedDb.notes || crt.notes,
+              evidenceNotes: matchedDb.evidenceNotes || crt.evidenceNotes,
+              nokEvidenceLinks: matchedDb.nokEvidenceLinks || crt.nokEvidenceLinks,
+              nokEvidenceLink: matchedDb.nokEvidenceLink || crt.nokEvidenceLink,
+              nokEvidenceDescription: matchedDb.nokEvidenceDescription || crt.nokEvidenceDescription,
+              top10AuditorQuantities: matchedDb.top10AuditorQuantities || crt.top10AuditorQuantities,
+              nokEvidenceFileName: matchedDb.nokEvidenceFileName || crt.nokEvidenceFileName,
+              nokEvidenceFileType: matchedDb.nokEvidenceFileType || crt.nokEvidenceFileType,
+              nokEvidenceFileData: matchedDb.nokEvidenceFileData || crt.nokEvidenceFileData,
+              isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao
+            };
+          }
+          return crt;
+        });
+
+        const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
+
+        return {
+          ...branch,
+          criteria: mergedCriteria,
+          currentScore: score,
+          status,
+          scoreCategory
+        };
+      });
+
+      const currentBrief = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+      const updatedBrief = JSON.stringify(updatedBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+      
+      if (currentBrief !== updatedBrief) {
+        setBranches(updatedBranches);
+      }
+      setLoadedPeriod({ month: activeMonth, year: activeYear });
     };
 
     fetchEvaluationsFromSupabase();
@@ -405,14 +634,18 @@ export default function App() {
 
   // Sync branches to local storage
   useEffect(() => {
-    localStorage.setItem("acandido_branches", JSON.stringify(branches));
-  }, [branches]);
+    if (loadedPeriod && loadedPeriod.month === activeMonth && loadedPeriod.year === activeYear) {
+      localStorage.setItem("acandido_branches", JSON.stringify(branches));
+      localStorage.setItem(`acandido_evaluations_${activeMonth}_${activeYear}`, JSON.stringify(branches));
+    }
+  }, [branches, activeMonth, activeYear, loadedPeriod]);
 
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
     const handleSync = () => {
       // 1. Sync branches
-      const storedBranches = localStorage.getItem("acandido_branches");
+      const specificKey = `acandido_evaluations_${activeMonth}_${activeYear}`;
+      const storedBranches = localStorage.getItem(specificKey) || localStorage.getItem("acandido_branches");
       if (storedBranches) {
         try {
           const parsed = JSON.parse(storedBranches);
@@ -481,23 +714,9 @@ export default function App() {
     };
   }, [branches, cycleState, cycleConfigs]);
 
-  // Sync cycle state to local storage and Supabase database on changes
+  // Keep localStorage manual state in sync with current cycleState without triggering state updates or saving to the database
   useEffect(() => {
     localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cycleState));
-    if (cycleState.activeMonth) setActiveMonth(cycleState.activeMonth);
-    if (cycleState.activeYear) setActiveYear(cycleState.activeYear);
-
-    const saveCycleToSupabase = async () => {
-      if (isSupabaseReady()) {
-        try {
-          await dbSaveCycleState(cycleState);
-        } catch (err) {
-          console.error("Failed to sync cycle state to Supabase:", err);
-          setDbConnectionError(true);
-        }
-      }
-    };
-    saveCycleToSupabase();
   }, [cycleState]);
 
   useEffect(() => {
@@ -569,22 +788,30 @@ export default function App() {
 
   // 1. Process branches dynamically on the fly to support automatic simulated cycles, deadlines & automation
   const currentConfigKey = `${activeMonth}_${activeYear}`;
-  const currentConfig = cycleConfigs[currentConfigKey] || {
-    configured: cycleState.status !== "NENHUM",
-    top10: [
-      { code: "1080571", name: "BATERIA 180 AMP" },
-      { code: "1050177", name: "KIT EMBREAGEM 1722" },
-      { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
-      { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
-      { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
-      { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
-      { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
-      { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
-      { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
-    ],
-    layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
-    materialParadoUploaded: true
-  };
+  const isFebJulAug2026 = ["Fevereiro", "Julho", "Agosto"].includes(activeMonth) && activeYear === "2026";
+  const currentConfig = isFebJulAug2026 
+    ? (cycleConfigs[currentConfigKey] || {
+        configured: false,
+        top10: [],
+        layoutLocation: "",
+        materialParadoUploaded: false
+      })
+    : (cycleConfigs[currentConfigKey] || {
+        configured: cycleState.status !== "NENHUM",
+        top10: [
+          { code: "1080571", name: "BATERIA 180 AMP" },
+          { code: "1050177", name: "KIT EMBREAGEM 1722" },
+          { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
+          { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
+          { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
+          { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
+          { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
+          { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
+          { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
+        ],
+        layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
+        materialParadoUploaded: true
+      });
 
   const processedBranches = (() => {
     const MONTH_MAP: Record<string, number> = {
@@ -603,41 +830,6 @@ export default function App() {
       const saved = localStorage.getItem("acandido_calendario_inventarios");
       localCalendar = saved ? JSON.parse(saved) : [];
     } catch (e) {}
-    if (localCalendar.length === 0) {
-      // Import/Redefine fallback
-      localCalendar = [
-        { id: "cal-1", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26" },
-        { id: "cal-2", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27" },
-        { id: "cal-3", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
-        { id: "cal-4", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
-        { id: "cal-5", almoxarifado: "Trans CG", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
-        { id: "cal-6", almoxarifado: "Trans CG", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
-        { id: "cal-7", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-        { id: "cal-8", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-        { id: "cal-9", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-25" },
-        { id: "cal-10", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-15" },
-        { id: "cal-11", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-05-16" },
-        { id: "cal-12", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-31" },
-        { id: "cal-13", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-08" },
-        { id: "cal-14", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-22" },
-        { id: "cal-15", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
-        { id: "cal-16", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
-        { id: "cal-17", almoxarifado: "Trans Rod CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-09" },
-        { id: "cal-18", almoxarifado: "Trans Rod CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-10" },
-        { id: "cal-19", almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-        { id: "cal-20", almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-        { id: "cal-21", almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-        { id: "cal-22", almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-        { id: "cal-23", almoxarifado: "Trans Rod PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
-        { id: "cal-24", almoxarifado: "Trans Rod PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
-        { id: "cal-25", almoxarifado: "Transnacional RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-07" },
-        { id: "cal-26", almoxarifado: "Transnacional RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-26" },
-        { id: "cal-27", almoxarifado: "Unissanta RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-06" },
-        { id: "cal-28", almoxarifado: "Unissanta RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-25" },
-        { id: "cal-29", almoxarifado: "Unitrans JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-12" },
-        { id: "cal-30", almoxarifado: "Unitrans JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-09" }
-      ];
-    }
 
     // Load material sem movimentacao data
     let localMatSemMov: any[] = [];
@@ -646,22 +838,38 @@ export default function App() {
       localMatSemMov = saved ? JSON.parse(saved) : [];
     } catch (e) {}
 
-    const matchBranch = (almoxName: string, bId: string) => {
+    const matchBranch = (almoxName: string, bId: string, bName?: string) => {
       const name = almoxName.toLowerCase().trim();
       const branchId = bId.toLowerCase().trim();
+      
+      // 1. Direct explicit rule maps for absolute safety
       if (name.includes("santa maria")) return branchId === "santa-maria-jp";
       if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-      if (name === "trans cg" || name === "expresso nacional") return branchId === "expresso-nacional";
+      if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
       if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
       if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
       if (name.includes("goiana")) return branchId === "fretamento-goiana";
       if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
       if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
       if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
-      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return branchId === "rodoviario-jaboatao";
-      if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+      if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
       if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
       if (name.includes("unitrans")) return branchId === "unitrans-jp";
+
+      // 2. Exact check
+      if (branchId === name) return true;
+
+      // 3. Normalized fallback
+      const normAlmox = name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      const normId = branchId
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      if (normAlmox === normId || normId === normAlmox) return true;
       return false;
     };
 
@@ -671,7 +879,7 @@ export default function App() {
 
       // Calculate Inventário Criterion ("1") Values
       const branchCalendar = localCalendar.filter(item => 
-        matchBranch(item.almoxarifado, b.id) &&
+        (item.branchId === b.id || (!item.branchId && matchBranch(item.almoxarifado, b.id, b.name))) &&
         item.ano === activeYearNum &&
         item.semestre === activeSemestre
       );
@@ -712,12 +920,7 @@ export default function App() {
         .filter(Boolean)
         .join(", ");
 
-      if (branchCalendar.length === 0) {
-        invPointsPossible = 0;
-        invPointsObtained = 0;
-        invStatus = "PENDENTE";
-        invNotes = "Nenhuma data de inventário agendada";
-      } else if (isAnyInventarioEvaluated) {
+      if (isAnyInventarioEvaluated) {
         // Semestral Rule: If any is NOK, whole semester is NOK (0 pts). Else if evaluated OK, whole semester is OK (20 pts).
         const hasNok = evaluatedInventories.some(it => it.status === "NOK");
         const allOk = evaluatedInventories.length > 0 && evaluatedInventories.every(it => it.status === "OK");
@@ -733,7 +936,6 @@ export default function App() {
           invStatus = "OK";
           invNotes = "Inventário realizado conforme!";
         } else {
-          // Mixed
           invPointsPossible = 20;
           invPointsObtained = 10;
           invStatus = "PENDENTE";
@@ -743,28 +945,19 @@ export default function App() {
         // Not evaluated yet
         invStatus = "PENDENTE";
         isAguardandoRealizacao = true;
-        
-        // If selected month M is strictly LESS than the first scheduled month, it is an "Aguardando realização" month (0 pts possible, 0 obtained)
-        if (minScheduledMonth !== null && activeMonthNum < minScheduledMonth) {
-          invPointsPossible = 0;
-          invPointsObtained = 0;
-          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Nenhuma data de inventário agendada";
-        } else {
-          // M is in or after scheduled month, but not evaluated yet
-          invPointsPossible = 20;
-          invPointsObtained = 0;
-          invNotes = datesText ? `Aguardando realização (data agendada: ${datesText})` : "Nenhuma data de inventário agendada";
-        }
+        invPointsPossible = 20;
+        invPointsObtained = 0;
+        invNotes = "Aguardando realização do inventário";
       }
 
       // Calculate Material Sem Movimentação Criterion ("10") Values
       const branchMatSem = localMatSemMov.find(item => 
-        matchBranch(item.almoxarifado || "", b.id) &&
+        matchBranch(item.almoxarifado || "", b.id, b.name) &&
         item.ano === activeYearNum &&
         item.semestre === activeSemestre
       );
 
-      let matPointsPossible = (activeMonthNum === 6 || activeMonthNum === 12) ? 5 : 0;
+      let matPointsPossible = 5;
       let matPointsObtained = 0;
       let matStatus: any = "PENDENTE";
       let isAguardandoFechamento = false;
@@ -779,16 +972,12 @@ export default function App() {
         } else {
           matStatus = "PENDENTE";
           matPointsObtained = 0;
-          if (activeMonthNum !== 6 && activeMonthNum !== 12) {
-            isAguardandoFechamento = true;
-          }
+          isAguardandoFechamento = true;
         }
       } else {
         matStatus = "PENDENTE";
         matPointsObtained = 0;
-        if (activeMonthNum !== 6 && activeMonthNum !== 12) {
-          isAguardandoFechamento = true;
-        }
+        isAguardandoFechamento = true;
       }
 
       // Overwrite dynamic criteria inside currentCriteria
@@ -855,8 +1044,9 @@ export default function App() {
         const savedHistVal = localStorage.getItem("acandido_history");
         if (savedHistVal) {
           try {
-            const hList = JSON.parse(savedHistVal);
-            if (Array.isArray(hList)) {
+            const parsed = JSON.parse(savedHistVal);
+            if (Array.isArray(parsed)) {
+              const hList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
               const semesterMonths = activeSemestre === 1 
                 ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
                 : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -1031,16 +1221,32 @@ export default function App() {
 
       const finalScore = obtained;
       const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
+      const isCycleActive = cycleState.status !== "NENHUM";
 
       return {
         ...b,
-        criteria: activeCriteria,
-        currentScore: finalScore,
-        semestralScore: dynamicSemScore + liveActiveScore,
-        scoreCategory,
-        status,
-        maxAuditablePoints: maxAuditable,
-        pointsObtainedSum: obtained
+        criteria: isCycleActive ? activeCriteria : activeCriteria.map(c => ({
+          ...c,
+          status: "AGUARDANDO ENVIO" as const,
+          pointsObtained: 0,
+          evidenceNotes: "",
+          submittedPhotos: [],
+          submittedAt: undefined,
+          notes: "",
+          nokEvidenceLinks: [],
+          nokEvidenceLink: undefined,
+          nokEvidenceDescription: undefined,
+          top10AuditorQuantities: undefined,
+          nokEvidenceFileName: undefined,
+          nokEvidenceFileType: undefined,
+          nokEvidenceFileData: undefined
+        })),
+        currentScore: isCycleActive ? finalScore : 0,
+        semestralScore: isCycleActive ? (dynamicSemScore + liveActiveScore) : 0,
+        scoreCategory: isCycleActive ? scoreCategory : "Sem avaliação",
+        status: isCycleActive ? status : "PENDENTE",
+        maxAuditablePoints: isCycleActive ? maxAuditable : 75,
+        pointsObtainedSum: isCycleActive ? obtained : 0
       };
     });
   })();
@@ -1302,7 +1508,7 @@ export default function App() {
     );
 
     // Lock cycle active status
-    setCycleState({
+    handleUpdateCycleState({
       activeMonth: month,
       activeYear: year,
       status: "NENHUM"
@@ -1370,6 +1576,11 @@ export default function App() {
               {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
                 <span className="inline-flex bg-amber-500/15 border border-amber-500/30 text-amber-500 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
                   ● AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
+                </span>
+              )}
+              {cycleState.status === "FECHADO" && (
+                <span className="inline-flex bg-[#374151]/45 border border-slate-600 text-slate-400 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
+                  ● FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "NENHUM" && (
@@ -1488,9 +1699,9 @@ export default function App() {
         <div className="bg-[#1C2C4E] border-b border-[#C8A84B] py-2.5 px-4 text-white shadow-inner select-none pointer-events-none">
           <div className="max-w-md mx-auto flex justify-between items-center text-xs font-bold font-sans">
             <span className="flex items-center gap-1.5 uppercase tracking-wider text-[#C8A85B] text-[9px] font-extrabold">
-              <span className={`w-2 h-2 rounded-full ${cycleState.status === "ABERTO" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
+              <span className={`w-2 h-2 rounded-full ${cycleState.status === "ABERTO" ? "bg-emerald-400 animate-pulse" : cycleState.status === "FECHADO" ? "bg-slate-400" : "bg-amber-400"}`}></span>
               Status do Ciclo: <strong className={cycleState.status === "ABERTO" ? "text-emerald-300" : "text-amber-350"}>
-                {cycleState.status === "ABERTO" ? "Aberto para Envios" : cycleState.status === "AGUARDANDO_FECHAMENTO" ? "Trancado (Avaliação)" : "Nenhum Ativo"}
+                {cycleState.status === "ABERTO" ? "Aberto para Envios" : cycleState.status === "FECHADO" ? "Fechado" : cycleState.status === "AGUARDANDO_FECHAMENTO" ? "Trancado (Avaliação)" : "Nenhum Ativo"}
               </strong>
             </span>
             <span className="text-slate-300 text-[10px]">
@@ -1700,14 +1911,7 @@ export default function App() {
                     selectedYear={activeYear}
                     setSelectedYear={setActiveYear}
                     cycleState={cycleState}
-                    onUpdateCycleState={(prevOrValue) => {
-                      setCycleState((prev) => {
-                        const next = typeof prevOrValue === "function" ? prevOrValue(prev) : prevOrValue;
-                        if (next.activeMonth) setActiveMonth(next.activeMonth);
-                        if (next.activeYear) setActiveYear(next.activeYear);
-                        return next;
-                      });
-                    }}
+                    onUpdateCycleState={handleUpdateCycleState}
                     onArchiveCycle={handleArchiveCycle}
                     user={user}
                   />
@@ -1718,7 +1922,7 @@ export default function App() {
                     onUpdateBranchNames={(updatedBranches) => setBranches(updatedBranches)}
                     onLogout={handleLogout}
                     cycleState={cycleState}
-                    onUpdateCycleState={setCycleState}
+                    onUpdateCycleState={handleUpdateCycleState}
                     onArchiveCycle={handleArchiveCycle}
                     user={user}
                   />

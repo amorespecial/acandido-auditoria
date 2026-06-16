@@ -36,7 +36,7 @@ const normalizeStr = (str: string) => {
     .replace(/\s+/g, "");
 };
 
-const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
+const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName?: string) => {
   let localCalendar: any[] = [];
   try {
     const saved = localStorage.getItem("acandido_calendario_inventarios");
@@ -53,27 +53,51 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
   const activeMonthNum = MONTH_MAP[monthName] || 6;
   const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
-  const matchBranch = (almoxName: string, bId: string) => {
+  const matchBranch = (almoxName: string, bId: string, bName?: string) => {
     const name = almoxName.toLowerCase().trim();
-    const bIdNorm = bId.toLowerCase().trim();
-    if (name.includes("santa maria")) return bIdNorm === "santa-maria-jp";
-    if (name.includes("a.candido") || name.includes("a.cândido")) return bIdNorm === "acandido-cg";
-    if (name === "trans cg" || name === "expresso nacional") return bIdNorm === "expresso-nacional";
-    if (name.includes("bayeux")) return bIdNorm === "trans-cg-bayeux";
-    if (name.includes("cabedelo")) return bIdNorm === "rodoviario-cabedelo";
-    if (name.includes("goiana")) return bIdNorm === "fretamento-goiana";
-    if (name.includes("fret pb") || name.includes("fretamento pb")) return bIdNorm === "fretamento-pb";
-    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return bIdNorm === "fretamento-jaboatao";
-    if (name.includes("rod ce") || name.includes("fortaleza")) return bIdNorm === "rodoviario-fortaleza";
-    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return bIdNorm === "rodoviario-jaboatao";
-    if (name.includes("transnacional rn") || name.includes("reunidas")) return bIdNorm === "reunidas-nat";
-    if (name.includes("unissanta") || name.includes("unissana")) return bIdNorm === "unissana-rn";
-    if (name.includes("unitrans")) return bIdNorm === "unitrans-jp";
+    const branchId = bId.toLowerCase().trim();
+    
+    const normAlmox = name
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+    const normId = branchId
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+    let normName = "";
+    if (bName) {
+      normName = bName.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .replace("almoxarifado", "")
+        .trim();
+    }
+
+    // Check direct overlaps first
+    if (normAlmox === normId || normId === normAlmox) return true;
+    if (normAlmox.includes(normId) || normId.includes(normAlmox)) return true;
+    if (normName && (normAlmox.includes(normName) || normName.includes(normAlmox))) return true;
+
+    // Keep legacy overrides for full backward compatibility
+    if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+    if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+    if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
+    if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+    if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+    if (name.includes("goiana")) return branchId === "fretamento-goiana";
+    if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+    if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+    if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+    if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+    if (name.includes("unitrans")) return branchId === "unitrans-jp";
     return false;
   };
 
   return localCalendar.filter(item =>
-    matchBranch(item.almoxarifado, branchId) &&
+    (item.branchId === branchId || (!item.branchId && matchBranch(item.almoxarifado, branchId, branchName))) &&
     item.ano === activeYearNum &&
     item.semestre === activeSemestre
   );
@@ -251,7 +275,11 @@ export default function AlmoxarifeHistorico({
       if (saved) {
         try {
           savedEntries = JSON.parse(saved);
-          if (!Array.isArray(savedEntries)) savedEntries = [];
+          if (!Array.isArray(savedEntries)) {
+            savedEntries = [];
+          } else {
+            savedEntries = savedEntries.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+          }
         } catch (e) {
           savedEntries = [];
         }
@@ -617,7 +645,7 @@ export default function AlmoxarifeHistorico({
 
                           {/* Dynamic Scheduled Inventories display for Criterion 1 inside Historical Report */}
                           {c.id === "1" && (() => {
-                            const calItems = getBranchCalendarForEntry(activeBranch.id, viewingReport.monthYear);
+                            const calItems = getBranchCalendarForEntry(activeBranch.id, viewingReport.monthYear, activeBranch.name);
                             if (calItems.length === 0) return null;
                             return (
                               <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2 font-sans select-text">

@@ -162,7 +162,11 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       if (saved) {
         try {
           historyEntries = JSON.parse(saved);
-          if (!Array.isArray(historyEntries)) historyEntries = [];
+          if (!Array.isArray(historyEntries)) {
+            historyEntries = [];
+          } else {
+            historyEntries = historyEntries.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+          }
         } catch {
           historyEntries = [];
         }
@@ -225,7 +229,10 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       const saved = localStorage.getItem("acandido_history");
       if (saved) {
         const parsed = JSON.parse(saved);
-        return Array.isArray(parsed) && parsed.length > 0;
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+          return filtered.length > 0;
+        }
       }
     } catch (e) {}
     return false;
@@ -349,8 +356,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         const saved = localStorage.getItem("acandido_history");
         if (saved) {
           try {
-            histList = JSON.parse(saved);
-            if (!Array.isArray(histList)) histList = [];
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              histList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+            } else {
+              histList = [];
+            }
           } catch {
             histList = [];
           }
@@ -435,8 +446,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         const saved = localStorage.getItem("acandido_history");
         if (saved) {
           try {
-            histList = JSON.parse(saved);
-            if (!Array.isArray(histList)) histList = [];
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              histList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+            } else {
+              histList = [];
+            }
           } catch {
             histList = [];
           }

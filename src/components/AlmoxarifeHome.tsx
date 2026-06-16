@@ -56,16 +56,20 @@ export default function AlmoxarifeHome({
     }
   };
 
-  const isClosedForAlmoxarife = (() => {
+  const currentCycleStatus = (() => {
     try {
       const saved = localStorage.getItem("acandido_cycle_state_manual");
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.status !== "ABERTO";
+        if (parsed.activeMonth === activeMonth && parsed.activeYear === activeYear) {
+          return parsed.status || "NENHUM";
+        }
       }
     } catch (e) {}
-    return false;
+    return "NENHUM";
   })();
+
+  const isClosedForAlmoxarife = currentCycleStatus !== "ABERTO";
 
   const isSemestralMonth = activeMonth.toLowerCase() === "janeiro" || activeMonth.toLowerCase() === "julho";
   const activeCriteria = branch.criteria;
@@ -97,27 +101,43 @@ export default function AlmoxarifeHome({
     const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
     const activeYearNum = parseInt(activeYear) || 2026;
 
-    const matchBranch = (almoxName: string, bId: string) => {
+    const matchBranch = (almoxName: string, bId: string, bName?: string) => {
       const name = almoxName.toLowerCase().trim();
       const branchId = bId.toLowerCase().trim();
+      
+      // 1. Direct explicit rule maps for absolute safety
       if (name.includes("santa maria")) return branchId === "santa-maria-jp";
       if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-      if (name === "trans cg" || name === "expresso nacional") return branchId === "expresso-nacional";
+      if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
       if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
       if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
       if (name.includes("goiana")) return branchId === "fretamento-goiana";
       if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
       if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
       if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
-      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return branchId === "rodoviario-jaboatao";
-      if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+      if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
       if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
       if (name.includes("unitrans")) return branchId === "unitrans-jp";
+
+      // 2. Exact check
+      if (branchId === name) return true;
+
+      // 3. Normalized fallback
+      const normAlmox = name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      const normId = branchId
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      if (normAlmox === normId || normId === normAlmox) return true;
       return false;
     };
 
     return localCalendar.filter(item =>
-      matchBranch(item.almoxarifado, branch.id) &&
+      (item.branchId === branch.id || (!item.branchId && matchBranch(item.almoxarifado, branch.id, branch.name))) &&
       item.ano === activeYearNum &&
       item.semestre === activeSemestre
     );
@@ -165,7 +185,20 @@ export default function AlmoxarifeHome({
       </section>
 
       {/* QUICK INSTRUCTION ACTIONS CARD */}
-      {isClosedForAlmoxarife ? (
+      {currentCycleStatus === "NENHUM" ? (
+        <section className="bg-amber-50 border border-amber-200/60 rounded-xl p-5 text-center flex flex-col items-center justify-center space-y-3 shadow-sm select-none">
+          <span className="material-symbols-outlined text-amber-500 text-[40px] animate-pulse">
+            hourglass_empty
+          </span>
+          <div>
+            <p className="text-xs font-black text-amber-900 uppercase tracking-wide">Aguardando Abertura do Ciclo</p>
+            <p className="text-[11px] text-slate-600 leading-relaxed font-semibold mt-1">
+              Aguardando abertura do ciclo pelo Auditor Geral.<br />
+              Você será notificado quando o próximo ciclo for iniciado.
+            </p>
+          </div>
+        </section>
+      ) : isClosedForAlmoxarife ? (
         <section className="bg-rose-50 border border-slate-200 rounded-xl p-4 flex gap-3">
           <span className="material-symbols-outlined text-rose-600 text-[24px] shrink-0">
             lock
@@ -192,10 +225,11 @@ export default function AlmoxarifeHome({
       )}
 
       {/* MOBILE LIST CHECKLISTS CRITERIAS */}
-      <section className="space-y-4">
-        <h3 className="text-sm font-black text-[#1B2A4A] tracking-tight">Status e Envios por Item</h3>
+      {currentCycleStatus !== "NENHUM" && (
+        <section className="space-y-4">
+          <h3 className="text-sm font-black text-[#1B2A4A] tracking-tight">Status e Envios por Item</h3>
 
-        <div className="space-y-3">
+          <div className="space-y-3">
           {activeCriteria.map((crit) => {
             const isSpecialCard = crit.id === "7" || crit.id === "9" || crit.id === "1";
             if (isSpecialCard) {
@@ -258,56 +292,74 @@ export default function AlmoxarifeHome({
                   </div>
 
                   {/* Dynamic Scheduled Inventories display for Criterion 1 */}
-                  {crit.id === "1" && calItems.length > 0 && (
+                  {crit.id === "1" && (
                     <div className="mt-2.5 space-y-2 border-t border-slate-100 pt-2.5">
                       <p className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider block mb-1">
                         Detalhamento do Calendário Semestral:
                       </p>
-                      {calItems.map((item, idx) => {
-                        const dateFormatted = item.data_agendada 
-                          ? item.data_agendada.split("-").reverse().join("/")
-                          : "--/--/----";
-                        const itemStatus = item.status || "PENDENTE";
-                        
-                        let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
-                        if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                        if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
-
-                        return (
-                          <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <span className="text-[10px] font-extrabold text-slate-600 block">
-                                  Inventário Semestral #{idx + 1}
-                                </span>
-                                <span className="text-[9px] text-slate-400 font-mono">
-                                  Agendado: {dateFormatted}
-                                </span>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
-                                {itemStatus}
+                      {calItems.length === 0 ? (
+                        <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5 animate-pulse">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-600 block">
+                                Inventário Semestral #1
+                              </span>
+                              <span className="text-[10px] text-rose-500 font-bold block mt-0.5">
+                                Agendado: Não agendado
                               </span>
                             </div>
-
-                            {itemStatus === "NOK" && item.nokEvidenceLink && (
-                              <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
-                                <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
-                                  <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>
-                                  <span>Evidência da Inconformidade:</span>
-                                </div>
-                                <a
-                                  href={item.nokEvidenceLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-indigo-600 hover:text-[#1B2A4A] hover:underline font-black truncate max-w-full block"
-                                >
-                                  {item.nokEvidenceLink} ↗
-                                </a>
-                              </div>
-                            )}
+                            <span className="px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none bg-amber-50 text-amber-700 border-amber-200">
+                              PENDENTE
+                            </span>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ) : (
+                        calItems.map((item, idx) => {
+                          const dateFormatted = (item.data_agendada && item.data_agendada.trim() !== "")
+                            ? item.data_agendada.split("-").reverse().join("/")
+                            : "Não agendado";
+                          const itemStatus = item.status || "PENDENTE";
+                          
+                          let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                          if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                          if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+
+                          return (
+                            <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="text-[10px] font-extrabold text-slate-600 block">
+                                    Inventário Semestral #{idx + 1}
+                                  </span>
+                                  <span className={dateFormatted === "Não agendado" ? "text-[10px] text-rose-500 font-bold block mt-0.5" : "text-[9px] text-slate-400 font-mono block"}>
+                                    Agendado: {dateFormatted}
+                                  </span>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
+                                  {itemStatus}
+                                </span>
+                              </div>
+
+                              {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
+                                  <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
+                                    <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>
+                                    <span>Evidência da Inconformidade:</span>
+                                  </div>
+                                  <a
+                                    href={item.nokEvidenceLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 hover:text-[#1B2A4A] hover:underline font-black truncate max-w-full block"
+                                  >
+                                    {item.nokEvidenceLink} ↗
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   )}
 
@@ -612,6 +664,7 @@ export default function AlmoxarifeHome({
           })}
         </div>
       </section>
+      )}
     </div>
   );
 }

@@ -352,6 +352,7 @@ export default function AlmoxarifeGarantia({
 
   // Filter local warranties list for the active branch and the active branch's selected monthly filter
   const filteredWarranties = warranties.filter((w) => {
+    if (w.monthYear && (w.monthYear.startsWith("Fevereiro") || w.monthYear.startsWith("Julho") || w.monthYear.startsWith("Agosto"))) return false;
     if (!activeBranch) return false;
     const isCurrentBranch = w.almoxarifado.toLowerCase() === activeBranch.name.toLowerCase();
     const isFilteredMonth = w.monthYear === activeBranchMonthFilter;

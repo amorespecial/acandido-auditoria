@@ -21,6 +21,49 @@ const ALMOXARIFADOS_LIST = [
   "Unitrans JPA"
 ];
 
+const matchBranch = (almoxName: string, bId: string, bName?: string) => {
+  const name = almoxName.toLowerCase().trim();
+  const branchId = bId.toLowerCase().trim();
+  
+  const normAlmox = name
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+  const normId = branchId
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+  let normName = "";
+  if (bName) {
+    normName = bName.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "")
+      .replace("almoxarifado", "")
+      .trim();
+  }
+
+  // Check direct overlaps first
+  if (normAlmox === normId || normId === normAlmox) return true;
+  if (normAlmox.includes(normId) || normId.includes(normAlmox)) return true;
+  if (normName && (normAlmox.includes(normName) || normName.includes(normAlmox))) return true;
+
+  // Keep legacy overrides for full backward compatibility
+  if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+  if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+  if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
+  if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+  if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+  if (name.includes("goiana")) return branchId === "fretamento-goiana";
+  if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+  if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+  if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+  if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+  if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+  if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+  if (name.includes("unitrans")) return branchId === "unitrans-jp";
+  return false;
+};
+
 const PRELOADED_CALENDAR_2026 = [
   { id: "cal-1", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26" },
   { id: "cal-2", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27" },
@@ -176,23 +219,38 @@ export default function AdminConfiguracoes({
   });
 
   const [calendarYear, setCalendarYear] = useState(2026);
-  const [calendarData, setCalendarData] = useState<{ id: string; almoxarifado: string; ano: number; semestre: number; indice: number; data_agendada: string }[]>(() => {
+  const [calendarData, setCalendarData] = useState<{ id: string; branchId?: string; almoxarifado: string; ano: number; semestre: number; indice: number; data_agendada: string }[]>(() => {
+    let local: any[] = [];
     try {
       const saved = localStorage.getItem("acandido_calendario_inventarios");
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(PRELOADED_CALENDAR_2026));
-    return PRELOADED_CALENDAR_2026;
+      local = saved ? JSON.parse(saved) : PRELOADED_CALENDAR_2026;
+    } catch (e) {
+      local = PRELOADED_CALENDAR_2026;
+    }
+
+    // Ensure all preloaded or existing entries have their branchId populated!
+    const migrated = local.map(item => {
+      if (item.branchId) return item;
+      const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
+      return {
+        ...item,
+        branchId: matched ? matched.id : undefined
+      };
+    });
+
+    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(migrated));
+    return migrated;
   });
 
-  const updateCalendarItem = (id: string, almox: string, semestre: number, indice: number, dateVal: string) => {
+  const updateCalendarItem = (id: string, branchId: string, almox: string, semestre: number, indice: number, dateVal: string) => {
     setCalendarData(prev => {
       const isRegistered = prev.some(item => item.id === id);
       if (isRegistered) {
-        return prev.map(item => item.id === id ? { ...item, data_agendada: dateVal } : item);
+        return prev.map(item => item.id === id ? { ...item, branchId, almoxarifado: almox, data_agendada: dateVal } : item);
       } else {
         const newItem = {
           id,
+          branchId,
           almoxarifado: almox,
           ano: calendarYear,
           semestre,
@@ -204,12 +262,17 @@ export default function AdminConfiguracoes({
     });
   };
 
-  const addCalendarItem = (almox: string, semestre: number) => {
+  const addCalendarItem = (branchId: string, almox: string, semestre: number) => {
     setCalendarData(prev => {
-      const semItems = prev.filter(item => item.almoxarifado === almox && item.ano === calendarYear && item.semestre === semestre);
+      const semItems = prev.filter(item => 
+        (item.branchId === branchId || (!item.branchId && matchBranch(item.almoxarifado, branchId, almox))) && 
+        item.ano === calendarYear && 
+        item.semestre === semestre
+      );
       const nextIndice = semItems.length > 0 ? Math.max(...semItems.map(i => i.indice)) + 1 : 1;
       const newItem = {
-        id: `cal-${almox.replace(/\s+/g, "_")}-${calendarYear}-${semestre}-${nextIndice}`,
+        id: `cal-${branchId}-${calendarYear}-${semestre}-${nextIndice}`,
+        branchId,
         almoxarifado: almox,
         ano: calendarYear,
         semestre,
@@ -850,6 +913,7 @@ export default function AdminConfiguracoes({
     // Dynamic addition for calendar data
     const calS1 = {
       id: `cal-${slug}-2026-1-1`,
+      branchId: newBranch.id,
       almoxarifado: newBranch.name,
       ano: 2026,
       semestre: 1,
@@ -858,6 +922,7 @@ export default function AdminConfiguracoes({
     };
     const calS2 = {
       id: `cal-${slug}-2026-2-1`,
+      branchId: newBranch.id,
       almoxarifado: newBranch.name,
       ano: 2026,
       semestre: 2,
@@ -1616,7 +1681,7 @@ export default function AdminConfiguracoes({
                     onChange={(e) => setCycleYear(e.target.value)}
                     className="w-full bg-white border border-slate-250 p-2 text-xs font-black rounded-lg"
                   >
-                    {["2026", "2027", "2028", "2029"].map(y => (
+                    {["2026"].map(y => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -2041,7 +2106,7 @@ export default function AdminConfiguracoes({
                 onChange={(e) => setCalendarYear(Math.max(2026, parseInt(e.target.value) || 2026))}
                 className="border border-slate-200 rounded-lg bg-white px-3 py-1.5 text-xs text-[#1B2A4A] font-black focus:outline-none"
               >
-                {[2026, 2027, 2028, 2029, 2030].map(y => (
+                {[2026].map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
@@ -2072,17 +2137,26 @@ export default function AdminConfiguracoes({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-150">
-                {activeAlmoxNames.map((almox) => {
-                  const s1Items = calendarData.filter(d => d.almoxarifado === almox && d.ano === calendarYear && d.semestre === 1).sort((a,b) => a.indice - b.indice);
-                  const s2Items = calendarData.filter(d => d.almoxarifado === almox && d.ano === calendarYear && d.semestre === 2).sort((a,b) => a.indice - b.indice);
+                {branches.map((branch) => {
+                  const s1Items = calendarData.filter(d => 
+                    (d.branchId === branch.id || (!d.branchId && matchBranch(d.almoxarifado, branch.id, branch.name))) && 
+                    d.ano === calendarYear && 
+                    d.semestre === 1
+                  ).sort((a,b) => a.indice - b.indice);
 
-                  const s1ToRender = s1Items.length > 0 ? s1Items : [{ id: `cal-${almox.replace(/\s+/g, "_")}-${calendarYear}-1-1`, almoxarifado: almox, ano: calendarYear, semestre: 1, indice: 1, data_agendada: "" }];
-                  const s2ToRender = s2Items.length > 0 ? s2Items : [{ id: `cal-${almox.replace(/\s+/g, "_")}-${calendarYear}-2-1`, almoxarifado: almox, ano: calendarYear, semestre: 2, indice: 1, data_agendada: "" }];
+                  const s2Items = calendarData.filter(d => 
+                    (d.branchId === branch.id || (!d.branchId && matchBranch(d.almoxarifado, branch.id, branch.name))) && 
+                    d.ano === calendarYear && 
+                    d.semestre === 2
+                  ).sort((a,b) => a.indice - b.indice);
+
+                  const s1ToRender = s1Items.length > 0 ? s1Items : [{ id: `cal-${branch.id}-${calendarYear}-1-1`, branchId: branch.id, almoxarifado: branch.name, ano: calendarYear, semestre: 1, indice: 1, data_agendada: "" }];
+                  const s2ToRender = s2Items.length > 0 ? s2Items : [{ id: `cal-${branch.id}-${calendarYear}-2-1`, branchId: branch.id, almoxarifado: branch.name, ano: calendarYear, semestre: 2, indice: 1, data_agendada: "" }];
 
                   return (
-                    <tr key={almox} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={branch.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3.5 font-bold text-[#1B2A4A] text-xs">
-                        {almox}
+                        {branch.name}
                       </td>
                       <td className="p-3.5 border-l border-slate-100">
                         <div className="space-y-2">
@@ -2093,7 +2167,7 @@ export default function AdminConfiguracoes({
                                 <input
                                   type="date"
                                   value={item.data_agendada}
-                                  onChange={(e) => updateCalendarItem(item.id, almox, 1, item.indice, e.target.value)}
+                                  onChange={(e) => updateCalendarItem(item.id, branch.id, branch.name, 1, item.indice, e.target.value)}
                                   className="border border-slate-250 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-mono tracking-wide focus:outline-none focus:border-[#1B2A4A] w-[145px]"
                                 />
                                 {isReal && (
@@ -2111,7 +2185,7 @@ export default function AdminConfiguracoes({
                           })}
                           <button
                             type="button"
-                            onClick={() => addCalendarItem(almox, 1)}
+                            onClick={() => addCalendarItem(branch.id, branch.name, 1)}
                             className="bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 px-2 py-1 rounded text-[10px] font-black uppercase flex items-center gap-0.5 mt-1 active:scale-95 transition-all w-fit"
                           >
                             <span className="material-symbols-outlined text-[11px] font-bold">add</span>
@@ -2128,7 +2202,7 @@ export default function AdminConfiguracoes({
                                 <input
                                   type="date"
                                   value={item.data_agendada}
-                                  onChange={(e) => updateCalendarItem(item.id, almox, 2, item.indice, e.target.value)}
+                                  onChange={(e) => updateCalendarItem(item.id, branch.id, branch.name, 2, item.indice, e.target.value)}
                                   className="border border-slate-250 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-mono tracking-wide focus:outline-none focus:border-[#1B2A4A] w-[145px]"
                                 />
                                 {isReal && (
@@ -2146,7 +2220,7 @@ export default function AdminConfiguracoes({
                           })}
                           <button
                             type="button"
-                            onClick={() => addCalendarItem(almox, 2)}
+                            onClick={() => addCalendarItem(branch.id, branch.name, 2)}
                             className="bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 px-2 py-1 rounded text-[10px] font-black uppercase flex items-center gap-0.5 mt-1 active:scale-95 transition-all w-fit"
                           >
                             <span className="material-symbols-outlined text-[11px] font-bold">add</span>

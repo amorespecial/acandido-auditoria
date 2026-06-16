@@ -25,7 +25,7 @@ export default function AdminEvaluationDetail({
       const saved = localStorage.getItem("acandido_cycle_state_manual");
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.status === "NENHUM";
+        return parsed.status === "NENHUM" || parsed.status === "FECHADO";
       }
     } catch (e) {}
     return false;
@@ -501,62 +501,43 @@ export default function AdminEvaluationDetail({
         localCalendar = saved ? JSON.parse(saved) : [];
       } catch (e) {}
 
-      if (localCalendar.length === 0) {
-        localCalendar = [
-          { id: "cal-1", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26" },
-          { id: "cal-2", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27" },
-          { id: "cal-3", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
-          { id: "cal-4", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
-          { id: "cal-5", almoxarifado: "Trans CG", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17" },
-          { id: "cal-6", almoxarifado: "Trans CG", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-18" },
-          { id: "cal-7", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-          { id: "cal-8", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-          { id: "cal-9", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-25" },
-          { id: "cal-10", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-15" },
-          { id: "cal-11", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-05-16" },
-          { id: "cal-12", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-31" },
-          { id: "cal-13", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-08" },
-          { id: "cal-14", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-22" },
-          { id: "cal-15", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
-          { id: "cal-16", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
-          { id: "cal-17", almoxarifado: "Trans Rod CE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-09" },
-          { id: "cal-18", almoxarifado: "Trans Rod CE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-10" },
-          { id: "cal-19", almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-          { id: "cal-20", almoxarifado: "Trans Rod PB (Bayeux)", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-          { id: "cal-21", almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10" },
-          { id: "cal-22", almoxarifado: "Trans Rod PB Cabedelo", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-12" },
-          { id: "cal-23", almoxarifado: "Trans Rod PE", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-15" },
-          { id: "cal-24", almoxarifado: "Trans Rod PE", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-08" },
-          { id: "cal-25", almoxarifado: "Transnacional RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-07" },
-          { id: "cal-26", almoxarifado: "Transnacional RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-26" },
-          { id: "cal-27", almoxarifado: "Unissanta RN", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-06" },
-          { id: "cal-28", almoxarifado: "Unissanta RN", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-25" },
-          { id: "cal-29", almoxarifado: "Unitrans JPA", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-12" },
-          { id: "cal-30", almoxarifado: "Unitrans JPA", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-09" }
-        ];
-      }
-
-      const matchBranch = (almoxName: string, bId: string) => {
+      const matchBranch = (almoxName: string, bId: string, bName?: string) => {
         const name = almoxName.toLowerCase().trim();
         const branchId = bId.toLowerCase().trim();
+        
+        // 1. Direct explicit rule maps for absolute safety
         if (name.includes("santa maria")) return branchId === "santa-maria-jp";
         if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-        if (name === "trans cg" || name === "expresso nacional") return branchId === "expresso-nacional";
+        if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
         if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
         if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
         if (name.includes("goiana")) return branchId === "fretamento-goiana";
         if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
         if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
         if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
-        if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return branchId === "rodoviario-jaboatao";
-        if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+        if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+        if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
         if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
         if (name.includes("unitrans")) return branchId === "unitrans-jp";
+
+        // 2. Exact check
+        if (branchId === name) return true;
+
+        // 3. Normalized fallback
+        const normAlmox = name
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]/g, "");
+
+        const normId = branchId
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]/g, "");
+
+        if (normAlmox === normId || normId === normAlmox) return true;
         return false;
       };
 
       const items = localCalendar.filter(item =>
-        matchBranch(item.almoxarifado, branch.id) &&
+        (item.branchId === branch.id || (!item.branchId && matchBranch(item.almoxarifado, branch.id, branch.name))) &&
         item.ano === activeYearNum &&
         item.semestre === activeSemestre
       );
@@ -876,8 +857,72 @@ export default function AdminEvaluationDetail({
     onUpdateCriteria(branch.id, updated);
   };
 
+  const isInventarioScheduledThisMonth = (() => {
+    try {
+      const savedManual = localStorage.getItem("acandido_cycle_state_manual");
+      if (!savedManual) return false;
+      const cycleStateParsed = JSON.parse(savedManual);
+      const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+      const MONTH_MAP: Record<string, number> = {
+        "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+      };
+      const activeMonthNum = MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6;
+      const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+
+      let localCalendar: any[] = [];
+      const saved = localStorage.getItem("acandido_calendario_inventarios");
+      localCalendar = saved ? JSON.parse(saved) : [];
+
+      const matchBranch = (almoxName: string, bId: string, bName?: string) => {
+        const name = (almoxName || "").toLowerCase().trim();
+        const branchId = bId.toLowerCase().trim();
+        if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+        if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+        if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
+        if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+        if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+        if (name.includes("goiana")) return branchId === "fretamento-goiana";
+        if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+        if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+        if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+        if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+        if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
+        if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+        if (name.includes("unitrans")) return branchId === "unitrans-jp";
+        if (branchId === name) return true;
+        return false;
+      };
+
+      const branchCalendar = localCalendar.filter(item => 
+        (item.branchId === branch.id || (!item.branchId && matchBranch(item.almoxarifado, branch.id, branch.name))) &&
+        item.ano === activeYearNum &&
+        item.semestre === activeSemestre
+      );
+
+      return branchCalendar.some(item => {
+        if (!item.data_agendada) return false;
+        const pts = item.data_agendada.split("-");
+        if (pts.length < 2) return false;
+        return parseInt(pts[1]) === activeMonthNum;
+      });
+    } catch (e) {
+      return false;
+    }
+  })();
+
   const filteredCriteria = branch.criteria.filter((c) => {
-    return c.name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+    // Semestral criteria rules: Only show for evaluation if in standard semestral month (Jan/Jul) or scheduled this month
+    if (c.id === "1") {
+      return isSemestralMonth || isInventarioScheduledThisMonth;
+    }
+    if (c.id === "10") {
+      return isSemestralMonth;
+    }
+
+    return true;
   });
 
   const handleViewCollaboratorFile = (cert: any) => {
@@ -1499,9 +1544,9 @@ export default function AdminEvaluationDetail({
                       </div>
                     ) : (
                       branchCalendar.map((item, idx) => {
-                        const dateFormatted = item.data_agendada 
+                        const dateFormatted = (item.data_agendada && item.data_agendada.trim() !== "")
                           ? item.data_agendada.split("-").reverse().join("/")
-                          : "--/--/----";
+                          : "Não agendado";
                         const isNok = item.status === "NOK";
 
                         return (

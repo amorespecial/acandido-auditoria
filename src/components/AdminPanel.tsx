@@ -12,7 +12,7 @@ interface AdminPanelProps {
   cycleState: {
     activeMonth: string;
     activeYear: string;
-    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "NENHUM";
+    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
     openedAt?: string;
     openedBy?: string;
   };
@@ -38,7 +38,7 @@ export default function AdminPanel({
 
   // Modals state
   const [showOpenModal, setShowOpenModal] = useState(false);
-  const [openForm, setOpenForm] = useState({ month: "Junho", year: "2026" });
+  const [openForm, setOpenForm] = useState({ month: "Fevereiro", year: "2026" });
 
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [challengeNameInput, setChallengeNameInput] = useState("");
@@ -48,7 +48,7 @@ export default function AdminPanel({
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
 
-  const years = ["2026", "2027", "2028"];
+  const years = ["2026"];
 
   const filteredBranches = branches.filter((b) => {
     if (selectedGroup !== "TODOS" && b.group !== selectedGroup) return false;
@@ -112,8 +112,8 @@ export default function AdminPanel({
                   <span className="bg-emerald-600/25 border border-emerald-500/40 text-emerald-400 font-extrabold px-3 py-1 rounded text-xs select-none">
                     ● CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
                   </span>
-                  <span className="text-[10px] text-slate-300">
-                    Iniciado em <strong className="text-white">{cycleState.openedAt}</strong> por <strong className="text-white text-bold">{cycleState.openedBy}</strong>.
+                  <span className="text-[10px] text-slate-350">
+                    Iniciado em <strong className="text-white">{cycleState.openedAt}</strong> por <strong className="text-white text-bold">{cycleState.openedBy}</strong>. Almoxarifes podem enviar evidências normalmente.
                   </span>
                 </>
               )}
@@ -124,6 +124,16 @@ export default function AdminPanel({
                   </span>
                   <span className="text-[10px] text-slate-350">
                     Modo avaliação. Envios bloqueados para os almoxarifes. Aguardando revisão de notas de {cycleState.openedBy || user?.name || "Fernando Silva"}.
+                  </span>
+                </>
+              )}
+              {cycleState.status === "FECHADO" && (
+                <>
+                  <span className="bg-[#374151]/55 border border-slate-600 text-slate-300 font-extrabold px-3 py-1 rounded text-xs select-none">
+                    ● FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
+                  </span>
+                  <span className="text-[10px] text-slate-350">
+                    O mês está FECHADO para envios. Os dados estão disponíveis para consulta e avaliação final pelo Auditor Geral.
                   </span>
                 </>
               )}
@@ -150,36 +160,47 @@ export default function AdminPanel({
               </button>
             )}
 
-            {cycleState.status === "ABERTO" && (
+            {(cycleState.status === "ABERTO" || cycleState.status === "AGUARDANDO_FECHAMENTO") && (
               <>
+                {cycleState.status === "ABERTO" ? (
+                  <button
+                    onClick={() => {
+                      onUpdateCycleState({ ...cycleState, status: "AGUARDANDO_FECHAMENTO" });
+                      alert(`O ciclo de ${cycleState.activeMonth} foi alterado para 'Aguardando Fechamento'! Almoxarifes agora estão trancados em modo de avaliação.`);
+                    }}
+                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-[#1B2A4A] rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                  >
+                    Bloquear Envios (Avaliar)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      onUpdateCycleState({ ...cycleState, status: "ABERTO" });
+                      alert(`O ciclo de ${cycleState.activeMonth} foi reaberto. Almoxarifes já podem reenviar evidências.`);
+                    }}
+                    className="px-3.5 py-2 bg-[#C8A84B] hover:bg-[#B3931C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                  >
+                    Reabrir para Ajustes
+                  </button>
+                )}
                 <button
                   onClick={() => {
-                    onUpdateCycleState({ ...cycleState, status: "AGUARDANDO_FECHAMENTO" });
-                    alert(`O ciclo de ${cycleState.activeMonth} foi alterado para 'Aguardando Fechamento'! Almoxarifes agora estão trancados.`);
+                    onUpdateCycleState({ ...cycleState, status: "FECHADO" });
+                    alert(`O ciclo de ${cycleState.activeMonth} foi alterado para FECHADO! Os dados permanecem legíveis para consulta mas novos envios estão encerrados.`);
                   }}
-                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-[#1B2A4A] rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                  className="px-3.5 py-2 bg-[#2D3748] hover:bg-[#1A202C] text-white rounded-xl text-xs font-black uppercase tracking-wider shadow border border-slate-700/40 transition"
                 >
-                  Bloquear Envios (Avaliar)
-                </button>
-                <button
-                  onClick={() => {
-                    setChallengeNameInput("");
-                    setShowCloseModal(true);
-                  }}
-                  className="px-3.5 py-2 bg-red-650 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow flex items-center gap-1.5 transition"
-                >
-                  <span className="material-symbols-outlined text-[15px]">lock</span>
-                  Fechar e Arquivar
+                  Fechar Mês
                 </button>
               </>
             )}
 
-            {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
+            {cycleState.status === "FECHADO" && (
               <>
                 <button
                   onClick={() => {
                     onUpdateCycleState({ ...cycleState, status: "ABERTO" });
-                    alert(`O ciclo de ${cycleState.activeMonth} foi reaberto. Almoxarifes já podem reenviar evidências.`);
+                    alert(`O ciclo de ${cycleState.activeMonth} foi reaberto para ajustes gerais.`);
                   }}
                   className="px-3.5 py-2 bg-[#C8A84B] hover:bg-[#B3931C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
                 >
@@ -353,8 +374,8 @@ export default function AdminPanel({
             if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white";
             if (branch.status === "NOK") badgeColor = "bg-red-500 text-white";
           } else {
-            badgeColor = "bg-slate-100 text-slate-500 border border-slate-200 font-black tracking-wide";
-            badgeText = "AGUARDANDO INÍCIO DO CICLO";
+            badgeColor = "bg-slate-100/80 text-slate-400 border border-slate-200/50 font-black tracking-wide";
+            badgeText = cycleState.status === "NENHUM" ? "Ciclo não iniciado" : "SEM DADOS";
           }
 
           let scoreTextClass = "text-slate-400 font-medium";

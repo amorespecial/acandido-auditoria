@@ -182,7 +182,7 @@ const isSemestralMonth = (monthYear: string) => {
   return m.includes("janeiro") || m.includes("junho") || m.includes("dezembro") || m.includes("semestral");
 };
 
-const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
+const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName?: string) => {
   let localCalendar: any[] = [];
   try {
     const saved = localStorage.getItem("acandido_calendario_inventarios");
@@ -199,68 +199,75 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string) => {
   const activeMonthNum = MONTH_MAP[monthName] || 6;
   const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
-  const matchBranch = (almoxName: string, bId: string) => {
+  const matchBranch = (almoxName: string, bId: string, bName?: string) => {
     const name = almoxName.toLowerCase().trim();
-    const bIdNorm = bId.toLowerCase().trim();
-    if (name.includes("santa maria")) return bIdNorm === "santa-maria-jp";
-    if (name.includes("a.candido") || name.includes("a.cândido")) return bIdNorm === "acandido-cg";
-    if (name === "trans cg" || name === "expresso nacional") return bIdNorm === "expresso-nacional";
-    if (name.includes("bayeux")) return bIdNorm === "trans-cg-bayeux";
-    if (name.includes("cabedelo")) return bIdNorm === "rodoviario-cabedelo";
-    if (name.includes("goiana")) return bIdNorm === "fretamento-goiana";
-    if (name.includes("fret pb") || name.includes("fretamento pb")) return bIdNorm === "fretamento-pb";
-    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return bIdNorm === "fretamento-jaboatao";
-    if (name.includes("rod ce") || name.includes("fortaleza")) return bIdNorm === "rodoviario-fortaleza";
-    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe") return bIdNorm === "rodoviario-jaboatao";
-    if (name.includes("transnacional rn") || name.includes("reunidas")) return bIdNorm === "reunidas-nat";
-    if (name.includes("unissanta") || name.includes("unissana")) return bIdNorm === "unissana-rn";
-    if (name.includes("unitrans")) return bIdNorm === "unitrans-jp";
+    const branchId = bId.toLowerCase().trim();
+    
+    const normAlmox = name
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+    const normId = branchId
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+    let normName = "";
+    if (bName) {
+      normName = bName.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .replace("almoxarifado", "")
+        .trim();
+    }
+
+    // Check direct overlaps first
+    if (normAlmox === normId || normId === normAlmox) return true;
+    if (normAlmox.includes(normId) || normId.includes(normAlmox)) return true;
+    if (normName && (normAlmox.includes(normName) || normName.includes(normAlmox))) return true;
+
+    // Keep legacy overrides for full backward compatibility
+    if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+    if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+    if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
+    if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+    if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+    if (name.includes("goiana")) return branchId === "fretamento-goiana";
+    if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+    if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+    if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+    if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+    if (name.includes("transnacional rn") || name.includes("reunidas")) return branchId === "reunidas-nat";
+    if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+    if (name.includes("unitrans")) return branchId === "unitrans-jp";
     return false;
   };
 
   return localCalendar.filter(item =>
-    matchBranch(item.almoxarifado, branchId) &&
+    (item.branchId === branchId || (!item.branchId && matchBranch(item.almoxarifado, branchId, branchName))) &&
     item.ano === activeYearNum &&
     item.semestre === activeSemestre
   );
 };
 
-const getScheduledInventoryDate = (branchName: string, monthYear: string) => {
+const getScheduledInventoryDate = (branchName: string, monthYear: string, branchId?: string) => {
   let localCalendar: any[] = [];
   try {
     const saved = localStorage.getItem("acandido_calendario_inventarios");
     localCalendar = saved ? JSON.parse(saved) : [];
   } catch (e) {}
 
-  if (localCalendar.length === 0) {
-    localCalendar = [
-      { id: "cal-1", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 1, data_agendada: "2026-06-26" },
-      { id: "cal-2", almoxarifado: "Santa Maria JPA", ano: 2026, semestre: 2, data_agendada: "2026-11-27" },
-      { id: "cal-3", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 1, data_agendada: "2026-01-17" },
-      { id: "cal-4", almoxarifado: "A.Candido (CG)", ano: 2026, semestre: 2, data_agendada: "2026-08-18" },
-      { id: "cal-5", almoxarifado: "Trans CG", ano: 2026, semestre: 1, data_agendada: "2026-01-17" },
-      { id: "cal-6", almoxarifado: "Trans CG", ano: 2026, semestre: 2, data_agendada: "2026-08-18" },
-      { id: "cal-7", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 1, data_agendada: "2026-02-10" },
-      { id: "cal-8", almoxarifado: "Trans CG Metrop (Bayeux)", ano: 2026, semestre: 2, data_agendada: "2026-09-12" },
-      { id: "cal-9", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 1, data_agendada: "2026-02-25" },
-      { id: "cal-10", almoxarifado: "Trans Fret CE", ano: 2026, semestre: 2, data_agendada: "2026-09-15" },
-      { id: "cal-11", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 1, data_agendada: "2026-05-16" },
-      { id: "cal-12", almoxarifado: "Trans Fret Goiana", ano: 2026, semestre: 2, data_agendada: "2026-10-31" },
-      { id: "cal-13", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 1, data_agendada: "2026-01-08" },
-      { id: "cal-14", almoxarifado: "Trans Fret PB", ano: 2026, semestre: 2, data_agendada: "2026-07-22" },
-      { id: "cal-15", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 1, data_agendada: "2026-01-15" },
-      { id: "cal-16", almoxarifado: "Trans Fret PE", ano: 2026, semestre: 2, data_agendada: "2026-07-08" },
-      { id: "cal-17", almoxarifado: "Trans Rod CE", ano: 2026, semestre: 1, data_agendada: "2026-06-09" }
-    ];
-  }
-
   const m = monthYear.toLowerCase();
   const isSem2 = m.includes("julho") || m.includes("agosto") || m.includes("setembro") || m.includes("outubro") || m.includes("novembro") || m.includes("dezembro");
   const sem = isSem2 ? 2 : 1;
 
-  const item = localCalendar.find(
-    (c) => c.almoxarifado === branchName && c.semestre === sem
-  );
+  const item = localCalendar.find((c) => {
+    if (branchId && c.branchId === branchId) return c.semestre === sem;
+    const name = c.almoxarifado.toLowerCase().trim();
+    const brName = branchName.toLowerCase().trim();
+    const cleanAlmox = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    const cleanBranch = brName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").replace("almoxarifado", "");
+    return (cleanAlmox.includes(cleanBranch) || cleanBranch.includes(cleanAlmox)) && c.semestre === sem;
+  });
 
   if (item && item.data_agendada) {
     const parts = item.data_agendada.split("-");
@@ -297,7 +304,11 @@ const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
     if (saved) {
       try {
         savedEntries = JSON.parse(saved);
-        if (!Array.isArray(savedEntries)) savedEntries = [];
+        if (!Array.isArray(savedEntries)) {
+          savedEntries = [];
+        } else {
+          savedEntries = savedEntries.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+        }
       } catch (e) {
         savedEntries = [];
       }
@@ -1651,7 +1662,8 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
 
                                   {(() => {
                                     if (c.id !== "1" || !selectedEntry) return null;
-                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear);
+                                    const bObj = branches.find(b => b.id === selectedEntry.branchId);
+                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear, bObj?.name);
                                     if (calItems.length === 0) return null;
 
                                     return (
