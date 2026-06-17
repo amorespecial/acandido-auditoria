@@ -1384,7 +1384,7 @@ export default function App() {
 
     const pair = twinPairs.find((p) => p.includes(activeBranchId));
     const twinId = pair ? (pair[0] === activeBranchId ? pair[1] : pair[0]) : null;
-    const isShared = criterionId === "10";
+    const isShared = criterionId === "10" || criterionId === "6";
 
     if (isShared && twinId) {
       const twinBranch = branches.find((b) => b.id === twinId);
@@ -1406,6 +1406,28 @@ export default function App() {
         });
 
         handleUpdateCriteria(twinId, twinUpdatedCriteria);
+
+        // Copiar os certificados do Curso Unimobin para o almoxarifado vinculado dentro do mesmo ciclo ativo
+        if (criterionId === "6") {
+          try {
+            const mainKey = `acandido_certificates_${activeBranchId}_${activeMonth}_${activeYear}`;
+            const twinKey = `acandido_certificates_${twinId}_${activeMonth}_${activeYear}`;
+            const certDataOfMain = localStorage.getItem(mainKey);
+            if (certDataOfMain) {
+              const parsedCertificates = JSON.parse(certDataOfMain);
+              if (Array.isArray(parsedCertificates)) {
+                // Forçar "Certificado enviado" para todos os colaboradores do vinculado também
+                const updatedCertificates = parsedCertificates.map(c => ({
+                  ...c,
+                  status: "Certificado enviado" as const
+                }));
+                localStorage.setItem(twinKey, JSON.stringify(updatedCertificates));
+              }
+            }
+          } catch (e) {
+            console.error("Falha ao copiar certificados para a filial gêmea:", e);
+          }
+        }
 
         if (isSupabaseReady()) {
           try {
