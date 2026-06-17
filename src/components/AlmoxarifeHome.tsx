@@ -559,7 +559,9 @@ export default function AlmoxarifeHome({
                     )}
 
                     {crit.id === "6" && (() => {
-                      const storageKey = branch.id ? "acandido_certificates_" + branch.id : "acandido_certificates_default";
+                      const storageKey = branch.id 
+                        ? `acandido_certificates_${branch.id}_${activeMonth}_${activeYear}` 
+                        : `acandido_certificates_default_${activeMonth}_${activeYear}`;
                       const saved = localStorage.getItem(storageKey);
                       if (saved) {
                         try {

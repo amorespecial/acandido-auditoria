@@ -449,7 +449,7 @@ export default function AdminEvaluationDetail({
     }
 
     if (crit.id === "6") {
-      const storageKey = "acandido_certificates_" + branch.id;
+      const storageKey = `acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
       const saved = localStorage.getItem(storageKey);
       let parsedSaved: any[] = [];
       if (saved) {
@@ -2051,7 +2051,7 @@ export default function AdminEvaluationDetail({
                                   return item;
                                 });
                                 setAuditorCerts(updated);
-                                localStorage.setItem("acandido_certificates_" + branch.id, JSON.stringify(updated));
+                                localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
                               }}
                               className={`py-1 px-2 rounded text-[9px] font-black border transition-all active:scale-95 flex items-center gap-0.5 uppercase tracking-wider ${
                                 c.status === "Certificado enviado"
@@ -2101,7 +2101,7 @@ export default function AdminEvaluationDetail({
                                       return item;
                                     });
                                     setAuditorCerts(updated);
-                                    localStorage.setItem("acandido_certificates_" + branch.id, JSON.stringify(updated));
+                                    localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
                                   }}
                                   className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                                 >
@@ -2147,7 +2147,7 @@ export default function AdminEvaluationDetail({
                                           return item;
                                         });
                                         setAuditorCerts(updated);
-                                        localStorage.setItem("acandido_certificates_" + branch.id, JSON.stringify(updated));
+                                        localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
                                       };
                                       reader.readAsDataURL(file);
                                     }

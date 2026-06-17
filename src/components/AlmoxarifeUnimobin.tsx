@@ -8,6 +8,8 @@ interface AlmoxarifeUnimobinProps {
   criterionState?: CriterionState;
   branchId?: string;
   branchName?: string;
+  activeMonth?: string;
+  activeYear?: string;
 }
 
 export default function AlmoxarifeUnimobin({
@@ -16,10 +18,32 @@ export default function AlmoxarifeUnimobin({
   criterionState,
   branchId,
   branchName,
+  activeMonth,
+  activeYear,
 }: AlmoxarifeUnimobinProps) {
+  // Safe Fallback Parsing for month/year to guarantee independent scoping under all flows
+  const cycleStateParsed = (() => {
+    try {
+      const saved = localStorage.getItem("acandido_cycle_state_manual");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          activeMonth: parsed.activeMonth || activeMonth || "Janeiro",
+          activeYear: parsed.activeYear || activeYear || "2026"
+        };
+      }
+    } catch {}
+    return { activeMonth: activeMonth || "Janeiro", activeYear: activeYear || "2026" };
+  })();
+
+  const currentMonth = cycleStateParsed.activeMonth;
+  const currentYear = cycleStateParsed.activeYear;
+
   const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
     const baseCerts = getCollaboratorsForBranch(branchId, branchName);
-    const storageKey = branchId ? "acandido_certificates_" + branchId : "acandido_certificates_default";
+    const storageKey = branchId 
+      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
+      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
     const saved = localStorage.getItem(storageKey);
     let parsedSaved: CollaboratorCertificate[] = [];
     if (saved) {
@@ -58,7 +82,9 @@ export default function AlmoxarifeUnimobin({
   });
 
   React.useEffect(() => {
-    const storageKey = branchId ? "acandido_certificates_" + branchId : "acandido_certificates_default";
+    const storageKey = branchId 
+      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
+      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
     try {
       localStorage.setItem(storageKey, JSON.stringify(certs));
     } catch (e) {
@@ -73,7 +99,7 @@ export default function AlmoxarifeUnimobin({
         // Safe catch
       }
     }
-  }, [certs, branchId]);
+  }, [certs, branchId, currentMonth, currentYear]);
 
   const [isSending, setIsSending] = useState(false);
 

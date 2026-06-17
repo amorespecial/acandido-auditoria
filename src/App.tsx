@@ -2048,6 +2048,8 @@ export default function App() {
                       criterionState={activeBranch.criteria.find((c) => c.id === "6")}
                       branchId={activeBranch.id}
                       branchName={activeBranch.name}
+                      activeMonth={activeMonth}
+                      activeYear={activeYear}
                     />
                   )
                 )}

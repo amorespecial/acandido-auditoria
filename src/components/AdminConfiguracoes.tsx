@@ -1069,7 +1069,9 @@ export default function AdminConfiguracoes({
     setCollabList(prev => [...prev, profile]);
 
     // Also sync the local certificates key for this branch to instantly show
-    const storageKey = "acandido_certificates_" + selectedCollabBranchId;
+    const currentMonth = cycleState?.activeMonth || "Janeiro";
+    const currentYear = cycleState?.activeYear || "2026";
+    const storageKey = `acandido_certificates_${selectedCollabBranchId}_${currentMonth}_${currentYear}`;
     const existingCertsRaw = localStorage.getItem(storageKey);
     let existingCerts = [];
     if (existingCertsRaw) {
@@ -1095,7 +1097,9 @@ export default function AdminConfiguracoes({
         setCollabList(prev => prev.filter((c) => c.id !== id));
 
         // Also clean up local certificados file if applicable
-        const storageKey = "acandido_certificates_" + selectedCollabBranchId;
+        const currentMonth = cycleState?.activeMonth || "Janeiro";
+        const currentYear = cycleState?.activeYear || "2026";
+        const storageKey = `acandido_certificates_${selectedCollabBranchId}_${currentMonth}_${currentYear}`;
         const existingCertsRaw = localStorage.getItem(storageKey);
         if (existingCertsRaw) {
           try {
