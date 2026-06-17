@@ -913,15 +913,6 @@ export default function AdminEvaluationDetail({
 
   const filteredCriteria = branch.criteria.filter((c) => {
     if (!c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-
-    // Semestral criteria rules: Only show for evaluation if in standard semestral month (Jan/Jul) or scheduled this month
-    if (c.id === "1") {
-      return isSemestralMonth || isInventarioScheduledThisMonth;
-    }
-    if (c.id === "10") {
-      return isSemestralMonth;
-    }
-
     return true;
   });
 
@@ -1403,8 +1394,8 @@ export default function AdminEvaluationDetail({
                       {/* Score point label */}
                       <div className="text-left md:text-right min-w-[70px]">
                         <p className="text-sm font-extrabold text-[#1B2A4A] font-mono leading-none">
-                          {(crit.id === "1" && !branch.isInventarioScheduledThisMonth) || 
-                           (crit.id === "10" && (crit.status === "PENDENTE" || crit.status === "AGUARDANDO ENVIO" || crit.status === "ENVIADO")) ? (
+                          {false || 
+                           false ? (
                             "—"
                           ) : (
                             <>

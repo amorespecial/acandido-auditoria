@@ -4,6 +4,13 @@ import { AppUser, Branch, CriterionState } from "../types";
 interface AdminRankingProps {
   user: AppUser;
   branches: Branch[];
+  activeMonth: string;
+  setActiveMonth: (month: string) => void;
+  activeYear: string;
+  setActiveYear: (year: string) => void;
+  selectedSemesterFilter: "1" | "2";
+  setSelectedSemesterFilter: (sem: "1" | "2") => void;
+  cycleState?: any;
 }
 
 interface UnifiedEntry {
@@ -16,10 +23,25 @@ interface UnifiedEntry {
   branches: Branch[];
 }
 
-export default function AdminRanking({ user, branches }: AdminRankingProps) {
+export default function AdminRanking({
+  user,
+  branches,
+  activeMonth,
+  setActiveMonth,
+  activeYear,
+  setActiveYear,
+  selectedSemesterFilter,
+  setSelectedSemesterFilter,
+  cycleState
+}: AdminRankingProps) {
   const [activeGroupTab, setActiveGroupTab] = useState<"A" | "B">("A");
   const [selectedEntry, setSelectedEntry] = useState<UnifiedEntry | null>(null);
   const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);
+  const [rankingMode, setRankingMode] = useState<"MES" | "ACUMULADO">("MES");
+
+  // Global synchronized references for selectedRankingMonth / selectedSemesterFilter
+  const selectedRankingMonth = activeMonth;
+  const setSelectedRankingMonth = setActiveMonth;
 
   const isAwaitingPair = (entry: UnifiedEntry | null) => {
     if (!entry || entry.branches.length !== 2) return false;
@@ -120,25 +142,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
   };
 
   const allEntries = getUnifiedEntries(branches);
-
-  const groupAEntries = allEntries
-    .filter((e) => e.group === "A")
-    .sort((a, b) => b.semestralScore - a.semestralScore);
-
-  const groupBEntries = allEntries
-    .filter((e) => e.group === "B")
-    .sort((a, b) => b.semestralScore - a.semestralScore);
-
-  const currentLeaderboard = activeGroupTab === "A" ? groupAEntries : groupBEntries;
-
-  // Dynamic Cycle State Parsing for Auditor Ranking View
-  const cycleStateParsed = (() => {
-    try {
-      const saved = localStorage.getItem("acandido_cycle_state_manual");
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return { activeMonth: "Junho", activeYear: "2026", status: "ABERTO" };
-  })();
+  const cycleStateParsed = cycleState || { activeMonth: activeMonth, activeYear: activeYear, status: "ABERTO" };
 
   const MONTH_MAP: Record<string, number> = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -147,9 +151,16 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
   const activeMonthNum = MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6;
   const currentSemester = activeMonthNum <= 6 ? 1 : 2;
   const visibleCount = currentSemester === 1 ? activeMonthNum : activeMonthNum - 6;
+  
+  // Custom: Showing all 12 months in the dropdown as requested
+  const monthsOfThisSemester = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
 
   // Monthly values for each of the 9 unified entries that perfectly match their semestralScore
-  const getHistoricalMonths = (entry: UnifiedEntry) => {
+  const getHistoricalMonths = (entry: UnifiedEntry, semToUse?: number) => {
+    const targetSem = semToUse !== undefined ? semToUse : (rankingMode === "ACUMULADO" ? Number(selectedSemesterFilter) : currentSemester);
     // Current active month is the dynamic/active month, calculated from its branches' consolidated currentScore
     const activeScore = entry.branches.length > 0
       ? entry.branches[0].currentScore
@@ -165,7 +176,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           if (!Array.isArray(historyEntries)) {
             historyEntries = [];
           } else {
-            historyEntries = historyEntries.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+            historyEntries = historyEntries.filter((h: any) => h.monthYear);
           }
         } catch {
           historyEntries = [];
@@ -173,11 +184,11 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
       }
     }
 
-    const months = currentSemester === 1
+    const months = targetSem === 1
       ? ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN"]
       : ["JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
-    const semMonthsMap: { [key: string]: string } = currentSemester === 1
+    const semMonthsMap: { [key: string]: string } = targetSem === 1
       ? { "JAN": "Janeiro", "FEV": "Fevereiro", "MAR": "Março", "ABR": "Abril", "MAI": "Maio", "JUN": "Junho" }
       : { "JUL": "Julho", "AGO": "Agosto", "SET": "Setembro", "OUT": "Outubro", "NOV": "Novembro", "DEZ": "Dezembro" };
 
@@ -219,22 +230,140 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         }
       }
 
-      // Default: no history and not active month -> 0 pts
+      // ─── EXTENDED ACCUMULATED SYNC ───
+      // If cycle is not archived (meaning it is unarchived layout like ABERTO, AGUARDANDO_FECHAMENTO, FECHADO),
+      // let's fetch scores from the monthly dynamic evaluation tables.
+      let monthBranches: any[] = [];
+      try {
+        const savedEvals = localStorage.getItem(`acandido_evaluations_${fullMonthName}_2026`);
+        if (savedEvals) {
+          monthBranches = JSON.parse(savedEvals);
+        }
+      } catch (e) {}
+
+      if (monthBranches && monthBranches.length > 0) {
+        const matchingMonthBranches = monthBranches.filter((mb) => branchIds.includes(mb.id));
+        if (matchingMonthBranches.length > 0) {
+          if (entry.branches.length === 2 && matchingMonthBranches.length === 2) {
+            let consolidatedScore = 0;
+            referenceCriteria.forEach((cRef) => {
+              const allOk = matchingMonthBranches.every((mRecord) => {
+                const crit = mRecord.criteria?.find((cs: any) => cs.id === cRef.id);
+                return crit && (crit.status === "OK" || crit.status === "Aprovado");
+              });
+              if (allOk) {
+                consolidatedScore += cRef.pointsPossible;
+              }
+            });
+            return { month: m, val: consolidatedScore };
+          } else {
+            const sumScore = matchingMonthBranches.reduce((sum, mb) => sum + (mb.currentScore || 0), 0);
+            return { month: m, val: sumScore };
+          }
+        }
+      }
+
+      // Check if there is an active/closed cycle created for this month to enforce standard zero score rule
+      let allCyclesList: any[] = [];
+      try {
+        const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+        if (savedCycles) {
+          allCyclesList = JSON.parse(savedCycles);
+        }
+      } catch (e) {}
+
+      const cycleExistsInList = Array.isArray(allCyclesList) && allCyclesList.some(
+        (c: any) => c.activeMonth?.toLowerCase() === fullMonthName.toLowerCase() && String(c.activeYear) === "2026"
+      );
+      const isCurrentActive = cycleStateParsed.activeMonth?.toLowerCase() === fullMonthName.toLowerCase() && cycleStateParsed.status !== "NENHUM";
+
+      // If no cycle is ever created for this month, consider 0 points for that period
+      if (!cycleExistsInList && !isCurrentActive) {
+        return { month: m, val: 0 };
+      }
+
+      // Default: no history/evaluation records found yet -> 0 pts
       return { month: m, val: 0 };
     });
   };
 
+  const getEntryScoreForMonth = (entry: UnifiedEntry, monthName: string) => {
+    const historical = getHistoricalMonths(entry);
+    const mAndAbbr: { [key: string]: string } = {
+      "janeiro": "JAN", "fevereiro": "FEV", "março": "MAR", "abril": "ABR", "maio": "MAI", "junho": "JUN",
+      "julho": "JUL", "agosto": "AGO", "setembro": "SET", "outubro": "OUT", "novembro": "NOV", "dezembro": "DEZ"
+    };
+    const targetAbbr = mAndAbbr[monthName.toLowerCase()];
+    if (!targetAbbr) return 0;
+    const found = historical.find(h => h.month === targetAbbr);
+    return found ? found.val : 0;
+  };
+
+  const getEntryDisplayScore = (entry: UnifiedEntry) => {
+    if (rankingMode === "MES") {
+      return getEntryScoreForMonth(entry, selectedRankingMonth);
+    } else {
+      return getHistoricalMonths(entry, Number(selectedSemesterFilter)).reduce((sum, h) => sum + h.val, 0);
+    }
+  };
+
+  const getEntryDisplayMax = () => {
+    if (rankingMode === "MES") {
+      return 80;
+    } else {
+      return 600;
+    }
+  };
+
+  const entriesWithDisplayScore = allEntries.map((e) => {
+    const scoreVal = getEntryDisplayScore(e);
+    return {
+      ...e,
+      semestralScore: scoreVal,
+      displayScore: scoreVal
+    };
+  });
+
+  const groupAEntries = entriesWithDisplayScore
+    .filter((e) => e.group === "A")
+    .sort((a, b) => b.displayScore - a.displayScore);
+
+  const groupBEntries = entriesWithDisplayScore
+    .filter((e) => e.group === "B")
+    .sort((a, b) => b.displayScore - a.displayScore);
+
+  const currentLeaderboard = activeGroupTab === "A" ? groupAEntries : groupBEntries;
+
   const hasRealHistory = (() => {
+    // 1. Check if we have archived records in acandido_history
     try {
       const saved = localStorage.getItem("acandido_history");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const filtered = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
-          return filtered.length > 0;
+        if (Array.isArray(parsed) && parsed.filter((h: any) => h.monthYear).length > 0) {
+          return true;
         }
       }
     } catch (e) {}
+
+    // 2. Check if there are active / closed / blocked cycle structures initialized
+    try {
+      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+      if (savedCycles) {
+        const parsed = JSON.parse(savedCycles);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasActiveOrClosedCycle = parsed.some((c: any) => 
+            c.status === "FECHADO" || c.status === "AGUARDANDO_FECHAMENTO" || c.status === "ABERTO"
+          );
+          if (hasActiveOrClosedCycle) return true;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Check if there is any evaluated score currently greater than zero
+    const anyScore = currentLeaderboard.some((item) => item.displayScore > 0);
+    if (anyScore) return true;
+
     return false;
   })();
 
@@ -358,7 +487,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           try {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
-              histList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+              histList = parsed.filter((h: any) => h.monthYear);
             } else {
               histList = [];
             }
@@ -448,7 +577,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           try {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
-              histList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+              histList = parsed.filter((h: any) => h.monthYear);
             } else {
               histList = [];
             }
@@ -1177,27 +1306,104 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
         </div>
       </div>
 
+      {/* Control panel for ranking selection and toggle mode */}
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-sans">Tipo de Ranking</label>
+          <div className="flex bg-slate-200/60 p-1 rounded-xl border border-slate-300 self-start">
+            <button
+              type="button"
+              onClick={() => {
+                setRankingMode("MES");
+                setSelectedEntry(null);
+              }}
+              className={`px-4 py-2 text-xs font-black rounded-lg uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                rankingMode === "MES"
+                  ? "bg-[#1B2A4A] text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+              Mês Selecionado
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRankingMode("ACUMULADO");
+                setSelectedEntry(null);
+              }}
+              className={`px-4 py-2 text-xs font-black rounded-lg uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                rankingMode === "ACUMULADO"
+                  ? "bg-[#1B2A4A] text-white shadow-sm"
+                  : "text-[#1B2A4A] hover:text-slate-800"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">query_stats</span>
+              Acumulado Anual
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 min-w-[220px]">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-sans">Referência Temporária</label>
+          {rankingMode === "MES" ? (
+            <select
+              value={selectedRankingMonth}
+              onChange={(e) => {
+                setSelectedRankingMonth(e.target.value);
+                setSelectedEntry(null);
+              }}
+              className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
+            >
+              {monthsOfThisSemester.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={selectedSemesterFilter}
+              onChange={(e) => {
+                setSelectedSemesterFilter(e.target.value as "1" | "2");
+                setSelectedEntry(null);
+              }}
+              className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
+            >
+              <option value="1">1º Semestre (Janeiro - Junho)</option>
+              <option value="2">2º Semestre (Julho - Dezembro)</option>
+            </select>
+          )}
+        </div>
+      </div>
+
       {/* CLEAN RANKING ENTRIES LIST (NO RIGHT SIDEBAR FOR ENTIRE SYSTEM SCREEN) */}
       <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-50 pb-2">
           <h4 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">
             Posições Consolidadas — Grupo {activeGroupTab}
           </h4>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Meta de Qualificação Mínima: 300 PTS
-          </span>
+          {rankingMode === "MES" && (
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Meta do Mês: 75 PTS
+            </span>
+          )}
         </div>
 
         <div className="space-y-3.5">
           {!hasRealHistory && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center text-xs font-semibold text-slate-500 animate-pulse">
-               🔘 O ranking será calculado a partir do primeiro ciclo encerrado pelo auditor
-            </div>
+               O ranking será calculado a partir do primeiro ciclo encerrado pelo auditor
+             </div>
           )}
 
           {currentLeaderboard.map((item, index) => {
             const place = index + 1;
-            const isBelowGoal = item.semestralScore < 300;
+            const displayScore = item.displayScore;
+            const maxPoints = getEntryDisplayMax();
+            const minGoal = rankingMode === "MES" ? 75 : 300;
+            const warningLimit = rankingMode === "MES" ? 85 : 350;
+            const isBelowGoal = displayScore < minGoal;
 
             return (
               <div
@@ -1218,7 +1424,7 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                       {item.name}
                     </h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Responsável: <span className="font-extrabold text-slate-650 text-slate-750 text-slate-700">{item.ownerName}</span> • <span className="italic font-bold">{item.location}</span>
+                      Responsável: <span className="font-extrabold text-slate-700">{item.ownerName}</span> • <span className="italic font-bold">{item.location}</span>
                     </p>
                   </div>
                 </div>
@@ -1230,17 +1436,23 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                         <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
                           Líder
                         </span>
-                      ) : item.semestralScore < 300 ? (
-                        <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                          🔴 ABAIXO DO MÍNIMO
-                        </span>
-                      ) : item.semestralScore <= 350 ? (
-                        <span className="bg-amber-55 bg-amber-500 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                          ⚠️ ATENÇÃO
-                        </span>
+                      ) : rankingMode === "MES" ? (
+                        isBelowGoal ? (
+                          <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
+                            🔴 ABAIXO DO MÍNIMO
+                          </span>
+                        ) : displayScore <= warningLimit ? (
+                          <span className="bg-amber-500 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
+                            ⚠️ ATENÇÃO
+                          </span>
+                        ) : (
+                          <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                            Ativo
+                          </span>
+                        )
                       ) : (
-                        <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                          Ativo
+                        <span className="bg-[#1B2A4A] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                          Pontuando
                         </span>
                       )}
                     </>
@@ -1249,7 +1461,12 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                   <div className="text-right min-w-[130px]">
                     <div className="flex items-center justify-end gap-1.5">
                       <span className="text-xs font-black text-[#1B2A4A] font-mono leading-none">
-                        {item.semestralScore} <span className="text-[10px] font-normal text-slate-400 font-sans">pts</span>
+                        {displayScore}
+                        {rankingMode === "MES" ? (
+                          <span className="text-[10px] font-normal text-slate-400 font-sans">/{maxPoints} pts</span>
+                        ) : (
+                          <span className="text-[10px] font-normal text-slate-400 font-sans"> pts</span>
+                        )}
                       </span>
                       {(() => {
                         if (!hasRealHistory) return null;
@@ -1277,8 +1494,8 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
                     </div>
                     <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
                       <div
-                        className={`h-full ${item.semestralScore === 0 ? "bg-transparent" : (item.semestralScore < 300 ? "bg-[#1B2A4A]/70" : (item.semestralScore <= 350 ? "bg-amber-400" : "bg-emerald-500"))}`}
-                        style={{ width: `${item.semestralScore === 0 ? 0 : Math.min(100, (item.semestralScore / 600) * 105)}%` }}
+                        className={`h-full ${displayScore === 0 ? "bg-transparent" : (rankingMode === "MES" ? (isBelowGoal ? "bg-rose-600" : (displayScore <= warningLimit ? "bg-amber-400" : "bg-emerald-500")) : "bg-[#1B2A4A]")}`}
+                        style={{ width: `${displayScore === 0 ? 0 : Math.min(100, (displayScore / maxPoints) * 100)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -1288,17 +1505,19 @@ export default function AdminRanking({ user, branches }: AdminRankingProps) {
           })}
         </div>
 
-        {/* Minimal Qualification Red Line marker */}
-        <div className="relative py-6">
-          <div className="absolute inset-0 flex items-center animate-pulse" aria-hidden="true">
-            <div className="w-full border-t-2 border-dashed border-red-500/30"></div>
+        {/* Dynamic Qualification separator */}
+        {rankingMode === "MES" && (
+          <div className="relative py-6">
+            <div className="absolute inset-0 flex items-center animate-pulse" aria-hidden="true">
+              <div className="w-full border-t-2 border-dashed border-amber-500/30"></div>
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white border border-amber-200 px-4 py-1 rounded-full font-black uppercase tracking-widest text-[9px] shadow-xs text-amber-600">
+                Meta Mínima de Conformidade Mensal (75 PTS)
+              </span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="bg-white border border-red-100 px-4 py-1 rounded-full font-black text-red-500 uppercase tracking-widest text-[9px] shadow-xs">
-              Mínimo Operacional Necessário (300 PTS)
-            </span>
-          </div>
-        </div>
+        )}
       </section>
     </div>
   );

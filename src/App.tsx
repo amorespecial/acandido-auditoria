@@ -260,6 +260,24 @@ export default function App() {
 
   const [loadedPeriod, setLoadedPeriod] = useState<{ month: string; year: string } | null>(null);
 
+  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<"1" | "2">(() => {
+    try {
+      const saved = localStorage.getItem("acandido_cycle_state_manual");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.activeMonth) {
+          const MONTH_MAP: Record<string, number> = {
+            "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+          };
+          const activeMonthNum = MONTH_MAP[parsed.activeMonth.toLowerCase()] || 6;
+          return activeMonthNum <= 6 ? "1" : "2";
+        }
+      }
+    } catch {}
+    return "1";
+  });
+
   const handleUpdateCycleState = async (newStateOrFn: any) => {
     let next: any;
     if (typeof newStateOrFn === "function") {
@@ -788,30 +806,23 @@ export default function App() {
 
   // 1. Process branches dynamically on the fly to support automatic simulated cycles, deadlines & automation
   const currentConfigKey = `${activeMonth}_${activeYear}`;
-  const isFebJulAug2026 = ["Fevereiro", "Julho", "Agosto"].includes(activeMonth) && activeYear === "2026";
-  const currentConfig = isFebJulAug2026 
-    ? (cycleConfigs[currentConfigKey] || {
-        configured: false,
-        top10: [],
-        layoutLocation: "",
-        materialParadoUploaded: false
-      })
-    : (cycleConfigs[currentConfigKey] || {
-        configured: cycleState.status !== "NENHUM",
-        top10: [
-          { code: "1080571", name: "BATERIA 180 AMP" },
-          { code: "1050177", name: "KIT EMBREAGEM 1722" },
-          { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
-          { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
-          { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
-          { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
-          { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
-          { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
-          { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
-        ],
-        layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
-        materialParadoUploaded: true
-      });
+  const isMonthOpen = cycleState.status === "ABERTO" && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear;
+  const currentConfig = cycleConfigs[currentConfigKey] || {
+    configured: isMonthOpen,
+    top10: [
+      { code: "1080571", name: "BATERIA 180 AMP" },
+      { code: "1050177", name: "KIT EMBREAGEM 1722" },
+      { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
+      { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
+      { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
+      { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
+      { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
+      { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
+      { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
+    ],
+    layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
+    materialParadoUploaded: true
+  };
 
   const processedBranches = (() => {
     const MONTH_MAP: Record<string, number> = {
@@ -1046,7 +1057,7 @@ export default function App() {
           try {
             const parsed = JSON.parse(savedHistVal);
             if (Array.isArray(parsed)) {
-              const hList = parsed.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+              const hList = parsed.filter((h: any) => h.monthYear);
               const semesterMonths = activeSemestre === 1 
                 ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
                 : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -1152,7 +1163,7 @@ export default function App() {
         activeCriteria = b.criteria.map((c) => {
           return {
             ...c,
-            pointsObtained: c.status === "OK" ? c.pointsPossible : (c.id === "1" ? c.pointsObtained : 0)
+            pointsObtained: c.status === "OK" ? c.pointsPossible : 0
           };
         });
       }
@@ -1162,8 +1173,8 @@ export default function App() {
       const monthlyPossible = 75; // 8 fixed monthly criteria is always 75
 
       const invCrit = activeCriteria.find((c) => c.id === "1");
-      const invObtained = b.isInventarioScheduledThisMonth ? (invCrit?.pointsObtained || 0) : 0;
-      const invPossible = b.isInventarioScheduledThisMonth ? 20 : 0;
+      const invObtained = invCrit?.pointsObtained || 0;
+      const invPossible = 20;
 
       const matCrit = activeCriteria.find((c) => c.id === "10");
       let hasMaterials = false;
@@ -1186,8 +1197,8 @@ export default function App() {
           hasMaterials = !!defaultMap[b.id];
         }
       }
-      const matObtained = hasMaterials ? (matCrit?.pointsObtained || 0) : 0;
-      const matPossible = hasMaterials ? 5 : 0;
+      const matObtained = matCrit?.pointsObtained || 0;
+      const matPossible = 5;
 
       const obtained = monthlyObtained + invObtained + matObtained;
       const maxAuditable = monthlyPossible + invPossible + matPossible;
@@ -1927,7 +1938,19 @@ export default function App() {
                     user={user}
                   />
                 )}
-                {adminTab === "RANKING" && <AdminRanking user={user} branches={processedBranches} />}
+                {adminTab === "RANKING" && (
+                  <AdminRanking
+                    user={user}
+                    branches={processedBranches}
+                    activeMonth={activeMonth}
+                    setActiveMonth={setActiveMonth}
+                    activeYear={activeYear}
+                    setActiveYear={setActiveYear}
+                    selectedSemesterFilter={selectedSemesterFilter}
+                    setSelectedSemesterFilter={setSelectedSemesterFilter}
+                    cycleState={cycleState}
+                  />
+                )}
                 {adminTab === "HISTORICO" && <AdminHistory user={user} branches={processedBranches} />}
                 {adminTab === "GARANTIAS" && <AdminGarantiasPanel allBranches={processedBranches} />}
                 {adminTab === "SERVICOS" && <AdminServicosPanel allBranches={processedBranches} />}

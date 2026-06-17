@@ -367,39 +367,39 @@ export default function AdminPanel({
           const hasRegisteredEvaluation = branch.criteria.some((c) => c.status === "OK" || c.status === "NOK");
           const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO").length;
 
-          let badgeColor = "bg-stone-150 text-stone-700";
+          let badgeColor = "bg-stone-150 text-stone-700 font-extrabold";
           let badgeText: string = branch.status;
-          if (hasRegisteredEvaluation) {
-            if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white";
-            if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white";
-            if (branch.status === "NOK") badgeColor = "bg-red-500 text-white";
-          } else {
+          if (cycleState.status === "NENHUM") {
             badgeColor = "bg-slate-100/80 text-slate-400 border border-slate-200/50 font-black tracking-wide";
-            badgeText = cycleState.status === "NENHUM" ? "Ciclo não iniciado" : "SEM DADOS";
+            badgeText = "Ciclo não iniciado";
+          } else {
+            if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white font-extrabold";
+            if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white font-extrabold";
+            if (branch.status === "NOK") badgeColor = "bg-red-500 text-white font-extrabold";
           }
+
+          const scoreToDisplay = branch.pointsObtainedSum ?? branch.currentScore;
+          const maxPoints = branch.maxAuditablePoints ?? 75;
+          const progressWidth = Math.min((scoreToDisplay / maxPoints) * 100, 100);
 
           let scoreTextClass = "text-slate-400 font-medium";
           let progressBgClass = "bg-slate-200";
-          let progressWidth = 0;
 
-          if (hasRegisteredEvaluation) {
-            progressWidth = Math.min(((branch.pointsObtainedSum ?? branch.currentScore) / (branch.maxAuditablePoints ?? 75)) * 100, 100);
-            if (branch.scoreCategory === "Excelente") {
-              scoreTextClass = "text-emerald-600 font-extrabold";
-              progressBgClass = "bg-emerald-500";
-            } else if (branch.scoreCategory === "Bom") {
-              scoreTextClass = "text-indigo-600 font-extrabold";
-              progressBgClass = "bg-indigo-500";
-            } else if (branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio") {
-              scoreTextClass = "text-amber-500 font-extrabold";
-              progressBgClass = "bg-amber-500";
-            } else if (branch.scoreCategory === "Parcial") {
-              scoreTextClass = "text-slate-500 font-bold uppercase tracking-wider";
-              progressBgClass = "bg-slate-400";
-            } else {
-              scoreTextClass = "text-red-500 font-extrabold";
-              progressBgClass = "bg-red-500";
-            }
+          if (branch.scoreCategory === "Excelente") {
+            scoreTextClass = "text-emerald-600 font-extrabold";
+            progressBgClass = "bg-emerald-500";
+          } else if (branch.scoreCategory === "Bom") {
+            scoreTextClass = "text-indigo-600 font-extrabold";
+            progressBgClass = "bg-indigo-500";
+          } else if (branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio") {
+            scoreTextClass = "text-amber-500 font-extrabold";
+            progressBgClass = "bg-amber-500";
+          } else if (branch.scoreCategory === "Parcial") {
+            scoreTextClass = "text-slate-500 font-bold uppercase tracking-wider";
+            progressBgClass = "bg-slate-400";
+          } else {
+            scoreTextClass = "text-red-500 font-extrabold";
+            progressBgClass = "bg-red-500";
           }
 
           return (
@@ -422,21 +422,21 @@ export default function AdminPanel({
                     {badgeText}
                   </span>
                 </div>
-
-                <div className="flex flex-col items-center justify-center py-4 bg-slate-50/50 rounded-xl mb-4">
-                  <div className="text-3xl font-black text-[#1B2A4A] mb-0.5 font-mono">
-                    {hasRegisteredEvaluation ? (branch.pointsObtainedSum ?? branch.currentScore) : "0"}
-                    <span className="text-sm text-slate-400 font-normal">/{branch.maxAuditablePoints ?? 75}</span>
+ 
+                <div className="flex flex-col items-center justify-center py-4 bg-slate-50/50 rounded-xl mb-4 font-mono">
+                  <div className="text-3xl font-black text-[#1B2A4A] mb-0.5">
+                    {scoreToDisplay}
+                    <span className="text-sm text-slate-400 font-normal">/{maxPoints}</span>
                   </div>
-                  <div className="text-[10px] text-slate-450 font-bold uppercase tracking-widest text-slate-400">
+                  <div className="text-[10px] text-slate-450 font-bold uppercase tracking-widest text-slate-400 font-sans">
                     Nota Mensal
                   </div>
                 </div>
-
+ 
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-[11px] font-medium text-slate-500">
-                    <span>{(branch.maxAuditablePoints ?? 75)} pts auditáveis este mês</span>
-                    <span className={scoreTextClass}>{hasRegisteredEvaluation ? branch.scoreCategory : "Sem avaliação"}</span>
+                    <span>{maxPoints} pts auditáveis este mês</span>
+                    <span className={scoreTextClass}>{branch.scoreCategory}</span>
                   </div>
                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                     <div

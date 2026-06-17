@@ -278,7 +278,7 @@ export default function AlmoxarifeHistorico({
           if (!Array.isArray(savedEntries)) {
             savedEntries = [];
           } else {
-            savedEntries = savedEntries.filter((h: any) => h.monthYear && !h.monthYear.startsWith("Fevereiro") && !h.monthYear.startsWith("Julho") && !h.monthYear.startsWith("Agosto"));
+            savedEntries = savedEntries.filter((h: any) => h.monthYear);
           }
         } catch (e) {
           savedEntries = [];
