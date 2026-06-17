@@ -11,6 +11,8 @@ interface AdminEvaluationDetailProps {
   onBack: () => void;
   onUpdateCriteria: (branchId: string, updatedCriteria: CriterionState[]) => void;
   isSemestralMonth: boolean;
+  activeMonth?: string;
+  activeYear?: string;
 }
 
 export default function AdminEvaluationDetail({
@@ -19,13 +21,29 @@ export default function AdminEvaluationDetail({
   onBack,
   onUpdateCriteria,
   isSemestralMonth,
+  activeMonth,
+  activeYear,
 }: AdminEvaluationDetailProps) {
   const isCycleClosed = (() => {
     try {
+      const m = activeMonth || "Janeiro";
+      const y = activeYear || "2026";
+      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+      if (savedCycles) {
+        const list = JSON.parse(savedCycles);
+        if (Array.isArray(list)) {
+          const match = list.find(c => c.activeMonth === m && c.activeYear === y);
+          if (match) {
+            return match.status === "NENHUM" || match.status === "FECHADO";
+          }
+        }
+      }
       const saved = localStorage.getItem("acandido_cycle_state_manual");
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.status === "NENHUM" || parsed.status === "FECHADO";
+        if (parsed.activeMonth === m && parsed.activeYear === y) {
+          return parsed.status === "NENHUM" || parsed.status === "FECHADO";
+        }
       }
     } catch (e) {}
     return false;
@@ -44,18 +62,20 @@ export default function AdminEvaluationDetail({
   const [subTab, setSubTab] = useState<"AUDITORIA" | "GARANTIAS" | "SERVICOS">("AUDITORIA");
 
   const cycleStateParsed = (() => {
+    let m = activeMonth || "Janeiro";
+    let y = activeYear || "2026";
+    let s: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
+
     try {
       const saved = localStorage.getItem("acandido_cycle_state_manual");
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
-          activeMonth: parsed.activeMonth || "Maio",
-          activeYear: parsed.activeYear || "2026",
-          status: parsed.status || "ABERTO"
-        };
+        s = parsed.status || "ABERTO";
+        if (!activeMonth && parsed.activeMonth) m = parsed.activeMonth;
+        if (!activeYear && parsed.activeYear) y = parsed.activeYear;
       }
     } catch (e) {}
-    return { activeMonth: "Maio", activeYear: "2026", status: "ABERTO" };
+    return { activeMonth: m, activeYear: y, status: s };
   })();
 
   // Synchronically load remote configuration on branch/cycle change

@@ -382,8 +382,24 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     return saved ? JSON.parse(saved) : defaultState;
   }
 
-  const { data, error } = await supabase.from('ciclos').select('*').order('iniciado_em', { ascending: false }).limit(1);
+  // Seeks specifically for a cycle with status 'aberto' (open) first
+  let { data, error } = await supabase.from('ciclos').select('*').eq('status', 'aberto').limit(1);
+
   if (error || !data || data.length === 0) {
+    // Fallback search for a cycle with status 'bloqueado'
+    const resBloq = await supabase.from('ciclos').select('*').eq('status', 'bloqueado').limit(1);
+    if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
+      data = resBloq.data;
+    } else {
+      // Final fallback to the latest initiated cycle
+      const resLatest = await supabase.from('ciclos').select('*').order('iniciado_em', { ascending: false }).limit(1);
+      if (!resLatest.error && resLatest.data && resLatest.data.length > 0) {
+        data = resLatest.data;
+      }
+    }
+  }
+
+  if (!data || data.length === 0) {
     return defaultState;
   }
 

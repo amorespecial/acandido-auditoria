@@ -312,31 +312,17 @@ export default function App() {
     }
   };
 
-  // Dynamic cycleState derivation effect to react to month and year filter changes
+  // Lock Almoxarife view strictly to the currently open cycle (cycleState) loaded from database
   useEffect(() => {
-    const key = `${activeMonth}_${activeYear}`;
-    const match = allCycles[key];
-    const targetStatus = match ? match.status : "NENHUM";
-    
-    setCycleState((prev) => {
-      if (
-        prev.activeMonth === activeMonth &&
-        prev.activeYear === activeYear &&
-        prev.status === targetStatus &&
-        prev.openedAt === match?.openedAt &&
-        prev.openedBy === match?.openedBy
-      ) {
-        return prev;
+    if (user && user.role === "ALMOXARIFE" && cycleState) {
+      if (cycleState.activeMonth && activeMonth !== cycleState.activeMonth) {
+        setActiveMonth(cycleState.activeMonth);
       }
-      return {
-        activeMonth,
-        activeYear,
-        status: targetStatus,
-        openedAt: match?.openedAt,
-        openedBy: match?.openedBy
-      };
-    });
-  }, [activeMonth, activeYear, allCycles]);
+      if (cycleState.activeYear && activeYear !== cycleState.activeYear) {
+        setActiveYear(cycleState.activeYear);
+      }
+    }
+  }, [user, cycleState, activeMonth, activeYear]);
 
   // Cycle configuration state map: key is "Mês_Ano" e.g. "Junho_2026"
   const [cycleConfigs, setCycleConfigs] = useState<Record<string, {
@@ -546,16 +532,6 @@ export default function App() {
     const fetchEvaluationsFromSupabase = async () => {
       const defaultBranches = getCleanDefaultBranches();
       
-      if (["Fevereiro", "Julho", "Agosto"].includes(activeMonth) && activeYear === "2026") {
-        const briefBranches = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        const briefDefault = JSON.stringify(defaultBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        if (briefBranches !== briefDefault) {
-          setBranches(defaultBranches);
-        }
-        setLoadedPeriod({ month: activeMonth, year: activeYear });
-        return;
-      }
-
       let evaluationsMap: Record<string, any> = {};
       let loadedFromSupabase = false;
 
@@ -806,7 +782,11 @@ export default function App() {
 
   // 1. Process branches dynamically on the fly to support automatic simulated cycles, deadlines & automation
   const currentConfigKey = `${activeMonth}_${activeYear}`;
-  const isMonthOpen = cycleState.status === "ABERTO" && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear;
+  const isMonthOpen = (() => {
+    const key = `${activeMonth}_${activeYear}`;
+    const match = allCycles[key];
+    return match ? match.status === "ABERTO" : false;
+  })();
   const currentConfig = cycleConfigs[currentConfigKey] || {
     configured: isMonthOpen,
     top10: [
@@ -1231,8 +1211,10 @@ export default function App() {
       }
 
       const finalScore = obtained;
-      const liveActiveScore = cycleState.status !== "NENHUM" ? finalScore : 0;
-      const isCycleActive = cycleState.status !== "NENHUM";
+      const key_query = `${activeMonth}_${activeYear}`;
+      const query_match = allCycles[key_query];
+      const isCycleActive = query_match ? query_match.status !== "NENHUM" : false;
+      const liveActiveScore = isCycleActive ? finalScore : 0;
 
       return {
         ...b,
@@ -1907,6 +1889,8 @@ export default function App() {
                 onBack={() => setSelectedBranchId(null)}
                 onUpdateCriteria={handleUpdateCriteria}
                 isSemestralMonth={activeMonth.toLowerCase() === "janeiro" || activeMonth.toLowerCase() === "julho"}
+                activeMonth={activeMonth}
+                activeYear={activeYear}
               />
             ) : (
               <>
