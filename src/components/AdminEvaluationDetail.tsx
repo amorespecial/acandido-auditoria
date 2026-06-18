@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules } from "../supabaseService";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -303,6 +303,7 @@ export default function AdminEvaluationDetail({
   const [nokEvidenceDescriptionInput, setNokEvidenceDescriptionInput] = useState("");
   const [auditorCerts, setAuditorCerts] = useState<any[]>([]);
   const [branchCalendar, setBranchCalendar] = useState<any[]>([]);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [nokEvidenceFileName, setNokEvidenceFileName] = useState("");
   const [nokEvidenceFileType, setNokEvidenceFileType] = useState("");
   const [nokEvidenceFileData, setNokEvidenceFileData] = useState("");
@@ -450,14 +451,14 @@ export default function AdminEvaluationDetail({
   const twinId = pair ? (pair[0] === branch.id ? pair[1] : pair[0]) : null;
   const twinBranch = twinId ? allBranches.find((b) => b.id === twinId) : null;
 
-  const handleOpenEvaluate = (crit: CriterionState) => {
+  const handleOpenEvaluate = async (crit: CriterionState) => {
     if (isCycleClosed) {
       alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas avaliações.");
       return;
     }
 
     if (crit.id === "5") {
-      alert("Item Automático: Este item é calculado automaticamente de acordo com o status de '03 - Nota Fiscal'.");
+      alert("Item Automático: Este item é calculated automaticamente de acordo com o status de '03 - Nota Fiscal'.");
       return;
     }
 
@@ -532,49 +533,18 @@ export default function AdminEvaluationDetail({
       const activeMonthNum = cycleStateParsed ? MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6 : 6;
       const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
-      const localCalendar = calendarData || [];
-
-      const matchBranch = (almoxName: string, bId: string, bName?: string) => {
-        const name = almoxName.toLowerCase().trim();
-        const branchId = bId.toLowerCase().trim();
-        
-        // 1. Direct explicit rule maps for absolute safety
-        if (name.includes("santa maria")) return branchId === "santa-maria-jp";
-        if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-        if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
-        if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
-        if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
-        if (name.includes("goiana")) return branchId === "fretamento-goiana";
-        if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
-        if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
-        if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
-        if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
-        if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
-        if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
-        if (name.includes("unitrans")) return branchId === "unitrans-jp";
-
-        // 2. Exact check
-        if (branchId === name) return true;
-
-        // 3. Normalized fallback
-        const normAlmox = name
-          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-          .replace(/[^a-z0-9]/g, "");
-
-        const normId = branchId
-          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-          .replace(/[^a-z0-9]/g, "");
-
-        if (normAlmox === normId || normId === normAlmox) return true;
-        return false;
-      };
-
-      const items = localCalendar.filter(item =>
-        (item.branchId === branch.id || (!item.branchId && matchBranch(item.almoxarifado, branch.id, branch.name))) &&
-        item.ano === activeYearNum &&
-        item.semestre === activeSemestre
-      );
-      setBranchCalendar(items);
+      console.log(`Fetching live calendar data directly from Supabase for branch: ${branch.id}`);
+      
+      try {
+        setIsCalendarLoading(true);
+        // Direct fetch on the table filter by almoxarifado_id, ano and semestre
+        const items = await dbFetchBranchSchedules(branch.id, { ano: activeYearNum, semestre: activeSemestre });
+        setBranchCalendar(items);
+      } catch (err) {
+        console.error("Error loading branch calendar in handleOpenEvaluate:", err);
+      } finally {
+        setIsCalendarLoading(false);
+      }
     }
 
     setSelectedCriterion(crit);
@@ -1555,8 +1525,13 @@ export default function AdminEvaluationDetail({
                     </p>
                   </div>
 
-                  <div className="space-y-3">
-                    {branchCalendar.length === 0 ? (
+                  <div className="space-y-3 relative min-h-[60px]">
+                    {isCalendarLoading ? (
+                      <div className="flex flex-col items-center justify-center p-6 gap-2">
+                        <div className="w-6 h-6 border-2 border-[#1B2A4A] border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-[10px] text-[#1B2A4A] font-black uppercase tracking-wider">Carregando agendamentos...</span>
+                      </div>
+                    ) : branchCalendar.length === 0 ? (
                       <div className="p-4 bg-white rounded-lg border border-slate-100 text-center text-xs text-slate-400 font-medium">
                         Não há inventários cadastrados para este semestre no calendário de configurações.
                       </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
-import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule } from "../supabaseService";
+import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules } from "../supabaseService";
 import { supabase } from "../supabaseClient";
 
 const ALMOXARIFADOS_LIST = [
@@ -323,13 +323,98 @@ export default function AdminConfiguracoes({
     dbDeleteSchedule(id).catch(e => console.error("Error deleting item:", e));
   };
 
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
+
+  // Load calendar directly from Supabase
+  useEffect(() => {
+    if (activeTab === "INVENTARIOS") {
+      let isSubscribed = true;
+      const fetchDirect = async () => {
+        try {
+          setIsCalendarLoading(true);
+          console.log(`[AdminConfiguracoes] Loading calendar schedules directly from Supabase for year: ${calendarYear}`);
+          const freshCal = await dbFetchSchedules();
+          if (isSubscribed) {
+            // Map the branchId back using the id matching
+            const migrated = freshCal.map(item => {
+              if (item.branchId) return item;
+              const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
+              return {
+                ...item,
+                branchId: matched ? matched.id : undefined
+              };
+            });
+            setCalendarData(migrated);
+          }
+        } catch (error) {
+          console.error("Error direct loading calendar schedules:", error);
+        } finally {
+          if (isSubscribed) {
+            setIsCalendarLoading(false);
+          }
+        }
+      };
+
+      fetchDirect();
+      return () => {
+        isSubscribed = false;
+      };
+    }
+  }, [activeTab, calendarYear, branches]);
+
+  useEffect(() => {
+    const handleRealtimeUpdate = async () => {
+      if (activeTab === "INVENTARIOS") {
+        console.log("[AdminConfiguracoes] Realtime calendar update event received, refetching...");
+        try {
+          const freshCal = await dbFetchSchedules();
+          const migrated = freshCal.map(item => {
+            if (item.branchId) return item;
+            const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
+            return {
+              ...item,
+              branchId: matched ? matched.id : undefined
+            };
+          });
+          setCalendarData(migrated);
+        } catch (error) {
+          console.error("Error handling realtime calendar update:", error);
+        }
+      }
+    };
+
+    window.addEventListener("realtime-calendario-update", handleRealtimeUpdate);
+    return () => {
+      window.removeEventListener("realtime-calendario-update", handleRealtimeUpdate);
+    };
+  }, [activeTab, branches]);
+
   const handleSaveCalendar = async () => {
     try {
-      await dbSaveSchedules(calendarData);
-      alert("Calendário de Inventários salvo com sucesso!");
-    } catch (e) {
+      setIsCalendarLoading(true);
+      // Wait for confirmation from Supabase before updating UI
+      await dbSaveSchedules(calendarData, calendarYear);
+      
+      // Reload calendar data (fazer novo SELECT para confirmar)
+      const freshCal = await dbFetchSchedules();
+      if (freshCal && freshCal.length > 0) {
+        const migrated = freshCal.map(item => {
+          if (item.branchId) return item;
+          const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
+          return {
+            ...item,
+            branchId: matched ? matched.id : undefined
+          };
+        });
+        setCalendarData(migrated);
+      }
+      
+      alert("Datas salvas com sucesso");
+    } catch (e: any) {
       console.error(e);
-      alert("Erro ao salvar o calendário de inventários.");
+      alert(`Falha crítica ao salvar o calendário de inventários: ${e?.message || e}`);
+    } finally {
+      setIsCalendarLoading(false);
     }
   };
 
@@ -2209,7 +2294,13 @@ export default function AdminConfiguracoes({
 
       {/* ================= TAB 8: CALENDÁRIO DE INVENTÁRIOS ================= */}
       {activeTab === "INVENTARIOS" && (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-xs p-5 space-y-6">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-xs p-5 space-y-6 relative">
+          {isCalendarLoading && (
+            <div className="absolute inset-0 bg-white/75 flex flex-col items-center justify-center gap-2 z-10 rounded-xl">
+              <div className="w-8 h-8 border-4 border-[#1B2A4A] border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-xs text-[#1B2A4A] font-black uppercase tracking-wider">Carregando do Supabase...</span>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b pb-4">
             <div>
               <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1.5 font-sans">

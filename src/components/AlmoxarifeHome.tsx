@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
+import { dbFetchBranchSchedules } from "../supabaseService";
 
 interface AlmoxarifeHomeProps {
   branch: Branch;
@@ -88,60 +89,48 @@ export default function AlmoxarifeHome({
   const twinId = pair ? (pair[0] === branch.id ? pair[1] : pair[0]) : null;
   const twinBranch = twinId ? allBranches?.find((b) => b.id === twinId) : null;
 
-  const getBranchCalendar = () => {
-    const localCalendar = calendarData || [];
+  const [calItems, setCalItems] = useState<any[]>([]);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
 
-    const MONTH_MAP: Record<string, number> = {
-      "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
-      "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-    };
-    const activeMonthNum = MONTH_MAP[activeMonth.toLowerCase()] || 6;
-    const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
-    const activeYearNum = parseInt(activeYear) || 2026;
+  useEffect(() => {
+    let isSubscribed = true;
+    const loadLiveCalendar = async () => {
+      try {
+        setIsCalendarLoading(true);
+        const MONTH_MAP: Record<string, number> = {
+          "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+        };
+        const activeMonthNum = MONTH_MAP[activeMonth.toLowerCase()] || 6;
+        const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+        const activeYearNum = parseInt(activeYear) || 2026;
 
-    const matchBranch = (almoxName: string, bId: string, bName?: string) => {
-      const name = almoxName.toLowerCase().trim();
-      const branchId = bId.toLowerCase().trim();
-      
-      // 1. Direct explicit rule maps for absolute safety
-      if (name.includes("santa maria")) return branchId === "santa-maria-jp";
-      if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-      if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
-      if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
-      if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
-      if (name.includes("goiana")) return branchId === "fretamento-goiana";
-      if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
-      if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
-      if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
-      if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
-      if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
-      if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
-      if (name.includes("unitrans")) return branchId === "unitrans-jp";
-
-      // 2. Exact check
-      if (branchId === name) return true;
-
-      // 3. Normalized fallback
-      const normAlmox = name
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9]/g, "");
-
-      const normId = branchId
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9]/g, "");
-
-      if (normAlmox === normId || normId === normAlmox) return true;
-      return false;
+        console.log(`[AlmoxarifeHome] Loading direct database calendar for branch: ${branch.id}, semestre: ${activeSemestre}, year: ${activeYearNum}`);
+        const items = await dbFetchBranchSchedules(branch.id, { ano: activeYearNum, semestre: activeSemestre });
+        if (isSubscribed) {
+          setCalItems(items);
+        }
+      } catch (err) {
+        console.error("Error loading branch calendar in AlmoxarifeHome:", err);
+      } finally {
+        if (isSubscribed) {
+          setIsCalendarLoading(false);
+        }
+      }
     };
 
-    return localCalendar.filter(item =>
-      (item.branchId === branch.id || (!item.branchId && matchBranch(item.almoxarifado, branch.id, branch.name))) &&
-      item.ano === activeYearNum &&
-      item.semestre === activeSemestre
-    );
-  };
+    loadLiveCalendar();
 
-  const calItems = getBranchCalendar();
+    const handleRealtimeUpdate = () => {
+      loadLiveCalendar();
+    };
+    window.addEventListener("realtime-calendario-update", handleRealtimeUpdate);
+
+    return () => {
+      isSubscribed = false;
+      window.removeEventListener("realtime-calendario-update", handleRealtimeUpdate);
+    };
+  }, [branch.id, activeMonth, activeYear]);
 
   return (
     <div className="space-y-6 max-w-md mx-auto">
@@ -295,11 +284,16 @@ export default function AlmoxarifeHome({
                       <p className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider block mb-1">
                         Detalhamento do Calendário Semestral:
                       </p>
-                      {calItems.length === 0 ? (
-                        <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5 animate-pulse">
+                      {isCalendarLoading ? (
+                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-[#1B2A4A] flex items-center justify-center gap-2">
+                          <div className="w-3.5 h-3.5 border-2 border-[#1B2A4A] border-t-transparent rounded-full animate-spin"></div>
+                          <span className="font-bold uppercase tracking-wider text-[9px]">Carregando do banco...</span>
+                        </div>
+                      ) : calItems.length === 0 ? (
+                        <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">
                             <div>
-                              <span className="text-[10px] font-extrabold text-slate-600 block">
+                              <span className="text-[10px] font-extrabold text-[#1B2A4A]/60 block">
                                 Inventário Semestral #1
                               </span>
                               <span className="text-[10px] text-rose-500 font-bold block mt-0.5">
