@@ -780,6 +780,213 @@ export default function App() {
     return { score: ratio, status, scoreCategory };
   };
 
+  // Automatic Reopen and Restore of Janeiro 2026 if closed/archived
+  useEffect(() => {
+    const revertKey = "acandido_revert_janeiro_2026_v4";
+    if (localStorage.getItem(revertKey) !== "true") {
+      let historyList: any[] = [];
+      const savedHistory = localStorage.getItem("acandido_history");
+      if (savedHistory) {
+        try {
+          historyList = JSON.parse(savedHistory);
+          if (!Array.isArray(historyList)) historyList = [];
+        } catch (e) {
+          historyList = [];
+        }
+      }
+
+      // Find January 2026 entries in the history list
+      const janeiroEntries = historyList.filter(
+        (entry) => entry.monthYear === "Janeiro 2026"
+      );
+
+      // Reconstruct branches evaluations
+      const defaultBranches = getCleanDefaultBranches();
+      const savedJaneiroEvals = localStorage.getItem("acandido_evaluations_Janeiro_2026");
+      let baseBranches = defaultBranches;
+      if (savedJaneiroEvals) {
+        try {
+          const parsed = JSON.parse(savedJaneiroEvals);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            baseBranches = parsed;
+          }
+        } catch (e) {}
+      }
+
+      const restoredBranches = baseBranches.map((b) => {
+        const histEntry = janeiroEntries.find((entry) => entry.branchId === b.id || entry.branchName === b.name);
+        if (histEntry) {
+          const restoredCriteria = b.criteria.map((crt) => {
+            const histCriteria = histEntry.criteriaState?.find((c: any) => c.id === crt.id);
+            if (histCriteria) {
+              const isInventario = crt.id === "1";
+              return {
+                ...crt,
+                status: isInventario ? "PENDENTE" as const : (histCriteria.status || crt.status),
+                pointsObtained: isInventario ? 0 : (histCriteria.pointsObtained !== undefined ? histCriteria.pointsObtained : (histCriteria.score !== undefined ? histCriteria.score : crt.pointsObtained)),
+                notes: isInventario ? "Aguardando realização do inventário" : (histCriteria.notes || crt.notes),
+                evidenceNotes: isInventario ? "" : (histCriteria.evidenceNotes || crt.evidenceNotes),
+                submittedPhotos: histCriteria.submittedPhotos || [],
+                submittedAt: histCriteria.submittedAt,
+                nokEvidenceLinks: histCriteria.nokEvidenceLinks || [],
+                nokEvidenceLink: histCriteria.nokEvidenceLink,
+                nokEvidenceDescription: histCriteria.nokEvidenceDescription,
+                top10AuditorQuantities: histCriteria.top10AuditorQuantities,
+                nokEvidenceFileName: histCriteria.nokEvidenceFileName,
+                nokEvidenceFileType: histCriteria.nokEvidenceFileType,
+                nokEvidenceFileData: histCriteria.nokEvidenceFileData,
+                isAguardandoRealizacao: isInventario ? true : histCriteria.isAguardandoRealizacao
+              };
+            }
+            return crt;
+          });
+
+          const { score, status, scoreCategory } = calculateDerivedMetrics(restoredCriteria);
+
+          return {
+            ...b,
+            criteria: restoredCriteria,
+            currentScore: score,
+            status,
+            scoreCategory
+          };
+        } else {
+          const restoredCriteria = b.criteria.map((crt) => {
+            if (crt.id === "1") {
+              return {
+                ...crt,
+                status: "PENDENTE" as const,
+                pointsObtained: 0,
+                notes: "Aguardando realização do inventário",
+                evidenceNotes: "",
+                isAguardandoRealizacao: true
+              };
+            }
+            return crt;
+          });
+          const { score, status, scoreCategory } = calculateDerivedMetrics(restoredCriteria);
+          return {
+            ...b,
+            criteria: restoredCriteria,
+            currentScore: score,
+            status,
+            scoreCategory
+          };
+        }
+      });
+
+      // Save restored branches back to evaluations_Janeiro_2026 and current branches key
+      localStorage.setItem("acandido_evaluations_Janeiro_2026", JSON.stringify(restoredBranches));
+      localStorage.setItem("acandido_branches", JSON.stringify(restoredBranches));
+      setBranches(restoredBranches);
+
+      // Now set the cycle state back to Janeiro 2026 ABERTO
+      const restoredCycle = {
+        activeMonth: "Janeiro",
+        activeYear: "2026",
+        status: "ABERTO" as const,
+        openedAt: "01/01/2026",
+        openedBy: "Fernando Silva"
+      };
+      localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(restoredCycle));
+      setCycleState(restoredCycle);
+      setActiveMonth("Janeiro");
+      setActiveYear("2026");
+
+      // Update cycles list to make Janeiro 2026 active and Fevereiro 2026 inactive
+      let allCyclesList: any[] = [];
+      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+      if (savedCycles) {
+        try {
+          allCyclesList = JSON.parse(savedCycles);
+          if (!Array.isArray(allCyclesList)) allCyclesList = [];
+        } catch (e) {
+          allCyclesList = [];
+        }
+      }
+
+      let janeiroFound = false;
+      let fevereiroFound = false;
+      allCyclesList = allCyclesList.map((c) => {
+        if (c.activeMonth === "Janeiro" && c.activeYear === "2026") {
+          janeiroFound = true;
+          return { ...c, status: "ABERTO" as const };
+        }
+        if (c.activeMonth === "Fevereiro" && c.activeYear === "2026") {
+          fevereiroFound = true;
+          return { ...c, status: "NENHUM" as const };
+        }
+        return c;
+      });
+
+      if (!janeiroFound) {
+        allCyclesList.push(restoredCycle);
+      }
+      if (!fevereiroFound) {
+        allCyclesList.push({
+          activeMonth: "Fevereiro",
+          activeYear: "2026",
+          status: "NENHUM" as const,
+          openedAt: new Date().toLocaleDateString("pt-BR"),
+          openedBy: "Fernando Silva"
+        });
+      }
+
+      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(allCyclesList));
+      
+      const newCyclesMap: Record<string, any> = {};
+      allCyclesList.forEach((c) => {
+        if (c.activeMonth && c.activeYear) {
+          newCyclesMap[`${c.activeMonth}_${c.activeYear}`] = c;
+        }
+      });
+      setAllCycles(newCyclesMap);
+
+      // Filter January 2026 out of the historical logs so they are active and not represented as closed in consolidation
+      const filteredHistoryList = historyList.filter(
+        (entry) => entry.monthYear !== "Janeiro 2026"
+      );
+      localStorage.setItem("acandido_history", JSON.stringify(filteredHistoryList));
+
+      // Reset any calendar scheduled events inside Janeira 2026 to PENDENTE
+      let calendarData = [];
+      const savedCal = localStorage.getItem("acandido_calendario_inventarios");
+      if (savedCal) {
+        try {
+          calendarData = JSON.parse(savedCal);
+          if (Array.isArray(calendarData)) {
+            calendarData = calendarData.map((item: any) => {
+              let isJan = false;
+              if (item.data_agendada) {
+                const parts = item.data_agendada.split("-");
+                if (parts.length >= 2 && parseInt(parts[1]) === 1) {
+                  isJan = true;
+                }
+              }
+              if (isJan && item.status !== "PENDENTE") {
+                return {
+                  ...item,
+                  status: "PENDENTE",
+                  nokEvidenceLink: ""
+                };
+              }
+              return item;
+            });
+            localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(calendarData));
+          }
+        } catch (e) {
+          console.error("Failed to restore calendar items:", e);
+        }
+      }
+
+      // Mark the revert as done
+      localStorage.setItem(revertKey, "true");
+      
+      // Force a single clean reload to ensure state is completely rebuilt
+      window.location.reload();
+    }
+  }, []);
+
   // 1. Process branches dynamically on the fly to support automatic simulated cycles, deadlines & automation
   const currentConfigKey = `${activeMonth}_${activeYear}`;
   const isMonthOpen = (() => {

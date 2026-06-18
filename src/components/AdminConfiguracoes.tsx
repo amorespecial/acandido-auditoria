@@ -128,6 +128,7 @@ export default function AdminConfiguracoes({
   user,
 }: AdminConfiguracoesProps) {
   const [activeTab, setActiveTab] = useState<"USUARIOS" | "ALMOXARIFADOS" | "COLABORADORES" | "GARANTIAS" | "CICLO" | "SUPERVISOR" | "CRITERIOS" | "INVENTARIOS">("USUARIOS");
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   // Dynamic names list derived from active branches
   const activeAlmoxNames = [...new Set(branches.map((b) => b.name))].sort((a, b) => a.localeCompare(b));
@@ -1761,25 +1762,7 @@ export default function AdminConfiguracoes({
                 <button
                   type="button"
                   disabled={cycleState?.status === "NENHUM" || !onArchiveCycle}
-                  onClick={() => {
-                    if (!cycleState) return;
-                    const currentAudName = user?.name || "Fernando Silva";
-                    const challenge = prompt(`Para arquivar e fechar o ciclo permanentemente, digite seu nome completo (${currentAudName}):`);
-                    if (challenge !== currentAudName) {
-                      alert("Entrada incorreta. Cancelado.");
-                      return;
-                    }
-                    if (onArchiveCycle) {
-                      onArchiveCycle(cycleState.activeMonth, cycleState.activeYear, 95);
-                    }
-                    if (onUpdateCycleState) {
-                      onUpdateCycleState({
-                        ...cycleState,
-                        status: "NENHUM"
-                      });
-                    }
-                    alert("Ciclo encerrado e arquivado permanentemente no Histórico!");
-                  }}
+                  onClick={() => setShowArchiveConfirm(true)}
                   className="w-full py-2 border rounded-lg text-xs font-black uppercase tracking-wider text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed justify-center flex items-center gap-1.5 transition-all font-sans"
                 >
                   <span className="material-symbols-outlined text-[16px]">archive</span>
@@ -2647,6 +2630,61 @@ export default function AdminConfiguracoes({
                   Confirmar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: SHOW ARCHIVE CONFIRMATION ================= */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-150 animate-in fade-in zoom-in duration-150">
+            <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-red-600">report</span>
+              Confirmar Fechamento e Arquivamento
+            </h3>
+            <div className="space-y-4 text-xs font-semibold text-slate-700 leading-relaxed font-sans">
+              <p className="p-3 bg-red-50 border border-red-100 rounded-lg text-red-800 font-extrabold text-xs">
+                Tem certeza? Todos os critérios foram avaliados? Esta ação não pode ser desfeita sem intervenção manual.
+              </p>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Ao confirmar, o ciclo ativo <strong className="text-slate-650">{cycleState?.activeMonth} {cycleState?.activeYear}</strong> será arquivado permanentemente no histórico. Os almoxarifes não conseguirão enviar novas evidências.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end mt-6 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setShowArchiveConfirm(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-[11px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowArchiveConfirm(false);
+                  if (!cycleState) return;
+                  const currentAudName = user?.name || "Fernando Silva";
+                  const challenge = prompt(`Para arquivar e fechar o ciclo permanentemente, digite seu nome completo (${currentAudName}):`);
+                  if (challenge !== currentAudName) {
+                    alert("Entrada incorreta. Cancelado.");
+                    return;
+                  }
+                  if (onArchiveCycle) {
+                    onArchiveCycle(cycleState.activeMonth, cycleState.activeYear, 95);
+                  }
+                  if (onUpdateCycleState) {
+                    onUpdateCycleState({
+                      ...cycleState,
+                      status: "NENHUM"
+                    });
+                  }
+                  alert("Ciclo encerrado e arquivado permanentemente no Histórico!");
+                }}
+                className="px-4 py-2 bg-red-650 hover:bg-red-700 active:scale-95 text-white rounded-lg text-[11px] font-black uppercase tracking-wider transition-all shadow-sm"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>
