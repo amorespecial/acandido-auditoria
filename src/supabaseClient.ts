@@ -47,6 +47,11 @@ try {
 
 export const supabase = supabaseInstance;
 
+// Global tracking to prevent self-update reload loops on Realtime events
+export const realtimeFlags = {
+  isLocalUpdate: false
+};
+
 // Helper check to see if we have valid Supabase credentials
 export const isSupabaseReady = (): boolean => {
   return (

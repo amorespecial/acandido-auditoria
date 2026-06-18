@@ -33,6 +33,16 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
       }
     }
     loadData();
+
+    const handleRealtime = () => {
+      console.log("Realtime event received! Reloading guarantees records...");
+      loadData();
+    };
+
+    window.addEventListener("realtime-garantias-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-garantias-update", handleRealtime);
+    };
   }, []);
 
   // Set selected almoxarifado when branch prop changes

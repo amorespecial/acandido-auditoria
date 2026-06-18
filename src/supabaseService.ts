@@ -1,4 +1,4 @@
-import { supabase, isSupabaseReady } from "./supabaseClient";
+import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
 import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus } from "./types";
 import { OFFICIAL_CREDENTIALS } from "./components/Login";
@@ -341,6 +341,7 @@ export const dbSaveUser = async (user: AppUser) => {
   // If Supabase is ready, attempt to save to the database in background/safe mode
   if (isSupabaseReady()) {
     try {
+      realtimeFlags.isLocalUpdate = true;
       const perfilData = {
         role: user.role,
         group: user.group || "A",
@@ -362,6 +363,8 @@ export const dbSaveUser = async (user: AppUser) => {
       }
     } catch (err) {
       console.warn("Critical exception saving user to Supabase:", err);
+    } finally {
+      realtimeFlags.isLocalUpdate = false;
     }
   }
 };
@@ -427,13 +430,18 @@ export const dbSaveCycleState = async (cycle: CycleState) => {
 
   const statusDb = cycle.status === "ABERTO" ? "aberto" : cycle.status === "AGUARDANDO_FECHAMENTO" ? "bloqueado" : "fechado";
 
-  await supabase.from('ciclos').upsert({
-    mes: monthNameToNum(cycle.activeMonth),
-    ano: Number(cycle.activeYear),
-    status: statusDb,
-    iniciado_por: cycle.openedBy || "Fernando Silva",
-    fechado_em: cycle.status === "NENHUM" || cycle.status === "FECHADO" ? new Date().toISOString() : null
-  }, { onConflict: 'mes,ano' });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    await supabase.from('ciclos').upsert({
+      mes: monthNameToNum(cycle.activeMonth),
+      ano: Number(cycle.activeYear),
+      status: statusDb,
+      iniciado_por: cycle.openedBy || "Fernando Silva",
+      fechado_em: cycle.status === "NENHUM" || cycle.status === "FECHADO" ? new Date().toISOString() : null
+    }, { onConflict: 'mes,ano' });
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
 };
 
 export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
@@ -520,19 +528,24 @@ export const dbSaveEvaluation = async (
     }
   }
 
-  await supabase.from('avaliacoes').upsert({
-    almoxarifado,
-    mes,
-    ano,
-    criterio_codigo: criterionId,
-    criterio_nome: criterionName,
-    resultado: evaluation.status || "PENDENTE",
-    pontuacao: evaluation.pointsObtained ?? 0,
-    avaliado_por: evaluatedBy,
-    avaliado_em: new Date().toISOString(),
-    descricao_evidencia: evaluation.notes || evaluation.evidenceNotes || "",
-    links_evidencia: finalLinks
-  }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    await supabase.from('avaliacoes').upsert({
+      almoxarifado,
+      mes,
+      ano,
+      criterio_codigo: criterionId,
+      criterio_nome: criterionName,
+      resultado: evaluation.status || "PENDENTE",
+      pontuacao: evaluation.pointsObtained ?? 0,
+      avaliado_por: evaluatedBy,
+      avaliado_em: new Date().toISOString(),
+      descricao_evidencia: evaluation.notes || evaluation.evidenceNotes || "",
+      links_evidencia: finalLinks
+    }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
 };
 
 // ======================= EVIDENCE SUBMISSIONS (envios_almoxarife) =======================
@@ -570,15 +583,20 @@ export const dbSubmitAlmoxarifeEvidence = async (
   const mes = monthNameToNum(mesName);
   const ano = Number(anoStr);
 
-  await supabase.from('envios_almoxarife').insert({
-    almoxarifado,
-    mes,
-    ano,
-    criterio_codigo: criterionId,
-    enviado_por: submittedBy,
-    comentario: comment,
-    storage_paths: storageUrls
-  });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    await supabase.from('envios_almoxarife').insert({
+      almoxarifado,
+      mes,
+      ano,
+      criterio_codigo: criterionId,
+      enviado_por: submittedBy,
+      comentario: comment,
+      storage_paths: storageUrls
+    });
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
 };
 
 // ======================= CALENDAR SCHEDULES (calendario_inventarios) =======================
@@ -609,15 +627,20 @@ export const dbSaveSchedules = async (schedules: any[]) => {
     return;
   }
 
-  // Rewrite / refresh schedule list (sync-up)
-  for (const item of schedules) {
-    await supabase.from('calendario_inventarios').upsert({
-      almoxarifado: item.almoxarifado,
-      ano: item.ano,
-      semestre: item.semestre,
-      indice: item.indice || 1,
-      data_agendada: item.data
-    }, { onConflict: 'almoxarifado,ano,semestre,indice' });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    // Rewrite / refresh schedule list (sync-up)
+    for (const item of schedules) {
+      await supabase.from('calendario_inventarios').upsert({
+        almoxarifado: item.almoxarifado,
+        ano: item.ano,
+        semestre: item.semestre,
+        indice: item.indice || 1,
+        data_agendada: item.data
+      }, { onConflict: 'almoxarifado,ano,semestre,indice' });
+    }
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
   }
 };
 
@@ -657,22 +680,27 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[]) => {
     return;
   }
 
-  for (const item of warranties) {
-    const spaceParts = item.monthYear ? item.monthYear.split(' ') : [];
-    const mesStr = spaceParts[0] || "Maio";
-    const anoNum = Number(spaceParts[1] || "2026");
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    for (const item of warranties) {
+      const spaceParts = item.monthYear ? item.monthYear.split(' ') : [];
+      const mesStr = spaceParts[0] || "Maio";
+      const anoNum = Number(spaceParts[1] || "2026");
 
-    await supabase.from('garantias').upsert({
-      id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
-      almoxarifado: item.almoxarifado,
-      mes: monthNameToNum(mesStr),
-      ano: anoNum,
-      item: item.itemCode,
-      fabricante: item.manufacturer,
-      garantia_ate: item.expiryDate || null,
-      registrado_por: "Almoxarife",
-      registrado_em: item.createdAt || new Date().toISOString()
-    });
+      await supabase.from('garantias').upsert({
+        id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
+        almoxarifado: item.almoxarifado,
+        mes: monthNameToNum(mesStr),
+        ano: anoNum,
+        item: item.itemCode,
+        fabricante: item.manufacturer,
+        garantia_ate: item.expiryDate || null,
+        registrado_por: "Almoxarife",
+        registrado_em: item.createdAt || new Date().toISOString()
+      });
+    }
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
   }
 };
 
@@ -709,19 +737,24 @@ export const dbSaveOccurrences = async (occs: MaterialOccurrence[]) => {
     return;
   }
 
-  for (const item of occs) {
-    const rawDate = item.date || new Date().toISOString().split('T')[0];
-    await supabase.from('nivel_servico').upsert({
-      id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
-      almoxarifado: item.branchName || item.filial || "",
-      mes: Number(rawDate.split('-')[1]) || 5,
-      ano: Number(rawDate.split('-')[0]) || 2026,
-      veiculo: item.veiculo,
-      codigo_material: item.codigoMaterial,
-      material_em_falta: item.material,
-      data_ocorrencia: rawDate,
-      solicitante: item.solicitante
-    });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    for (const item of occs) {
+      const rawDate = item.date || new Date().toISOString().split('T')[0];
+      await supabase.from('nivel_servico').upsert({
+        id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
+        almoxarifado: item.branchName || item.filial || "",
+        mes: Number(rawDate.split('-')[1]) || 5,
+        ano: Number(rawDate.split('-')[0]) || 2026,
+        veiculo: item.veiculo,
+        codigo_material: item.codigoMaterial,
+        material_em_falta: item.material,
+        data_ocorrencia: rawDate,
+        solicitante: item.solicitante
+      });
+    }
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
   }
 };
 
@@ -768,18 +801,23 @@ export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number
     return;
   }
 
-  await supabase.from('material_sem_movimentacao').upsert({
-    almoxarifado,
-    ano,
-    semestre,
-    lista_inserida_em: payload.timestamp || new Date().toISOString(),
-    lista_inserida_por: payload.insertedBy || "Almoxarife",
-    itens: payload.materials || payload.itemsToCount || [],
-    resultado: payload.resultStatus || null,
-    avaliado_em: payload.reviewedAt || null,
-    avaliado_por: payload.reviewedBy || null,
-    links_evidencia: payload.nokEvidenceLinks || []
-  }, { onConflict: 'almoxarifado,ano,semestre' });
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    await supabase.from('material_sem_movimentacao').upsert({
+      almoxarifado,
+      ano,
+      semestre,
+      lista_inserida_em: payload.timestamp || new Date().toISOString(),
+      lista_inserida_por: payload.insertedBy || "Almoxarife",
+      itens: payload.materials || payload.itemsToCount || [],
+      resultado: payload.resultStatus || null,
+      avaliado_em: payload.reviewedAt || null,
+      avaliado_por: payload.reviewedBy || null,
+      links_evidencia: payload.nokEvidenceLinks || []
+    }, { onConflict: 'almoxarifado,ano,semestre' });
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
 };
 
 // ======================= TOP 10 CONFIG (top10_configuracao) =======================
@@ -987,6 +1025,7 @@ export const dbDeleteUser = async (email: string, id?: any) => {
   // Attempt to delete from Supabase if ready
   if (isSupabaseReady()) {
     try {
+      realtimeFlags.isLocalUpdate = true;
       let query = supabase.from('usuarios').delete();
       if (id) {
         query = query.eq('id', id);
@@ -999,6 +1038,8 @@ export const dbDeleteUser = async (email: string, id?: any) => {
       }
     } catch (err) {
       console.warn("Critical error deleting user from Supabase:", err);
+    } finally {
+      realtimeFlags.isLocalUpdate = false;
     }
   }
 };

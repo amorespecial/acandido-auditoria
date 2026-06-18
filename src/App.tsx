@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
 import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers } from "./supabaseService";
-import { supabase } from "./supabaseClient";
+import { supabase, realtimeFlags } from "./supabaseClient";
 
 // View components
 import Login from "./components/Login";
@@ -363,6 +363,7 @@ export default function App() {
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
   const [dbConnectionError, setDbConnectionError] = useState(false);
+  const [showLiveUpdateToast, setShowLiveUpdateToast] = useState(false);
 
   useEffect(() => {
     // Database seeding
@@ -431,9 +432,19 @@ export default function App() {
     checkConnectionAndLoadCycle();
   }, []);
 
-  // 2. Realtime Subscriptions for live updates
+  // 2. Realtime Subscriptions for live updates with reconnection handling, anti-looping protection, and notifications
   useEffect(() => {
     if (!isSupabaseReady()) return;
+
+    let toastTimer: NodeJS.Timeout;
+    const triggerLiveToast = () => {
+      if (realtimeFlags.isLocalUpdate) return;
+      setShowLiveUpdateToast(true);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        setShowLiveUpdateToast(false);
+      }, 2000);
+    };
 
     const cyclesChannel = supabase
       .channel("realtime-ciclos")
@@ -442,6 +453,8 @@ export default function App() {
         { event: "*", schema: "public", table: "ciclos" },
         async (payload) => {
           console.log("Realtime ciclos update received:", payload);
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
           try {
             const dbCycles = await dbFetchAllCycles();
             if (dbCycles) {
@@ -456,6 +469,7 @@ export default function App() {
               const key = `${dbCycle.activeMonth}_${dbCycle.activeYear}`;
               setAllCycles((prev) => ({ ...prev, [key]: dbCycle }));
             }
+            window.dispatchEvent(new Event("realtime-ciclos-update"));
           } catch (err) {
             console.error("Error reloading cycle state on realtime payload:", err);
           }
@@ -470,9 +484,23 @@ export default function App() {
         { event: "*", schema: "public", table: "avaliacoes" },
         () => {
           console.log("Realtime update on avaliacoes!");
-          setRefetchTrigger(prev => prev + 1);
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          setRefetchTrigger((prev) => prev + 1);
+          window.dispatchEvent(new Event("realtime-avaliacoes-update"));
         }
       )
+      .on('system', { event: 'reconnected' }, () => {
+        console.log("Supabase Realtime reconnected! Synchronizing data.");
+        setRefetchTrigger((prev) => prev + 1);
+        window.dispatchEvent(new Event("realtime-avaliacoes-update"));
+        window.dispatchEvent(new Event("realtime-ciclos-update"));
+        window.dispatchEvent(new Event("realtime-submissions-update"));
+        window.dispatchEvent(new Event("realtime-garantias-update"));
+        window.dispatchEvent(new Event("realtime-nivel-servico-update"));
+        window.dispatchEvent(new Event("realtime-material-sem-mov-update"));
+        window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
+      })
       .subscribe();
 
     const submissionsChannel = supabase
@@ -482,7 +510,11 @@ export default function App() {
         { event: "*", schema: "public", table: "envios_almoxarife" },
         () => {
           console.log("Realtime update on envios_almoxarife!");
-          setRefetchTrigger(prev => prev + 1);
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          setRefetchTrigger((prev) => prev + 1);
+          window.dispatchEvent(new Event("realtime-submissions-update"));
+          window.dispatchEvent(new Event("realtime-envios-update"));
         }
       )
       .subscribe();
@@ -494,6 +526,8 @@ export default function App() {
         { event: "*", schema: "public", table: "usuarios" },
         async (payload) => {
           console.log("Realtime update on usuarios table received:", payload);
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
           try {
             const dbUsers = await dbFetchUsers();
             if (dbUsers) {
@@ -507,11 +541,87 @@ export default function App() {
       )
       .subscribe();
 
+    const garantiasChannel = supabase
+      .channel("realtime-garantias")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "garantias" },
+        () => {
+          console.log("Realtime update on garantias!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          window.dispatchEvent(new Event("realtime-garantias-update"));
+        }
+      )
+      .subscribe();
+
+    const nivelServicoChannel = supabase
+      .channel("realtime-nivel-servico")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "nivel_servico" },
+        () => {
+          console.log("Realtime update on nivel_servico!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          window.dispatchEvent(new Event("realtime-nivel-servico-update"));
+        }
+      )
+      .subscribe();
+
+    const materialsNoMovChannel = supabase
+      .channel("realtime-materials-sem-mov")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "material_sem_movimentacao" },
+        () => {
+          console.log("Realtime update on material_sem_movimentacao!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          window.dispatchEvent(new Event("realtime-material-sem-mov-update"));
+        }
+      )
+      .subscribe();
+
+    const unimobinCertsChannel = supabase
+      .channel("realtime-unimobin-certs")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "colaboradores_unimobin" },
+        () => {
+          console.log("Realtime update on colaboradores_unimobin certificates!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
+        }
+      )
+      .subscribe();
+
+    const pontuacoesChannel = supabase
+      .channel("realtime-pontuacoes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pontuacoes" },
+        () => {
+          console.log("Realtime update on pontuacoes!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          setRefetchTrigger((prev) => prev + 1);
+        }
+      )
+      .subscribe();
+
     return () => {
+      clearTimeout(toastTimer);
       supabase.removeChannel(cyclesChannel);
       supabase.removeChannel(evaluationsChannel);
       supabase.removeChannel(submissionsChannel);
       supabase.removeChannel(usersChannel);
+      supabase.removeChannel(garantiasChannel);
+      supabase.removeChannel(nivelServicoChannel);
+      supabase.removeChannel(materialsNoMovChannel);
+      supabase.removeChannel(unimobinCertsChannel);
+      supabase.removeChannel(pontuacoesChannel);
     };
   }, []);
 
@@ -1949,6 +2059,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FBF8FC] flex flex-col font-sans select-none pb-12">
+      {showLiveUpdateToast && (
+        <div className="fixed top-20 right-4 bg-emerald-600 text-white font-semibold text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 z-50 border border-emerald-500/30 transition-all duration-300 animate-slide-in">
+          <span className="text-sm">🔄</span>
+          <span>Dados atualizados em tempo real!</span>
+        </div>
+      )}
       {dbConnectionError && (
         <div className="w-full bg-red-600 text-white font-medium text-center py-3 px-4 text-sm flex items-center justify-center gap-2 shadow-inner z-50">
           <span>⚠ Erro de conexão com o banco de dados. Tente recarregar a página.</span>

@@ -40,6 +40,16 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
       }
     }
     loadData();
+
+    const handleRealtime = () => {
+      console.log("Realtime event received! Reloading service records...");
+      loadData();
+    };
+
+    window.addEventListener("realtime-nivel-servico-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-nivel-servico-update", handleRealtime);
+    };
   }, []);
 
   // Listen to other tab changes, branch switching, or supervisor panel updates

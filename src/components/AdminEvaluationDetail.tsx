@@ -101,6 +101,21 @@ export default function AdminEvaluationDetail({
     loadConfig();
   }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
 
+  // Synchronize the currently selected criterion with reactive props changes (Supabase Realtime)
+  useEffect(() => {
+    if (!selectedCriterion) return;
+    const latestMatched = branch.criteria.find(c => c.id === selectedCriterion.id);
+    if (latestMatched) {
+      setSelectedCriterion(latestMatched);
+      setStatusInput(latestMatched.status);
+      setPtsInput(latestMatched.pointsObtained);
+      setNotesInput(latestMatched.notes || latestMatched.evidenceNotes || "");
+      if (latestMatched.nokEvidenceLink) {
+        setNokEvidenceLinkInput(latestMatched.nokEvidenceLink);
+      }
+    }
+  }, [branch.criteria]);
+
   const layoutConfig = (() => {
     const _dummy = layoutConfigUpdatedCount;
     const key = `acandido_layout_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
