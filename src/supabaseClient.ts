@@ -40,7 +40,15 @@ if (isValidUrl(cleanUrl) && isKeyValid(cleanKey)) {
 // Safely initialize the client inside a try-catch to prevent a white screen at import-time.
 let supabaseInstance: any = null;
 try {
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
+    }
+  });
 } catch (e) {
   console.error("Critical: Failed to generate Supabase client due to invalid configuration:", e);
 }

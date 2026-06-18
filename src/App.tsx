@@ -66,10 +66,8 @@ export default function App() {
     if (localStorage.getItem(resetKey) !== "true") {
       const savedUser = localStorage.getItem("acandido_app_user");
       const savedUsersList = localStorage.getItem("acandido_users");
-      const savedJaneiroEvals = localStorage.getItem("acandido_evaluations_Janeiro_2026");
       
       // Clear all mock data keys
-      localStorage.removeItem("acandido_branches");
       localStorage.removeItem("acandido_history");
       localStorage.removeItem("acandido_cycle_configs3");
       localStorage.removeItem("acandido_warranties");
@@ -87,10 +85,10 @@ export default function App() {
         }
       }
 
-      // Preserve only acandido_evaluations_Janeiro_2026 and delete all other evaluations
+      // Delete all evaluations from localStorage
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith("acandido_evaluations_") && k !== "acandido_evaluations_Janeiro_2026") {
+        if (k && k.startsWith("acandido_evaluations_")) {
           localStorage.removeItem(k);
           i--;
         }
@@ -98,7 +96,6 @@ export default function App() {
 
       if (savedUser) localStorage.setItem("acandido_app_user", savedUser);
       if (savedUsersList) localStorage.setItem("acandido_users", savedUsersList);
-      if (savedJaneiroEvals) localStorage.setItem("acandido_evaluations_Janeiro_2026", savedJaneiroEvals);
       
       // Seed Janeiro 2026 as unique active open cycle
       const initialCycle = {
@@ -321,7 +318,7 @@ export default function App() {
     seedDatabaseIfEmpty();
 
     // Check for existing local storage data
-    const hasLegacyData = localStorage.getItem("acandido_branches") || localStorage.getItem("acandido_cycle_state_manual");
+    const hasLegacyData = localStorage.getItem("acandido_cycle_state_manual");
     const wasCleared = localStorage.getItem("acandido_localstorage_cleared") === "true";
     
     if (user && user.role === "ADMIN" && hasLegacyData && !wasCleared) {
@@ -817,90 +814,8 @@ export default function App() {
         }
       }
 
-      // Find January 2026 entries in the history list
-      const janeiroEntries = historyList.filter(
-        (entry) => entry.monthYear === "Janeiro 2026"
-      );
-
-      // Reconstruct branches evaluations
       const defaultBranches = getCleanDefaultBranches();
-      const savedJaneiroEvals = localStorage.getItem("acandido_evaluations_Janeiro_2026");
-      let baseBranches = defaultBranches;
-      if (savedJaneiroEvals) {
-        try {
-          const parsed = JSON.parse(savedJaneiroEvals);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            baseBranches = parsed;
-          }
-        } catch (e) {}
-      }
-
-      const restoredBranches = baseBranches.map((b) => {
-        const histEntry = janeiroEntries.find((entry) => entry.branchId === b.id || entry.branchName === b.name);
-        if (histEntry) {
-          const restoredCriteria = b.criteria.map((crt) => {
-            const histCriteria = histEntry.criteriaState?.find((c: any) => c.id === crt.id);
-            if (histCriteria) {
-              const isInventario = crt.id === "1";
-              return {
-                ...crt,
-                status: isInventario ? "PENDENTE" as const : (histCriteria.status || crt.status),
-                pointsObtained: isInventario ? 0 : (histCriteria.pointsObtained !== undefined ? histCriteria.pointsObtained : (histCriteria.score !== undefined ? histCriteria.score : crt.pointsObtained)),
-                notes: isInventario ? "Aguardando realização do inventário" : (histCriteria.notes || crt.notes),
-                evidenceNotes: isInventario ? "" : (histCriteria.evidenceNotes || crt.evidenceNotes),
-                submittedPhotos: histCriteria.submittedPhotos || [],
-                submittedAt: histCriteria.submittedAt,
-                nokEvidenceLinks: histCriteria.nokEvidenceLinks || [],
-                nokEvidenceLink: histCriteria.nokEvidenceLink,
-                nokEvidenceDescription: histCriteria.nokEvidenceDescription,
-                top10AuditorQuantities: histCriteria.top10AuditorQuantities,
-                nokEvidenceFileName: histCriteria.nokEvidenceFileName,
-                nokEvidenceFileType: histCriteria.nokEvidenceFileType,
-                nokEvidenceFileData: histCriteria.nokEvidenceFileData,
-                isAguardandoRealizacao: isInventario ? true : histCriteria.isAguardandoRealizacao
-              };
-            }
-            return crt;
-          });
-
-          const { score, status, scoreCategory } = calculateDerivedMetrics(restoredCriteria);
-
-          return {
-            ...b,
-            criteria: restoredCriteria,
-            currentScore: score,
-            status,
-            scoreCategory
-          };
-        } else {
-          const restoredCriteria = b.criteria.map((crt) => {
-            if (crt.id === "1") {
-              return {
-                ...crt,
-                status: "PENDENTE" as const,
-                pointsObtained: 0,
-                notes: "Aguardando realização do inventário",
-                evidenceNotes: "",
-                isAguardandoRealizacao: true
-              };
-            }
-            return crt;
-          });
-          const { score, status, scoreCategory } = calculateDerivedMetrics(restoredCriteria);
-          return {
-            ...b,
-            criteria: restoredCriteria,
-            currentScore: score,
-            status,
-            scoreCategory
-          };
-        }
-      });
-
-      // Save restored branches back to evaluations_Janeiro_2026 and current branches key
-      localStorage.setItem("acandido_evaluations_Janeiro_2026", JSON.stringify(restoredBranches));
-      localStorage.setItem("acandido_branches", JSON.stringify(restoredBranches));
-      setBranches(restoredBranches);
+      setBranches(defaultBranches);
 
       // Now set the cycle state back to Janeiro 2026 ABERTO
       const restoredCycle = {
@@ -1837,85 +1752,11 @@ export default function App() {
     setActiveMonth(month);
     setActiveYear(year);
 
-    // Try to load evaluations from storage specific key
-    const specificKey = `acandido_evaluations_${month}_${year}`;
-    const savedLocal = localStorage.getItem(specificKey);
-    let restoredBranches = null;
+    // Baseline branches in memory to empty pristine state to wait for live Supabase fetch
+    const cleanB = getCleanDefaultBranches();
+    setBranches(cleanB);
 
-    if (savedLocal) {
-      try {
-        const parsed = JSON.parse(savedLocal);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          restoredBranches = parsed;
-        }
-      } catch (e) {}
-    }
-
-    // Try constructing from history list
-    if (!restoredBranches) {
-      let historyList = [];
-      const savedHistory = localStorage.getItem("acandido_history");
-      if (savedHistory) {
-        try {
-          historyList = JSON.parse(savedHistory);
-        } catch (e) {}
-      }
-
-      const mKey = `${month} ${year}`;
-      const foundInHist = Array.isArray(historyList)
-        ? historyList.filter((item) => item.monthYear === mKey)
-        : [];
-
-      if (foundInHist.length > 0) {
-        restoredBranches = getCleanDefaultBranches().map((b) => {
-          const matchedItem = foundInHist.find((e) => e.branchId === b.id || e.branchName === b.name);
-          if (matchedItem && matchedItem.criteriaState) {
-            const criteriaWithScore = b.criteria.map((c) => {
-              const savedC = matchedItem.criteriaState.find((x: any) => x.id === c.id);
-              if (savedC) {
-                return {
-                  ...c,
-                  status: savedC.status || c.status,
-                  pointsObtained: savedC.pointsObtained !== undefined ? savedC.pointsObtained : (savedC.score !== undefined ? savedC.score : c.pointsObtained),
-                  notes: savedC.notes || c.notes,
-                  evidenceNotes: savedC.evidenceNotes || c.evidenceNotes,
-                  submittedPhotos: savedC.submittedPhotos || [],
-                  submittedAt: savedC.submittedAt,
-                  nokEvidenceLinks: savedC.nokEvidenceLinks || [],
-                  nokEvidenceLink: savedC.nokEvidenceLink,
-                  nokEvidenceDescription: savedC.nokEvidenceDescription
-                };
-              }
-              return c;
-            });
-
-            const { score, status, scoreCategory } = calculateDerivedMetrics(criteriaWithScore);
-
-            return {
-              ...b,
-              criteria: criteriaWithScore,
-              currentScore: score,
-              status,
-              scoreCategory
-            };
-          }
-          return b;
-        });
-      }
-    }
-
-    if (restoredBranches) {
-      localStorage.setItem("acandido_branches", JSON.stringify(restoredBranches));
-      localStorage.setItem(specificKey, JSON.stringify(restoredBranches));
-      setBranches(restoredBranches);
-    } else {
-      const cleanB = getCleanDefaultBranches();
-      localStorage.setItem("acandido_branches", JSON.stringify(cleanB));
-      localStorage.setItem(specificKey, JSON.stringify(cleanB));
-      setBranches(cleanB);
-    }
-
-    // Filter out of consolidation history
+    // Filter out of consolidation history in localStorage (if any local cache remains)
     let historyList = [];
     const savedHistory = localStorage.getItem("acandido_history");
     if (savedHistory) {
@@ -2480,6 +2321,7 @@ export default function App() {
                     branchId={activeBranch.id}
                     branchName={activeBranch.name}
                     user={user}
+                    branches={processedBranches}
                   />
                 )}
                 {activeSubscreen === "CONTROLE_GARANTIA" && (
@@ -2536,6 +2378,7 @@ export default function App() {
                     branchId={activeBranch.id}
                     branchName={activeBranch.name}
                     user={user}
+                    branches={processedBranches}
                   />
                 )}
                 {almoxarifeTab === "GARANTIA" && (

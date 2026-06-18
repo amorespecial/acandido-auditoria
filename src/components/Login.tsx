@@ -196,6 +196,14 @@ export default function Login({ onLogin }: LoginProps) {
           return;
         }
 
+        // Clean up any stale data, cache or sessions from previous users on login
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch (e) {
+          console.error("Failed to clear local/session storage on login:", e);
+        }
+
         onLogin({
           name: matchedUser.name,
           role: matchedUser.role,

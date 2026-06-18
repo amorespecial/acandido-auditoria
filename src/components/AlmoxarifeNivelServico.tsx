@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { MaterialOccurrence, AppUser } from "../types";
+import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
 
 interface AlmoxarifeNivelServicoProps {
@@ -7,15 +7,14 @@ interface AlmoxarifeNivelServicoProps {
   branchId: string;
   branchName: string;
   user: AppUser;
+  branches?: Branch[];
 }
 
-export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, user }: AlmoxarifeNivelServicoProps) {
+export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, user, branches }: AlmoxarifeNivelServicoProps) {
   const isCriterionPresencial = () => {
     try {
-      const saved = localStorage.getItem("acandido_branches");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const branch = parsed.find((b: any) => b.id === branchId);
+      if (branches) {
+        const branch = branches.find((b: any) => b.id === branchId);
         const criterion = branch?.criteria?.find((c: any) => c.id === "7");
         return criterion?.auditMode === "Presencial";
       }

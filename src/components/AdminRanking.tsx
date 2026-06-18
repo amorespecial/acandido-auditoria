@@ -211,45 +211,23 @@ export default function AdminRanking({
     }
 
     // 2. Check dynamic evaluations
-    let monthBranches: any[] = [];
-    try {
-      const savedEvals = localStorage.getItem(`acandido_evaluations_${monthName}_2026`);
-      if (savedEvals) monthBranches = JSON.parse(savedEvals);
-    } catch (e) {}
-
-    const matchingMonthBranches = Array.isArray(monthBranches) ? monthBranches.filter((mb) => branchIds.includes(mb.id)) : [];
-
-    if (matchingMonthBranches.length > 0) {
-      if (entry.branches.length === 2) {
-        if (matchingMonthBranches.length === 2) {
+    if (monthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
+      if (entry.branches.length > 0) {
+        if (entry.branches.length === 2) {
           let consolidatedScore = 0;
           const refCriteria = entry.branches[0]?.criteria || [];
           refCriteria.forEach((cRef) => {
-            const allOk = matchingMonthBranches.every((mRecord) => {
+            const allOk = entry.branches.every((mRecord) => {
               const crit = mRecord.criteria?.find((cs: any) => cs.id === cRef.id);
-              return crit && (crit.status === "OK" || crit.status === "Aprovado");
+              return crit && crit.status === "OK";
             });
             if (allOk) {
               consolidatedScore += cRef.pointsPossible;
             }
           });
           return consolidatedScore;
-        }
-        return 0;
-      } else {
-        if (matchingMonthBranches.length === 1) {
-          let consolidatedScore = 0;
-          const bData = matchingMonthBranches[0];
-          if (bData.criteria) {
-            bData.criteria.forEach((c: any) => {
-              if (c.status === "OK" || c.status === "Aprovado") {
-                consolidatedScore += c.pointsPossible;
-              }
-            });
-          } else {
-            consolidatedScore = bData.currentScore || 0;
-          }
-          return consolidatedScore;
+        } else {
+          return entry.branches[0].currentScore || 0;
         }
       }
     }
@@ -309,37 +287,27 @@ export default function AdminRanking({
     }
 
     // Check dynamic evaluations
-    let monthBranches: any[] = [];
-    try {
-      const savedEvals = localStorage.getItem(`acandido_evaluations_${monthName}_2026`);
-      if (savedEvals) monthBranches = JSON.parse(savedEvals);
-    } catch (e) {}
-
-    const matchingMonthBranches = Array.isArray(monthBranches) ? monthBranches.filter((mb) => branchIds.includes(mb.id)) : [];
-
-    if (matchingMonthBranches.length > 0) {
-      if (entry.branches.length === 2) {
-        if (matchingMonthBranches.length === 2) {
-          const statuses = matchingMonthBranches.map((mRecord) => {
+    if (monthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
+      if (entry.branches.length > 0) {
+        if (entry.branches.length === 2) {
+          const statuses = entry.branches.map((mRecord) => {
             const crit = mRecord.criteria?.find((cs: any) => cs.id === criterionId);
             return crit ? crit.status : "PENDENTE";
           });
           const isNok = statuses.includes("NOK");
-          const isBothOk = statuses.every((s) => s === "OK" || s === "Aprovado");
+          const isBothOk = statuses.every((s) => s === "OK");
           const statusText = isNok
             ? "NOK"
             : isBothOk
             ? "OK"
-            : statuses.includes("ENVIADO") || statuses.includes("Aguardando Avaliação")
+            : statuses.includes("ENVIADO")
             ? "ENVIADO"
             : "PENDENTE";
           return { status: statusText, points: isBothOk ? pointsMax : 0 };
-        }
-      } else {
-        if (matchingMonthBranches.length === 1) {
-          const crit = matchingMonthBranches[0].criteria?.find((cs: any) => cs.id === criterionId);
+        } else {
+          const crit = entry.branches[0].criteria?.find((cs: any) => cs.id === criterionId);
           if (crit) {
-            const isOk = crit.status === "OK" || crit.status === "Aprovado";
+            const isOk = crit.status === "OK";
             return { status: crit.status, points: isOk ? pointsMax : 0 };
           }
         }
