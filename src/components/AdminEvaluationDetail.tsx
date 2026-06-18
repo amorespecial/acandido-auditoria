@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules } from "../supabaseService";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -13,6 +13,7 @@ interface AdminEvaluationDetailProps {
   isSemestralMonth: boolean;
   activeMonth?: string;
   activeYear?: string;
+  calendarData?: any[];
 }
 
 export default function AdminEvaluationDetail({
@@ -23,6 +24,7 @@ export default function AdminEvaluationDetail({
   isSemestralMonth,
   activeMonth,
   activeYear,
+  calendarData,
 }: AdminEvaluationDetailProps) {
   const isCycleClosed = (() => {
     try {
@@ -530,11 +532,7 @@ export default function AdminEvaluationDetail({
       const activeMonthNum = cycleStateParsed ? MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6 : 6;
       const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
-      let localCalendar: any[] = [];
-      try {
-        const saved = localStorage.getItem("acandido_calendario_inventarios");
-        localCalendar = saved ? JSON.parse(saved) : [];
-      } catch (e) {}
+      const localCalendar = calendarData || [];
 
       const matchBranch = (almoxName: string, bId: string, bName?: string) => {
         const name = almoxName.toLowerCase().trim();
@@ -641,7 +639,7 @@ export default function AdminEvaluationDetail({
     }));
   };
 
-  const handleSaveEvaluation = () => {
+  const handleSaveEvaluation = async () => {
     if (!selectedCriterion) return;
 
     if (isCycleClosed) {
@@ -722,13 +720,9 @@ export default function AdminEvaluationDetail({
         return;
       }
 
-      let globalCalendar: any[] = [];
-      try {
-        const saved = localStorage.getItem("acandido_calendario_inventarios");
-        globalCalendar = saved ? JSON.parse(saved) : [];
-      } catch {}
-
-      globalCalendar = globalCalendar.map(g => {
+      // Update global calendar state using Supabase
+      const fullCalendar = calendarData || [];
+      const globalCalendar = fullCalendar.map(g => {
         const match = branchCalendar.find(b => b.id === g.id);
         if (match) {
           return { 
@@ -740,7 +734,7 @@ export default function AdminEvaluationDetail({
         return g;
       });
 
-      localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(globalCalendar));
+      await dbSaveSchedules(globalCalendar);
 
       const okCount = branchCalendar.filter(b => b.status === "OK").length;
       const totalCount = branchCalendar.length;
@@ -905,9 +899,7 @@ export default function AdminEvaluationDetail({
       const activeMonthNum = MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6;
       const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
-      let localCalendar: any[] = [];
-      const saved = localStorage.getItem("acandido_calendario_inventarios");
-      localCalendar = saved ? JSON.parse(saved) : [];
+      const localCalendar = calendarData || [];
 
       const matchBranch = (almoxName: string, bId: string, bName?: string) => {
         const name = (almoxName || "").toLowerCase().trim();

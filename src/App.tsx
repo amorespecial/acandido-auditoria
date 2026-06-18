@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 
 // View components
@@ -123,6 +123,8 @@ export default function App() {
   const [branches, setBranches] = useState<Branch[]>(() => {
     return getCleanDefaultBranches();
   });
+
+  const [calendarData, setCalendarData] = useState<any[]>([]);
 
   const [allCycles, setAllCycles] = useState<Record<string, {
     activeMonth: string;
@@ -371,6 +373,14 @@ export default function App() {
           } catch (usersErr) {
             console.error("Failed to load initial users in App.tsx:", usersErr);
           }
+          try {
+            const dbSchedules = await dbFetchSchedules();
+            if (dbSchedules) {
+              setCalendarData(dbSchedules);
+            }
+          } catch (calErr) {
+            console.error("Failed to load initial schedules in App.tsx:", calErr);
+          }
         }
       } catch (err) {
         console.error("Supabase exception checking connection:", err);
@@ -559,6 +569,21 @@ export default function App() {
       )
       .subscribe();
 
+    const calendarChannel = supabase
+      .channel("realtime-calendario")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "calendario_inventarios" },
+        async () => {
+          console.log("Realtime update on calendario_inventarios!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          setRefetchTrigger((prev) => prev + 1);
+          window.dispatchEvent(new Event("realtime-calendario-update"));
+        }
+      )
+      .subscribe();
+
     return () => {
       clearTimeout(toastTimer);
       supabase.removeChannel(cyclesChannel);
@@ -570,8 +595,23 @@ export default function App() {
       supabase.removeChannel(materialsNoMovChannel);
       supabase.removeChannel(unimobinCertsChannel);
       supabase.removeChannel(pontuacoesChannel);
+      supabase.removeChannel(calendarChannel);
     };
   }, []);
+
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      try {
+        const dbSchedules = await dbFetchSchedules();
+        if (dbSchedules) {
+          setCalendarData(dbSchedules);
+        }
+      } catch (e) {
+        console.error("Failed to fetch schedules on refetchTrigger:", e);
+      }
+    };
+    fetchSchedules();
+  }, [refetchTrigger]);
 
   const handleClearLegacyLocalStorage = () => {
     const savedUser = localStorage.getItem("acandido_app_user");
@@ -960,11 +1000,7 @@ export default function App() {
     const activeYearNum = parseInt(activeYear) || 2026;
 
     // Load calendar data
-    let localCalendar: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_calendario_inventarios");
-      localCalendar = saved ? JSON.parse(saved) : [];
-    } catch (e) {}
+    const localCalendar = calendarData;
 
     // Load material sem movimentacao data
     let localMatSemMov: any[] = [];
@@ -2166,6 +2202,7 @@ export default function App() {
                 isSemestralMonth={activeMonth.toLowerCase() === "janeiro" || activeMonth.toLowerCase() === "julho"}
                 activeMonth={activeMonth}
                 activeYear={activeYear}
+                calendarData={calendarData}
               />
             ) : (
               <>
@@ -2198,6 +2235,7 @@ export default function App() {
                     user={user}
                     allCycles={allCycles}
                     onReopenCycle={handleReopenCycle}
+                    calendarData={calendarData}
                   />
                 )}
                 {adminTab === "RANKING" && (
@@ -2213,7 +2251,7 @@ export default function App() {
                     cycleState={cycleState}
                   />
                 )}
-                {adminTab === "HISTORICO" && <AdminHistory user={user} branches={processedBranches} />}
+                {adminTab === "HISTORICO" && <AdminHistory user={user} branches={processedBranches} calendarData={calendarData} />}
                 {adminTab === "GARANTIAS" && <AdminGarantiasPanel allBranches={processedBranches} />}
                 {adminTab === "SERVICOS" && <AdminServicosPanel allBranches={processedBranches} />}
               </>
@@ -2369,6 +2407,7 @@ export default function App() {
                       onNavigateToScreen={(scr) => setActiveSubscreen(scr)}
                       activeMonth={activeMonth}
                       activeYear={activeYear}
+                      calendarData={calendarData}
                     />
                   )
                 )}
@@ -2397,6 +2436,7 @@ export default function App() {
                     managedBranches={managedBranches}
                     activeMonth={activeMonth}
                     activeYear={activeYear}
+                    calendarData={calendarData}
                   />
                 )}
               </>

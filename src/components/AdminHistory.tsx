@@ -6,6 +6,7 @@ import { AuditHistoryEntry, AppUser, Branch, CriterionState } from "../types";
 interface AdminHistoryProps {
   user: AppUser;
   branches: Branch[];
+  calendarData?: any[];
 }
 
 // 1. HELPERS FOR TEXT NORMALIZATION AND STRING MATCHING
@@ -182,12 +183,8 @@ const isSemestralMonth = (monthYear: string) => {
   return m.includes("janeiro") || m.includes("junho") || m.includes("dezembro") || m.includes("semestral");
 };
 
-const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName?: string) => {
-  let localCalendar: any[] = [];
-  try {
-    const saved = localStorage.getItem("acandido_calendario_inventarios");
-    localCalendar = saved ? JSON.parse(saved) : [];
-  } catch (e) {}
+const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName: string | undefined, calendarData: any[] | undefined) => {
+  const localCalendar = calendarData || [];
 
   const MONTH_MAP: Record<string, number> = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -249,12 +246,8 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchNa
   );
 };
 
-const getScheduledInventoryDate = (branchName: string, monthYear: string, branchId?: string) => {
-  let localCalendar: any[] = [];
-  try {
-    const saved = localStorage.getItem("acandido_calendario_inventarios");
-    localCalendar = saved ? JSON.parse(saved) : [];
-  } catch (e) {}
+const getScheduledInventoryDate = (branchName: string, monthYear: string, branchId: string | undefined, calendarData: any[] | undefined) => {
+  const localCalendar = calendarData || [];
 
   const m = monthYear.toLowerCase();
   const isSem2 = m.includes("julho") || m.includes("agosto") || m.includes("setembro") || m.includes("outubro") || m.includes("novembro") || m.includes("dezembro");
@@ -359,7 +352,7 @@ const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
   return combined;
 };
 
-export default function AdminHistory({ user, branches }: AdminHistoryProps) {
+export default function AdminHistory({ user, branches, calendarData }: AdminHistoryProps) {
   // If user is Admin, they can select any of the 13 warehouses. If Almoxarife, it is locked to their active branch.
   const userBranches = branches.filter((b) => b.ownerName === user.ownerName);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
@@ -1685,7 +1678,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
                                   {(() => {
                                     if (c.id !== "1" || !selectedEntry) return null;
                                     const bObj = branches.find(b => b.id === selectedEntry.branchId);
-                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear, bObj?.name);
+                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear, bObj?.name, calendarData);
                                     if (calItems.length === 0) return null;
 
                                     return (

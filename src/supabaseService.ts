@@ -602,42 +602,117 @@ export const dbSubmitAlmoxarifeEvidence = async (
 // ======================= CALENDAR SCHEDULES (calendario_inventarios) =======================
 export const dbFetchSchedules = async (): Promise<any[]> => {
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_calendario_inventarios");
-    return saved ? JSON.parse(saved) : [];
+    return [];
   }
 
   const { data, error } = await supabase.from('calendario_inventarios').select('*');
   if (error || !data) {
+    console.error("Failed to fetch calendar schedules from Supabase:", error);
     return [];
   }
 
-  return data.map(item => ({
-    almoxarifado: item.almoxarifado,
-    ano: item.ano,
-    semestre: item.semestre,
-    indice: item.indice,
-    data: item.data_agendada
-  }));
+  return data.map(item => {
+    const bId = item.almoxarifado_id || item.branchId || "";
+    let idx = 1;
+    if (item.indice !== undefined) {
+      idx = Number(item.indice);
+    } else if (item.sequencia) {
+      const match = item.sequencia.match(/\d+/);
+      if (match) idx = parseInt(match[0]) || 1;
+    }
+
+    return {
+      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}-${idx}`,
+      branchId: bId,
+      almoxarifado_id: bId,
+      almoxarifado: item.almoxarifado || "",
+      ano: Number(item.ano || 2026),
+      semestre: Number(item.semestre || 1),
+      indice: idx,
+      sequencia: item.sequencia || `#${idx}`,
+      data_agendada: item.data_agendada || "",
+      status: item.status || "PENDENTE",
+      nokEvidenceLink: item.nokEvidenceLink || "",
+      created_by: item.created_by || "",
+      created_at: item.created_at || ""
+    };
+  });
 };
 
 export const dbSaveSchedules = async (schedules: any[]) => {
-  localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(schedules));
-
   if (!isSupabaseReady()) {
     return;
   }
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    // Rewrite / refresh schedule list (sync-up)
     for (const item of schedules) {
-      await supabase.from('calendario_inventarios').upsert({
-        almoxarifado: item.almoxarifado,
-        ano: item.ano,
-        semestre: item.semestre,
-        indice: item.indice || 1,
-        data_agendada: item.data
-      }, { onConflict: 'almoxarifado,ano,semestre,indice' });
+      const idx = item.indice || 1;
+      const seq = item.sequencia || `#${idx}`;
+      const record = {
+        id: item.id || `cal-${item.branchId || item.almoxarifado_id}-${item.ano}-${item.semestre}-${idx}`,
+        almoxarifado_id: item.branchId || item.almoxarifado_id || "",
+        almoxarifado: item.almoxarifado || "",
+        ano: Number(item.ano || 2026),
+        semestre: Number(item.semestre || 1),
+        sequencia: seq,
+        indice: idx,
+        data_agendada: item.data_agendada || item.data || "",
+        status: item.status || "PENDENTE",
+        nokEvidenceLink: item.nokEvidenceLink || "",
+        created_by: item.created_by || ""
+      };
+
+      const { error } = await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'id' });
+      if (error) {
+        console.error("Error upserting schedule in dbSaveSchedules:", error, "for record:", record);
+      }
+    }
+  } catch (err) {
+    console.error("Exception in dbSaveSchedules:", err);
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
+};
+
+export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string) => {
+  if (!isSupabaseReady()) return;
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    const idx = item.indice || 1;
+    const seq = item.sequencia || `#${idx}`;
+    const record = {
+      id: item.id || `cal-${item.branchId || item.almoxarifado_id}-${item.ano}-${item.semestre}-${idx}`,
+      almoxarifado_id: item.branchId || item.almoxarifado_id || "",
+      almoxarifado: item.almoxarifado || "",
+      ano: Number(item.ano || 2026),
+      semestre: Number(item.semestre || 1),
+      sequencia: seq,
+      indice: idx,
+      data_agendada: item.data_agendada || item.data || "",
+      status: item.status || "PENDENTE",
+      nokEvidenceLink: item.nokEvidenceLink || "",
+      created_by: userEmailOrName || item.created_by || ""
+    };
+
+    const { error } = await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'id' });
+    if (error) {
+      console.error("Error upserting single schedule:", error);
+      throw error;
+    }
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
+};
+
+export const dbDeleteSchedule = async (id: string) => {
+  if (!isSupabaseReady()) return;
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    const { error } = await supabase.from('calendario_inventarios').delete().eq('id', id);
+    if (error) {
+      console.error("Error deleting schedule in DB:", error);
+      throw error;
     }
   } finally {
     realtimeFlags.isLocalUpdate = false;

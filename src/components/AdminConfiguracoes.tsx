@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
-import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser } from "../supabaseService";
+import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule } from "../supabaseService";
 import { supabase } from "../supabaseClient";
 
 const ALMOXARIFADOS_LIST = [
@@ -119,6 +119,7 @@ interface AdminConfiguracoesProps {
     openedBy?: string;
   }>;
   onReopenCycle?: (month: string, year: string) => void;
+  calendarData?: any[];
 }
 
 interface MiniCollaborator {
@@ -136,6 +137,7 @@ export default function AdminConfiguracoes({
   user,
   allCycles,
   onReopenCycle,
+  calendarData: externalCalendarData,
 }: AdminConfiguracoesProps) {
   const [activeTab, setActiveTab] = useState<"USUARIOS" | "ALMOXARIFADOS" | "COLABORADORES" | "GARANTIAS" | "CICLO" | "SUPERVISOR" | "CRITERIOS" | "INVENTARIOS">("USUARIOS");
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -249,15 +251,7 @@ export default function AdminConfiguracoes({
 
   const [calendarYear, setCalendarYear] = useState(2026);
   const [calendarData, setCalendarData] = useState<{ id: string; branchId?: string; almoxarifado: string; ano: number; semestre: number; indice: number; data_agendada: string }[]>(() => {
-    let local: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_calendario_inventarios");
-      local = saved ? JSON.parse(saved) : PRELOADED_CALENDAR_2026;
-    } catch (e) {
-      local = PRELOADED_CALENDAR_2026;
-    }
-
-    // Ensure all preloaded or existing entries have their branchId populated!
+    const local = externalCalendarData || PRELOADED_CALENDAR_2026;
     const migrated = local.map(item => {
       if (item.branchId) return item;
       const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
@@ -266,10 +260,22 @@ export default function AdminConfiguracoes({
         branchId: matched ? matched.id : undefined
       };
     });
-
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(migrated));
     return migrated;
   });
+
+  useEffect(() => {
+    if (externalCalendarData) {
+      const migrated = externalCalendarData.map(item => {
+        if (item.branchId) return item;
+        const matched = branches.find(b => matchBranch(item.almoxarifado, b.id, b.name));
+        return {
+          ...item,
+          branchId: matched ? matched.id : undefined
+        };
+      });
+      setCalendarData(migrated);
+    }
+  }, [externalCalendarData, branches]);
 
   const updateCalendarItem = (id: string, branchId: string, almox: string, semestre: number, indice: number, dateVal: string) => {
     setCalendarData(prev => {
@@ -314,12 +320,17 @@ export default function AdminConfiguracoes({
 
   const removeCalendarItem = (id: string) => {
     setCalendarData(prev => prev.filter(item => item.id !== id));
+    dbDeleteSchedule(id).catch(e => console.error("Error deleting item:", e));
   };
 
-  const handleSaveCalendar = () => {
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(calendarData));
-    window.dispatchEvent(new Event("storage"));
-    alert("Calendário de Inventários salvo com sucesso!");
+  const handleSaveCalendar = async () => {
+    try {
+      await dbSaveSchedules(calendarData);
+      alert("Calendário de Inventários salvo com sucesso!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar o calendário de inventários.");
+    }
   };
 
   // Synchronizers
@@ -884,7 +895,7 @@ export default function AdminConfiguracoes({
   };
 
   // ================= ALMOXARIFADOS EDIT & TRANSITIONS =================
-  const handleSaveNewBranch = () => {
+  const handleSaveNewBranch = async () => {
     if (!newBranchForm.name.trim()) {
       alert("Por favor, informe o nome do almoxarifado.");
       return;
@@ -960,7 +971,7 @@ export default function AdminConfiguracoes({
     };
     const updatedCalendar = [...calendarData, calS1, calS2];
     setCalendarData(updatedCalendar);
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCalendar));
+    await dbSaveSchedules(updatedCalendar);
 
     window.dispatchEvent(new Event("storage"));
     alert(`Almoxarifado ${newBranch.name} adicionado com sucesso!`);
@@ -974,7 +985,7 @@ export default function AdminConfiguracoes({
     });
   };
 
-  const handleSaveBranchName = () => {
+  const handleSaveBranchName = async () => {
     if (!editingBranch || !branchFormName.trim()) return;
 
     const oldName = editingBranch.name;
@@ -1000,7 +1011,7 @@ export default function AdminConfiguracoes({
       return c;
     });
     setCalendarData(updatedCal);
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCal));
+    await dbSaveSchedules(updatedCal);
 
     // 3. Cascade rename inside active registered warranties list
     const savedWarranties = localStorage.getItem("acandido_warranties");
@@ -1046,7 +1057,7 @@ export default function AdminConfiguracoes({
     setEditingBranch(null);
   };
 
-  const handleDeleteBranch = (branchId: string, branchName: string) => {
+  const handleDeleteBranch = async (branchId: string, branchName: string) => {
     if (branches.length <= 1) {
       alert("Não é possível remover o último almoxarifado ativo do sistema corporativo.");
       return;
@@ -1077,9 +1088,14 @@ export default function AdminConfiguracoes({
     localStorage.setItem("acandido_all_collab_profiles", JSON.stringify(updatedCollabs));
 
     // 4. Cleanup its dynamic calendar references
+    const itemsToDelete = calendarData.filter((c) => c.almoxarifado.toLowerCase() === branchName.toLowerCase());
+    for (const item of itemsToDelete) {
+      if (item.id) {
+        await dbDeleteSchedule(item.id).catch(e => console.error("Error delete schedule cascade:", e));
+      }
+    }
     const updatedCalendar = calendarData.filter((c) => c.almoxarifado.toLowerCase() !== branchName.toLowerCase());
     setCalendarData(updatedCalendar);
-    localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(updatedCalendar));
 
     window.dispatchEvent(new Event("storage"));
     alert(`Almoxarifado "${branchName}" removido com sucesso.`);

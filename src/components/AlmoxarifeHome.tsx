@@ -8,6 +8,7 @@ interface AlmoxarifeHomeProps {
   onNavigateToScreen: (screenId: string) => void;
   activeMonth: string;
   activeYear: string;
+  calendarData?: any[];
 }
 
 export default function AlmoxarifeHome({
@@ -17,6 +18,7 @@ export default function AlmoxarifeHome({
   onNavigateToScreen,
   activeMonth,
   activeYear,
+  calendarData,
 }: AlmoxarifeHomeProps) {
   // Score parameters
   const score = branch.currentScore;
@@ -87,11 +89,7 @@ export default function AlmoxarifeHome({
   const twinBranch = twinId ? allBranches?.find((b) => b.id === twinId) : null;
 
   const getBranchCalendar = () => {
-    let localCalendar: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_calendario_inventarios");
-      localCalendar = saved ? JSON.parse(saved) : [];
-    } catch (e) {}
+    const localCalendar = calendarData || [];
 
     const MONTH_MAP: Record<string, number> = {
       "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,

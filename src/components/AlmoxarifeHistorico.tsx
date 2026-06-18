@@ -7,6 +7,7 @@ interface AlmoxarifeHistoricoProps {
   managedBranches: Branch[];
   activeMonth: string;
   activeYear: string;
+  calendarData?: any[];
 }
 
 interface HistoricalReportDetails {
@@ -36,12 +37,8 @@ const normalizeStr = (str: string) => {
     .replace(/\s+/g, "");
 };
 
-const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName?: string) => {
-  let localCalendar: any[] = [];
-  try {
-    const saved = localStorage.getItem("acandido_calendario_inventarios");
-    localCalendar = saved ? JSON.parse(saved) : [];
-  } catch (e) {}
+const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName: string | undefined, calendarData: any[] | undefined) => {
+  const localCalendar = calendarData || [];
 
   const MONTH_MAP: Record<string, number> = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -241,7 +238,8 @@ export default function AlmoxarifeHistorico({
   user,
   managedBranches,
   activeMonth,
-  activeYear
+  activeYear,
+  calendarData
 }: AlmoxarifeHistoricoProps) {
   // Select active branch inside Historico
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
@@ -645,7 +643,7 @@ export default function AlmoxarifeHistorico({
 
                           {/* Dynamic Scheduled Inventories display for Criterion 1 inside Historical Report */}
                           {c.id === "1" && (() => {
-                            const calItems = getBranchCalendarForEntry(activeBranch.id, viewingReport.monthYear, activeBranch.name);
+                            const calItems = getBranchCalendarForEntry(activeBranch.id, viewingReport.monthYear, activeBranch.name, calendarData);
                             if (calItems.length === 0) return null;
                             return (
                               <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2 font-sans select-text">
