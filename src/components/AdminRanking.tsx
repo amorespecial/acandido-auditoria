@@ -39,9 +39,9 @@ export default function AdminRanking({
   const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);
   const [rankingMode, setRankingMode] = useState<"MES" | "ACUMULADO">("MES");
 
-  // Global synchronized references for selectedRankingMonth / selectedSemesterFilter
-  const selectedRankingMonth = activeMonth;
-  const setSelectedRankingMonth = setActiveMonth;
+  // Independent local state for filters in the Ranking screen
+  const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth);
+  const [localAccumulatedFilter, setLocalAccumulatedFilter] = useState<"1_SEMESTRE" | "2_SEMESTRE" | "ANO_TODO">("1_SEMESTRE");
 
   const isAwaitingPair = (entry: UnifiedEntry | null) => {
     if (!entry || entry.branches.length !== 2) return false;
@@ -158,63 +158,41 @@ export default function AdminRanking({
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
 
-  // Monthly values for each of the 9 unified entries that perfectly match their semestralScore
-  const getHistoricalMonths = (entry: UnifiedEntry, semToUse?: number) => {
-    const targetSem = semToUse !== undefined ? semToUse : (rankingMode === "ACUMULADO" ? Number(selectedSemesterFilter) : currentSemester);
-    // Current active month is the dynamic/active month, calculated from its branches' consolidated currentScore
-    const activeScore = entry.branches.length > 0
-      ? entry.branches[0].currentScore
-      : 80;
+  // Bulletproof core solver: Score for specified entry in a specific month
+  const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
+    let allCyclesList: any[] = [];
+    try {
+      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+      if (savedCycles) allCyclesList = JSON.parse(savedCycles);
+    } catch (e) {}
 
-    // Load actual history to build values dynamically
-    let historyEntries: any[] = [];
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) {
-        try {
-          historyEntries = JSON.parse(saved);
-          if (!Array.isArray(historyEntries)) {
-            historyEntries = [];
-          } else {
-            historyEntries = historyEntries.filter((h: any) => h.monthYear);
-          }
-        } catch {
-          historyEntries = [];
-        }
-      }
+    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
+      (c: any) => c.activeMonth?.toLowerCase() === monthName.toLowerCase() && c.status !== "NENHUM"
+    );
+    if (!hasCycle) {
+      return 0;
     }
 
-    const months = targetSem === 1
-      ? ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN"]
-      : ["JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+    const branchIds = entry.branches.map(b => b.id);
 
-    const semMonthsMap: { [key: string]: string } = targetSem === 1
-      ? { "JAN": "Janeiro", "FEV": "Fevereiro", "MAR": "Março", "ABR": "Abril", "MAI": "Maio", "JUN": "Junho" }
-      : { "JUL": "Julho", "AGO": "Agosto", "SET": "Setembro", "OUT": "Outubro", "NOV": "Novembro", "DEZ": "Dezembro" };
+    // 1. Check history
+    let histEntries: any[] = [];
+    try {
+      const saved = localStorage.getItem("acandido_history");
+      if (saved) histEntries = JSON.parse(saved);
+    } catch (e) {}
 
-    const referenceCriteria = entry.branches.length > 0 ? entry.branches[0].criteria : [];
+    const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
+      (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
+    ) : [];
 
-    return months.map((m) => {
-      const fullMonthName = semMonthsMap[m];
-
-      // If it is the active cycle month and the cycle is active, we showcase the live score
-      if (cycleStateParsed.status !== "NENHUM" && fullMonthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
-        return { month: m, val: activeScore };
-      }
-
-      // Check if there are closed history records for this specific month/year under this unified entry's branches
-      const branchIds = entry.branches.map(b => b.id);
-      const matchingEntries = historyEntries.filter(
-        (h) => branchIds.includes(h.branchId) && 
-               h.monthYear.toLowerCase().startsWith(fullMonthName.toLowerCase())
-      );
-
-      if (matchingEntries.length > 0) {
-        if (entry.branches.length === 2 && matchingEntries.length === 2) {
-          // Twin branches: Both must be evaluated to score, apply AND logic to each criterion
+    if (matchingHist.length > 0) {
+      if (entry.branches.length === 2) {
+        if (matchingHist.length === 2) {
           let consolidatedScore = 0;
-          referenceCriteria.forEach((cRef) => {
-            const allOk = matchingEntries.every((mRecord) => {
+          const refCriteria = entry.branches[0]?.criteria || [];
+          refCriteria.forEach((cRef) => {
+            const allOk = matchingHist.every((mRecord) => {
               const crit = mRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
               return crit && crit.status === "OK";
             });
@@ -222,96 +200,201 @@ export default function AdminRanking({
               consolidatedScore += cRef.pointsPossible;
             }
           });
-          return { month: m, val: consolidatedScore };
-        } else {
-          // Single branch
-          const sumScore = matchingEntries.reduce((sum, h) => sum + (h.score || 0), 0);
-          return { month: m, val: sumScore };
+          return consolidatedScore;
+        }
+        return 0; // if twin branch but only 1 matching in history
+      } else {
+        if (matchingHist.length === 1) {
+          return matchingHist[0].score || 0;
         }
       }
+    }
 
-      // ─── EXTENDED ACCUMULATED SYNC ───
-      // If cycle is not archived (meaning it is unarchived layout like ABERTO, AGUARDANDO_FECHAMENTO, FECHADO),
-      // let's fetch scores from the monthly dynamic evaluation tables.
-      let monthBranches: any[] = [];
-      try {
-        const savedEvals = localStorage.getItem(`acandido_evaluations_${fullMonthName}_2026`);
-        if (savedEvals) {
-          monthBranches = JSON.parse(savedEvals);
+    // 2. Check dynamic evaluations
+    let monthBranches: any[] = [];
+    try {
+      const savedEvals = localStorage.getItem(`acandido_evaluations_${monthName}_2026`);
+      if (savedEvals) monthBranches = JSON.parse(savedEvals);
+    } catch (e) {}
+
+    const matchingMonthBranches = Array.isArray(monthBranches) ? monthBranches.filter((mb) => branchIds.includes(mb.id)) : [];
+
+    if (matchingMonthBranches.length > 0) {
+      if (entry.branches.length === 2) {
+        if (matchingMonthBranches.length === 2) {
+          let consolidatedScore = 0;
+          const refCriteria = entry.branches[0]?.criteria || [];
+          refCriteria.forEach((cRef) => {
+            const allOk = matchingMonthBranches.every((mRecord) => {
+              const crit = mRecord.criteria?.find((cs: any) => cs.id === cRef.id);
+              return crit && (crit.status === "OK" || crit.status === "Aprovado");
+            });
+            if (allOk) {
+              consolidatedScore += cRef.pointsPossible;
+            }
+          });
+          return consolidatedScore;
         }
-      } catch (e) {}
-
-      if (monthBranches && monthBranches.length > 0) {
-        const matchingMonthBranches = monthBranches.filter((mb) => branchIds.includes(mb.id));
-        if (matchingMonthBranches.length > 0) {
-          if (entry.branches.length === 2 && matchingMonthBranches.length === 2) {
-            let consolidatedScore = 0;
-            referenceCriteria.forEach((cRef) => {
-              const allOk = matchingMonthBranches.every((mRecord) => {
-                const crit = mRecord.criteria?.find((cs: any) => cs.id === cRef.id);
-                return crit && (crit.status === "OK" || crit.status === "Aprovado");
-              });
-              if (allOk) {
-                consolidatedScore += cRef.pointsPossible;
+        return 0;
+      } else {
+        if (matchingMonthBranches.length === 1) {
+          let consolidatedScore = 0;
+          const bData = matchingMonthBranches[0];
+          if (bData.criteria) {
+            bData.criteria.forEach((c: any) => {
+              if (c.status === "OK" || c.status === "Aprovado") {
+                consolidatedScore += c.pointsPossible;
               }
             });
-            return { month: m, val: consolidatedScore };
           } else {
-            const sumScore = matchingMonthBranches.reduce((sum, mb) => sum + (mb.currentScore || 0), 0);
-            return { month: m, val: sumScore };
+            consolidatedScore = bData.currentScore || 0;
+          }
+          return consolidatedScore;
+        }
+      }
+    }
+
+    return 0;
+  };
+
+  const getCriterionScoreForMonth = (
+    entry: UnifiedEntry,
+    monthName: string,
+    criterionId: string
+  ): { status: string; points: number } => {
+    let allCyclesList: any[] = [];
+    try {
+      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+      if (savedCycles) allCyclesList = JSON.parse(savedCycles);
+    } catch (e) {}
+
+    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
+      (c: any) => c.activeMonth?.toLowerCase() === monthName.toLowerCase() && c.status !== "NENHUM"
+    );
+    if (!hasCycle) {
+      return { status: "AGUARDANDO ENVIO", points: 0 };
+    }
+
+    const branchIds = entry.branches.map((b) => b.id);
+    const refCriterion = entry.branches[0]?.criteria?.find((c) => c.id === criterionId);
+    const pointsMax = refCriterion ? refCriterion.pointsPossible : 0;
+
+    // Check history
+    let histEntries: any[] = [];
+    try {
+      const saved = localStorage.getItem("acandido_history");
+      if (saved) histEntries = JSON.parse(saved);
+    } catch (e) {}
+
+    const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
+      (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
+    ) : [];
+
+    if (matchingHist.length > 0) {
+      if (entry.branches.length === 2) {
+        if (matchingHist.length === 2) {
+          const allOk = matchingHist.every((mRecord) => {
+            const crit = mRecord.criteriaState?.find((cs: any) => cs.id === criterionId);
+            return crit && crit.status === "OK";
+          });
+          return { status: allOk ? "OK" : "NOK", points: allOk ? pointsMax : 0 };
+        }
+      } else {
+        if (matchingHist.length === 1) {
+          const crit = matchingHist[0].criteriaState?.find((cs: any) => cs.id === criterionId);
+          const isOk = crit && crit.status === "OK";
+          return { status: isOk ? "OK" : "NOK", points: isOk ? pointsMax : 0 };
+        }
+      }
+    }
+
+    // Check dynamic evaluations
+    let monthBranches: any[] = [];
+    try {
+      const savedEvals = localStorage.getItem(`acandido_evaluations_${monthName}_2026`);
+      if (savedEvals) monthBranches = JSON.parse(savedEvals);
+    } catch (e) {}
+
+    const matchingMonthBranches = Array.isArray(monthBranches) ? monthBranches.filter((mb) => branchIds.includes(mb.id)) : [];
+
+    if (matchingMonthBranches.length > 0) {
+      if (entry.branches.length === 2) {
+        if (matchingMonthBranches.length === 2) {
+          const statuses = matchingMonthBranches.map((mRecord) => {
+            const crit = mRecord.criteria?.find((cs: any) => cs.id === criterionId);
+            return crit ? crit.status : "PENDENTE";
+          });
+          const isNok = statuses.includes("NOK");
+          const isBothOk = statuses.every((s) => s === "OK" || s === "Aprovado");
+          const statusText = isNok
+            ? "NOK"
+            : isBothOk
+            ? "OK"
+            : statuses.includes("ENVIADO") || statuses.includes("Aguardando Avaliação")
+            ? "ENVIADO"
+            : "PENDENTE";
+          return { status: statusText, points: isBothOk ? pointsMax : 0 };
+        }
+      } else {
+        if (matchingMonthBranches.length === 1) {
+          const crit = matchingMonthBranches[0].criteria?.find((cs: any) => cs.id === criterionId);
+          if (crit) {
+            const isOk = crit.status === "OK" || crit.status === "Aprovado";
+            return { status: crit.status, points: isOk ? pointsMax : 0 };
           }
         }
       }
+    }
 
-      // Check if there is an active/closed cycle created for this month to enforce standard zero score rule
-      let allCyclesList: any[] = [];
-      try {
-        const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-        if (savedCycles) {
-          allCyclesList = JSON.parse(savedCycles);
-        }
-      } catch (e) {}
+    return { status: "PENDENTE", points: 0 };
+  };
 
-      const cycleExistsInList = Array.isArray(allCyclesList) && allCyclesList.some(
-        (c: any) => c.activeMonth?.toLowerCase() === fullMonthName.toLowerCase() && String(c.activeYear) === "2026"
-      );
-      const isCurrentActive = cycleStateParsed.activeMonth?.toLowerCase() === fullMonthName.toLowerCase() && cycleStateParsed.status !== "NENHUM";
+  const getHistoricalMonths = (entry: UnifiedEntry, filterToUse?: "1_SEMESTRE" | "2_SEMESTRE" | "ANO_TODO") => {
+    const filter = filterToUse || localAccumulatedFilter;
+    const months = filter === "1_SEMESTRE"
+      ? ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN"]
+      : filter === "2_SEMESTRE"
+      ? ["JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
+      : ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
-      // If no cycle is ever created for this month, consider 0 points for that period
-      if (!cycleExistsInList && !isCurrentActive) {
-        return { month: m, val: 0 };
-      }
+    const semMonthsMap: { [key: string]: string } = {
+      "JAN": "Janeiro", "FEV": "Fevereiro", "MAR": "Março", "ABR": "Abril", "MAI": "Maio", "JUN": "Junho",
+      "JUL": "Julho", "AGO": "Agosto", "SET": "Setembro", "OUT": "Outubro", "NOV": "Novembro", "DEZ": "Dezembro"
+    };
 
-      // Default: no history/evaluation records found yet -> 0 pts
-      return { month: m, val: 0 };
+    return months.map((m) => {
+      const fullMonthName = semMonthsMap[m];
+      return {
+        month: m,
+        val: getUnifiedScoreForMonth(entry, fullMonthName)
+      };
     });
   };
 
   const getEntryScoreForMonth = (entry: UnifiedEntry, monthName: string) => {
-    const historical = getHistoricalMonths(entry);
-    const mAndAbbr: { [key: string]: string } = {
-      "janeiro": "JAN", "fevereiro": "FEV", "março": "MAR", "abril": "ABR", "maio": "MAI", "junho": "JUN",
-      "julho": "JUL", "agosto": "AGO", "setembro": "SET", "outubro": "OUT", "novembro": "NOV", "dezembro": "DEZ"
-    };
-    const targetAbbr = mAndAbbr[monthName.toLowerCase()];
-    if (!targetAbbr) return 0;
-    const found = historical.find(h => h.month === targetAbbr);
-    return found ? found.val : 0;
+    return getUnifiedScoreForMonth(entry, monthName);
   };
 
   const getEntryDisplayScore = (entry: UnifiedEntry) => {
     if (rankingMode === "MES") {
-      return getEntryScoreForMonth(entry, selectedRankingMonth);
+      return getEntryScoreForMonth(entry, localRankingMonth);
     } else {
-      return getHistoricalMonths(entry, Number(selectedSemesterFilter)).reduce((sum, h) => sum + h.val, 0);
+      const months = localAccumulatedFilter === "1_SEMESTRE"
+        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+        : localAccumulatedFilter === "2_SEMESTRE"
+        ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+      
+      return months.reduce((sum, mName) => sum + getUnifiedScoreForMonth(entry, mName), 0);
     }
   };
 
   const getEntryDisplayMax = () => {
     if (rankingMode === "MES") {
-      return 80;
+      return 100;
     } else {
-      return 600;
+      const monthsCount = localAccumulatedFilter === "ANO_TODO" ? 12 : 6;
+      return monthsCount * 100;
     }
   };
 
@@ -450,16 +533,15 @@ export default function AdminRanking({
     const groupEntries = selectedEntry.group === "A" ? groupAEntries : groupBEntries;
     const positionInGroup = groupEntries.findIndex((e) => e.id === selectedEntry.id) + 1;
 
-    // Get historical monthly data
-    const monthlyVals = getHistoricalMonths(selectedEntry);
+    // Get historical monthly data based on currently selected period filter
+    const searchFilter = rankingMode === "MES"
+      ? (["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].includes(localRankingMonth) ? "1_SEMESTRE" : "2_SEMESTRE" as const)
+      : localAccumulatedFilter;
 
-    const hasJuneData = selectedEntry.branches.some(
-      (b) => b.criteria.some((c) => c.status === "OK" || c.status === "NOK")
-    );
-    const monthsWithData = monthlyVals.filter((m, idx) => {
-      if (idx < 5) return true; // JAN to MAI always closed
-      return hasJuneData; // JUN included if evaluated/launched
-    });
+    const monthlyVals = getHistoricalMonths(selectedEntry, searchFilter);
+
+    // Filter to represent the months within the active selected range
+    const monthsWithData = monthlyVals;
 
     const totalAccumulatedScore = monthsWithData.reduce((sum, d) => sum + d.val, 0);
 
@@ -467,100 +549,44 @@ export default function AdminRanking({
     const bestMonth = sortedVals[0] || { month: "JUN", val: 100 };
     const worstMonth = sortedVals[sortedVals.length - 1] || { month: "JAN", val: 0 };
 
-    // Consolidate Criteria status based on the double garage rules and dynamic closed history:
-    // "NOK em um = NOK nos dois, só pontua se ambos OK"
+    // Compile dynamic performance scores per criterion based on selected period as requested
+    const selectedMonths = rankingMode === "MES"
+      ? [localRankingMonth]
+      : localAccumulatedFilter === "1_SEMESTRE"
+      ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+      : localAccumulatedFilter === "2_SEMESTRE"
+      ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+      : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
     const getUnifiedCriteriaList = (entry: UnifiedEntry) => {
       if (entry.branches.length === 0) return [];
-      
       const referenceCriteria = entry.branches[0].criteria;
-      const branchIds = entry.branches.map(b => b.id);
       
-      const semMonthsList = currentSemester === 1
-        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
-        : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-
-      // Load history entries
-      let histList: any[] = [];
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("acandido_history");
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-              histList = parsed.filter((h: any) => h.monthYear);
-            } else {
-              histList = [];
-            }
-          } catch {
-            histList = [];
-          }
-        }
-      }
-
       return referenceCriteria.map((cRef) => {
-        let okMonths = 0;
+        let totalPointsObtained = 0;
+        let okMonthsCount = 0;
 
-        semMonthsList.forEach((mName) => {
-          // Find matching archive record for this month of this branch
-          const matches = histList.filter(
-            (h) => branchIds.includes(h.branchId) && 
-                   h.monthYear.toLowerCase().startsWith(mName.toLowerCase())
-          );
-
-          if (entry.branches.length === 2) {
-            // Twin branches: Both must be present in history and both must have cRef.id equal to OK
-            if (matches.length === 2) {
-              const allOk = matches.every((mRecord) => {
-                const crit = mRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
-                return crit && crit.status === "OK";
-              });
-              if (allOk) okMonths++;
-            }
-          } else {
-            // Single branch
-            if (matches.length === 1) {
-              const crit = matches[0].criteriaState?.find((cs: any) => cs.id === cRef.id);
-              if (crit && crit.status === "OK") okMonths++;
-            }
+        selectedMonths.forEach((mName) => {
+          const res = getCriterionScoreForMonth(entry, mName, cRef.id);
+          totalPointsObtained += res.points;
+          if (res.status === "OK") {
+            okMonthsCount++;
           }
         });
 
-        // 6 months as divisor for semestral tracking
-        const accuracy = Math.round((okMonths / 6) * 100);
-
-        // Calculate active month unified status to show current live status
-        let liveStatus = "PENDENTE";
-        let livePoints = 0;
-        const totalPointsPossible = cRef.pointsPossible;
-
-        if (entry.branches.length === 2) {
-          const b1 = entry.branches[0];
-          const b2 = entry.branches[1];
-          const c1 = b1.criteria.find((cr) => cr.id === cRef.id);
-          const c2 = b2.criteria.find((cr) => cr.id === cRef.id);
-          if (c1 && c2) {
-            const isNok = c1.status === "NOK" || c2.status === "NOK";
-            const isBothOk = c1.status === "OK" && c2.status === "OK";
-            liveStatus = isNok ? "NOK" : isBothOk ? "OK" : (c1.status === "ENVIADO" || c2.status === "ENVIADO" ? "ENVIADO" : "PENDENTE");
-            livePoints = isBothOk ? totalPointsPossible : (cRef.id === "1" && isBothOk ? (c1.pointsObtained || 0) : 0);
-          }
-        } else {
-          const b = entry.branches[0];
-          const matchCrit = b.criteria.find((cr) => cr.id === cRef.id);
-          if (matchCrit) {
-            liveStatus = matchCrit.status;
-            livePoints = matchCrit.status === "OK" ? cRef.pointsPossible : (matchCrit.id === "1" ? (matchCrit.pointsObtained || 0) : 0);
-          }
-        }
+        const maxPossibleInPeriod = cRef.pointsPossible * selectedMonths.length;
+        const accuracy = maxPossibleInPeriod > 0 ? Math.round((totalPointsObtained / maxPossibleInPeriod) * 100) : 0;
 
         return {
           id: cRef.id,
           name: cRef.name,
           recurrence: cRef.recurrence,
-          pointsPossible: totalPointsPossible,
-          status: liveStatus,
-          pointsObtained: livePoints,
-          okMonths,
+          pointsPossible: cRef.pointsPossible,
+          statusInPeriod: rankingMode === "MES" 
+            ? getCriterionScoreForMonth(entry, localRankingMonth, cRef.id).status 
+            : `${okMonthsCount} / ${selectedMonths.length} Meses OK`,
+          pointsObtained: totalPointsObtained,
+          okMonths: okMonthsCount,
           accuracy
         };
       });
@@ -1081,8 +1107,8 @@ export default function AdminRanking({
                     <tr className="border-b border-slate-200 text-[9px] font-black uppercase text-slate-400 tracking-wider">
                       <th className="py-2.5 pb-2">CRITÉRIO</th>
                       <th className="py-2.5 pb-2 text-center">PONTOS MENSAL</th>
-                      <th className="py-2.5 pb-2 text-center">MESES OK</th>
-                      <th className="py-2.5 pb-2 text-right">PONTOS NO CICLO</th>
+                      <th className="py-2.5 pb-2 text-center">STATUS NO PERÍODO</th>
+                      <th className="py-2.5 pb-2 text-right">PONTOS OBTIDOS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1105,9 +1131,7 @@ export default function AdminRanking({
                                 Aguardando par
                               </span>
                             ) : (
-                              <>
-                                {c.okMonths} <span className="text-[10px] font-normal text-slate-400">/ 6 meses</span>
-                              </>
+                              <span>{c.statusInPeriod}</span>
                             )}
                           </td>
                           <td className="py-3 text-right">
@@ -1115,9 +1139,9 @@ export default function AdminRanking({
                               <span className="text-amber-600 font-black text-[10px] uppercase font-mono tracking-wider">Aguardando</span>
                             ) : (
                               <div className="inline-flex flex-col items-end">
-                                <span className={`text-xs font-black font-mono ${textStyle}`}>{c.okMonths * c.pointsPossible} pts</span>
-                                <div className="w-20 h-1  bg-slate-100 rounded-full mt-1 overflow-hidden">
-                                  <div className={`h-full ${pctStyle}`} style={{ width: `${(c.okMonths / 6) * 100}%` }}></div>
+                                <span className={`text-xs font-black font-mono ${textStyle}`}>{c.pointsObtained} pts</span>
+                                <div className="w-20 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                  <div className={`h-full ${pctStyle}`} style={{ width: `${c.accuracy}%` }}></div>
                                 </div>
                               </div>
                             )}
@@ -1145,7 +1169,7 @@ export default function AdminRanking({
                     <span className="text-xl shrink-0">🏆</span>
                     <div>
                       <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                      <p className="text-[10px] text-emerald-600 font-bold mt-1">Acertou {c.okMonths} de 6 meses avaliados</p>
+                      <p className="text-[10px] text-emerald-600 font-bold mt-1">Conquistou {c.okMonths} de {selectedMonths.length} no período</p>
                     </div>
                   </div>
                 ))}
@@ -1161,27 +1185,27 @@ export default function AdminRanking({
               <div className="space-y-3">
                 {bottomCriteria.length > 0 ? (
                   bottomCriteria.map((c) => {
-                    const mostRecentNokMonth = (c.status !== "OK") ? "Junho" : "Maio";
+                    const mostRecentNokMonth = (c.pointsObtained < c.pointsPossible * selectedMonths.length) ? "Inconformidade detectada" : "Ok";
                     return (
                       <div key={c.id} className="bg-white p-3 rounded-xl border border-amber-100 flex items-start gap-2.5 shadow-xs">
                         <span className="text-xl shrink-0">⚠️</span>
                         <div>
                           <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                          <p className="text-[10px] text-amber-700 font-bold mt-1">NOK em {6 - c.okMonths} meses</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5 italic">Mais recente com NOK: {mostRecentNokMonth}</p>
+                          <p className="text-[10px] text-amber-700 font-bold mt-1">NOK em {selectedMonths.length - c.okMonths} meses</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
                         </div>
                       </div>
                     );
                   })
                 ) : (
                   <div className="p-3 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-105">
-                    Nenhum critério com inconformidade este semestre!
+                    Nenhum critério com inconformidade este período!
                   </div>
                 )}
               </div>
             </div>
 
-            {/* BLOCO 5 - COMPARATIVO COM A META (300 pts) */}
+            {/* BLOCO 5 - COMPARATIVO COM A META */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
               <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
                 <span className="material-symbols-outlined text-slate-500 text-[18px]">adjust</span>
@@ -1190,39 +1214,39 @@ export default function AdminRanking({
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-500 font-bold">Nota Semestral Unificada</span>
-                  <span className="font-mono text-slate-800 font-black">{selectedEntry.semestralScore} pts</span>
+                  <span className="text-slate-500 font-bold">Nota do Período Unificada</span>
+                  <span className="font-mono text-slate-800 font-black">{totalAccumulatedScore} pts</span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-50">
-                  <span className="text-slate-500 font-bold">Meta Mínima Semestral</span>
-                  <span className="font-mono text-slate-800 font-black">300 pts</span>
+                  <span className="text-slate-500 font-bold">Meta Mínima no Período</span>
+                  <span className="font-mono text-slate-800 font-black">{selectedMonths.length * 50} pts</span>
                 </div>
 
-                {selectedEntry.semestralScore >= 300 ? (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-850 font-bold space-y-1">
+                {totalAccumulatedScore >= selectedMonths.length * 50 ? (
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs inline-block w-full font-bold space-y-1">
                     <p className="flex items-center gap-1.5 text-emerald-800">
                       <span className="material-symbols-outlined text-[#10B981] text-[16px] font-bold">check_circle</span>
                       Meta Atingida
                     </p>
-                    <p className="text-[10.5px] font-normal leading-relaxed text-emerald-900">
-                      ✅ Meta atingida — <strong>{selectedEntry.semestralScore - 300} pts</strong> acima do mínimo.
+                    <p className="text-[10.5px] font-normal leading-relaxed text-emerald-950">
+                      ✅ Meta atingida — <strong>{totalAccumulatedScore - (selectedMonths.length * 50)} pts</strong> acima do mínimo.
                     </p>
                   </div>
                 ) : (
-                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs text-rose-850 font-bold space-y-1">
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs inline-block w-full font-bold space-y-1">
                     <p className="flex items-center gap-1.5 text-rose-850 font-bold">
                       <span className="material-symbols-outlined text-[#EF4444] text-[16px] font-bold">cancel</span>
                       Abaixo da Meta
                     </p>
-                    <p className="text-[10.5px] font-normal leading-relaxed text-rose-900">
-                      ⚠️ Abaixo da meta — <strong>faltam {300 - selectedEntry.semestralScore} pts</strong> para atingir a qualificação semestral mínima operacional.
+                    <p className="text-[10.5px] font-normal leading-relaxed text-rose-955">
+                      ⚠️ Abaixo da meta — <strong>faltam {(selectedMonths.length * 50) - totalAccumulatedScore} pts</strong> para atingir a qualificação do período mínima operacional.
                     </p>
                   </div>
                 )}
 
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500">
                   <span className="font-bold text-slate-700">Projeção: </span>
-                  Se manter a média atual, encerrará o semestre com <strong>{selectedEntry.semestralScore} pts</strong>.
+                  Se manter a média atual, encerrará o período com <strong>{totalAccumulatedScore} pts</strong>.
                 </div>
               </div>
             </div>
@@ -1348,9 +1372,9 @@ export default function AdminRanking({
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-sans">Referência Temporária</label>
           {rankingMode === "MES" ? (
             <select
-              value={selectedRankingMonth}
+              value={localRankingMonth}
               onChange={(e) => {
-                setSelectedRankingMonth(e.target.value);
+                setLocalRankingMonth(e.target.value);
                 setSelectedEntry(null);
               }}
               className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
@@ -1363,15 +1387,16 @@ export default function AdminRanking({
             </select>
           ) : (
             <select
-              value={selectedSemesterFilter}
+              value={localAccumulatedFilter}
               onChange={(e) => {
-                setSelectedSemesterFilter(e.target.value as "1" | "2");
+                setLocalAccumulatedFilter(e.target.value as any);
                 setSelectedEntry(null);
               }}
               className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
             >
-              <option value="1">1º Semestre (Janeiro - Junho)</option>
-              <option value="2">2º Semestre (Julho - Dezembro)</option>
+              <option value="1_SEMESTRE">1º Semestre (Janeiro - Junho)</option>
+              <option value="2_SEMESTRE">2º Semestre (Julho - Dezembro)</option>
+              <option value="ANO_TODO">Ano Todo (Janeiro - Dezembro)</option>
             </select>
           )}
         </div>
@@ -1385,7 +1410,7 @@ export default function AdminRanking({
           </h4>
           {rankingMode === "MES" && (
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Meta do Mês: 75 PTS
+              Meta do Mês: 100 PTS
             </span>
           )}
         </div>
@@ -1401,8 +1426,7 @@ export default function AdminRanking({
             const place = index + 1;
             const displayScore = item.displayScore;
             const maxPoints = getEntryDisplayMax();
-            const minGoal = rankingMode === "MES" ? 75 : 300;
-            const warningLimit = rankingMode === "MES" ? 85 : 350;
+            const minGoal = rankingMode === "MES" ? 100 : (localAccumulatedFilter === "ANO_TODO" ? 600 : 300);
             const isBelowGoal = displayScore < minGoal;
 
             return (
@@ -1436,24 +1460,16 @@ export default function AdminRanking({
                         <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
                           Líder
                         </span>
-                      ) : rankingMode === "MES" ? (
+                      ) : (
                         isBelowGoal ? (
                           <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                            🔴 ABAIXO DO MÍNIMO
-                          </span>
-                        ) : displayScore <= warningLimit ? (
-                          <span className="bg-amber-500 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                            ⚠️ ATENÇÃO
+                            🔴 ABAIXO DA META
                           </span>
                         ) : (
                           <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                            Ativo
+                            🟢 ATINGIU A META
                           </span>
                         )
-                      ) : (
-                        <span className="bg-[#1B2A4A] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                          Pontuando
-                        </span>
                       )}
                     </>
                   )}
@@ -1462,28 +1478,30 @@ export default function AdminRanking({
                     <div className="flex items-center justify-end gap-1.5">
                       <span className="text-xs font-black text-[#1B2A4A] font-mono leading-none">
                         {displayScore}
-                        {rankingMode === "MES" ? (
-                          <span className="text-[10px] font-normal text-slate-400 font-sans">/{maxPoints} pts</span>
-                        ) : (
-                          <span className="text-[10px] font-normal text-slate-400 font-sans"> pts</span>
-                        )}
+                        <span className="text-[10px] font-normal text-slate-400 font-sans">/{maxPoints} pts</span>
                       </span>
                       {(() => {
                         if (!hasRealHistory) return null;
-                        const monthlyVals = getHistoricalMonths(item);
-                        const activeIdx = Math.max(0, visibleCount - 1);
-                        const prevIdx = Math.max(0, activeIdx - 1);
-                        const variation = activeIdx !== prevIdx ? monthlyVals[activeIdx].val - monthlyVals[prevIdx].val : 0;
+                        const targetMonthAbbrMap: { [key: string]: string } = {
+                          "Janeiro": "JAN", "Fevereiro": "FEV", "Março": "MAR", "Abril": "ABR", "Maio": "MAI", "Junho": "JUN",
+                          "Julho": "JUL", "Agosto": "AGO", "Setembro": "SET", "Outubro": "OUT", "novembro": "NOV", "dezembro": "DEZ"
+                        };
+                        const searchSem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"].includes(localRankingMonth) ? "1_SEMESTRE" : "2_SEMESTRE";
+                        const monthlyVals = getHistoricalMonths(item, searchSem);
+                        const targetAbbr = targetMonthAbbrMap[localRankingMonth];
+                        const activeIdx = monthlyVals.findIndex(mv => mv.month === targetAbbr);
+                        const prevIdx = activeIdx > 0 ? activeIdx - 1 : -1;
+                        const variation = (activeIdx >= 0 && prevIdx >= 0) ? (monthlyVals[activeIdx].val - monthlyVals[prevIdx].val) : 0;
 
                         if (variation > 0) {
                           return (
-                            <span className="text-[10px] font-black text-emerald-650 text-emerald-600 shrink-0 font-sans">
+                            <span className="text-[10px] font-black text-emerald-600 shrink-0 font-sans">
                               ▲ +{variation}
                             </span>
                           );
                         } else if (variation < 0) {
                           return (
-                            <span className="text-[10px] font-black text-rose-650 text-rose-600 shrink-0 font-sans">
+                            <span className="text-[10px] font-black text-rose-600 shrink-0 font-sans">
                               ▼ {variation}
                             </span>
                           );
@@ -1494,7 +1512,7 @@ export default function AdminRanking({
                     </div>
                     <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
                       <div
-                        className={`h-full ${displayScore === 0 ? "bg-transparent" : (rankingMode === "MES" ? (isBelowGoal ? "bg-rose-600" : (displayScore <= warningLimit ? "bg-amber-400" : "bg-emerald-500")) : "bg-[#1B2A4A]")}`}
+                        className={`h-full ${displayScore === 0 ? "bg-transparent" : (isBelowGoal ? "bg-rose-600" : "bg-emerald-500")}`}
                         style={{ width: `${displayScore === 0 ? 0 : Math.min(100, (displayScore / maxPoints) * 100)}%` }}
                       ></div>
                     </div>
@@ -1513,7 +1531,7 @@ export default function AdminRanking({
             </div>
             <div className="relative flex justify-center text-xs">
               <span className="bg-white border border-amber-200 px-4 py-1 rounded-full font-black uppercase tracking-widest text-[9px] shadow-xs text-amber-600">
-                Meta Mínima de Conformidade Mensal (75 PTS)
+                Meta Mínima de Conformidade Mensal (100 PTS)
               </span>
             </div>
           </div>

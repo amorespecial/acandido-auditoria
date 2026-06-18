@@ -1213,7 +1213,8 @@ export default function App() {
       const finalScore = obtained;
       const key_query = `${activeMonth}_${activeYear}`;
       const query_match = allCycles[key_query];
-      const isCycleActive = query_match ? query_match.status !== "NENHUM" : false;
+      // A cycle is active (evaluations are loadable/visible) if its status is defined and is NOT NENHUM
+      const isCycleActive = query_match ? (query_match.status !== "NENHUM") : false;
       const liveActiveScore = isCycleActive ? finalScore : 0;
 
       return {
@@ -1238,7 +1239,7 @@ export default function App() {
         semestralScore: isCycleActive ? (dynamicSemScore + liveActiveScore) : 0,
         scoreCategory: isCycleActive ? scoreCategory : "Sem avaliação",
         status: isCycleActive ? status : "PENDENTE",
-        maxAuditablePoints: isCycleActive ? maxAuditable : 75,
+        maxAuditablePoints: isCycleActive ? maxAuditable : 100,
         pointsObtainedSum: isCycleActive ? obtained : 0
       };
     });
@@ -1488,16 +1489,25 @@ export default function App() {
       status: b.status,
       dateEvaluated: new Date().toLocaleDateString("pt-BR"),
       auditorName: "Fernando Silva",
+      nokItems: b.criteria.filter((c) => c.status === "NOK").map((c) => c.name),
       criteriaState: b.criteria.map((c) => ({
         id: c.id,
         name: c.name,
-        score: c.status === "OK" ? c.pointsPossible : 0,
+        score: c.pointsObtained !== undefined ? c.pointsObtained : (c.status === "OK" ? c.pointsPossible : 0),
+        pointsObtained: c.pointsObtained !== undefined ? c.pointsObtained : (c.status === "OK" ? c.pointsPossible : 0),
         pointsPossible: c.pointsPossible,
         status: c.status,
         notes: c.notes || c.evidenceNotes || "Avaliado pelo auditor.",
         evidenceNotes: c.evidenceNotes,
         submittedPhotos: c.submittedPhotos || [],
-        submittedAt: c.submittedAt
+        submittedAt: c.submittedAt,
+        nokEvidenceLinks: c.nokEvidenceLinks || [],
+        nokEvidenceLink: c.nokEvidenceLink,
+        nokEvidenceDescription: c.nokEvidenceDescription,
+        top10AuditorQuantities: c.top10AuditorQuantities,
+        nokEvidenceFileName: c.nokEvidenceFileName,
+        nokEvidenceFileType: c.nokEvidenceFileType,
+        nokEvidenceFileData: c.nokEvidenceFileData
       }))
     }));
 
@@ -1522,11 +1532,29 @@ export default function App() {
       }))
     );
 
-    // Lock cycle active status
-    handleUpdateCycleState({
+    // Save cycle with state ARQUIVADO in allCycles map
+    const key = `${month}_${year}`;
+    setAllCycles((prev) => {
+      const updatedAll = {
+        ...prev,
+        [key]: {
+          activeMonth: month,
+          activeYear: year,
+          status: "ARQUIVADO" as const,
+          openedAt: prev[key]?.openedAt || new Date().toLocaleDateString("pt-BR"),
+          openedBy: prev[key]?.openedBy || "Fernando Silva"
+        }
+      };
+      const list = Object.values(updatedAll);
+      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
+      return updatedAll;
+    });
+
+    // Reset current active cycleState to NENHUM
+    setCycleState({
       activeMonth: month,
       activeYear: year,
-      status: "NENHUM"
+      status: "NENHUM" as const
     });
   };
 
@@ -1931,6 +1959,7 @@ export default function App() {
                     onUpdateCycleState={handleUpdateCycleState}
                     onArchiveCycle={handleArchiveCycle}
                     user={user}
+                    allCycles={allCycles}
                   />
                 )}
                 {adminTab === "CONFIGURI" && (

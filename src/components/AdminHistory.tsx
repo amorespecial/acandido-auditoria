@@ -343,6 +343,8 @@ const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
       type,
       score: entry.score,
       nokItems: entry.nokItems || [],
+      criteriaState: entry.criteriaState || [],
+      branchId: entry.branchId,
       auditedDetails: entry.auditedDetails || "Ciclo encerrado e enviado à auditoria pelo usuário."
     });
   });
@@ -474,7 +476,27 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
     }
   };
 
-  const getCriteriaForHistory = (score: number, nokItems: string[]) => {
+  const getCriteriaForHistory = (score: number, nokItems: string[], savedCriteriaState?: any[]) => {
+    if (savedCriteriaState && Array.isArray(savedCriteriaState) && savedCriteriaState.length > 0) {
+      return savedCriteriaState.map((c: any) => {
+        const isNok = c.status === "NOK";
+        return {
+          id: c.id,
+          name: c.name,
+          recurrence: (c.id === "1" || c.id === "10") ? ("Semestral" as const) : ("Mensal" as const),
+          pointsPossible: c.pointsPossible ?? 10,
+          status: c.status === "OK" ? ("OK" as const) : ("NOK" as const),
+          pointsObtained: c.pointsObtained !== undefined ? c.pointsObtained : (c.score !== undefined ? c.score : (c.status === "OK" ? (c.pointsPossible ?? 10) : 0)),
+          notes: c.notes || c.evidenceNotes || "Avaliado pelo auditor.",
+          nokEvidenceLink: c.nokEvidenceLink ?? (isNok ? `https://drive.google.com/drive/folders/mock-nok-folder-${c.id}` : undefined),
+          nokEvidenceDescription: c.nokEvidenceDescription ?? (isNok ? `Inconformidade histórica registrada e validada no escopo do critério de ${c.name}.` : undefined),
+          nokEvidenceFileName: c.nokEvidenceFileName,
+          nokEvidenceFileType: c.nokEvidenceFileType,
+          nokEvidenceFileData: c.nokEvidenceFileData
+        };
+      });
+    }
+
     const normalizedNok = nokItems.map((item) => removeAccentsAndSpaces(item));
 
     const baseCriteria = [
@@ -538,7 +560,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
   };
 
   const buildAutomaticResumoExecutivo = (entry: AuditHistoryEntry) => {
-    const crits = getCriteriaForHistory(entry.score, entry.nokItems);
+    const crits = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
     const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
     const maxPoints = crits.reduce((sum, c) => sum + c.pointsPossible, 0);
     const listOK = crits.filter(c => c.status === "OK");
@@ -554,9 +576,9 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
 
     let tendencyLine = "";
     if (lastThree.length === 3) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj3 = getCriteriaForHistory(lastThree[2].score, lastThree[2].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems, lastThree[1].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj3 = getCriteriaForHistory(lastThree[2].score, lastThree[2].nokItems, lastThree[2].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
 
       let trend = "estabilidade";
       if (adj3 > adj1) {
@@ -567,12 +589,12 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
 
       tendencyLine = `Nos últimos três meses o almoxarifado registrou ${adj1}, ${adj2} e ${adj3} pts respectivamente, indicando ${trend} no desempenho operacional.`;
     } else if (lastThree.length === 2) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems, lastThree[1].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
       const trend = adj2 > adj1 ? "melhora" : adj2 < adj1 ? "queda" : "estabilidade";
       tendencyLine = `Nos últimos dois meses o almoxarifado registrou ${adj1} e ${adj2} pts respectivamente, indicando ${trend} no desempenho operacional.`;
     } else if (lastThree.length === 1) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems).reduce((sum, c) => sum + c.pointsObtained, 0);
+      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
       tendencyLine = `No mês anterior o almoxarifado registrou ${adj1} pts, indicando desempenho operacional estável.`;
     } else {
       tendencyLine = `Nos meses anteriores o almoxarifado não possuía registros suficientes, estabelecendo esta avaliação como linha de base para análises de tendência futuras.`;
@@ -584,7 +606,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
       .map((b) => ({
         id: b.id,
         semestralScore: getHistoryForBranch(b.id).reduce((sum, h) => {
-          return sum + getCriteriaForHistory(h.score, h.nokItems).reduce((acc, c) => acc + c.pointsObtained, 0);
+          return sum + getCriteriaForHistory(h.score, h.nokItems, h.criteriaState).reduce((acc, c) => acc + c.pointsObtained, 0);
         }, 0)
       }))
       .sort((a, b) => b.semestralScore - a.semestralScore);
@@ -610,7 +632,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
   };
 
   const buildAutomaticConclusion = (entry: AuditHistoryEntry) => {
-    const crits = getCriteriaForHistory(entry.score, entry.nokItems);
+    const crits = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
     const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
     const listNOK = crits.filter(c => c.status === "NOK");
 
@@ -645,7 +667,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
     setIsExporting(true);
 
     try {
-        const crits = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems);
+        const crits = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems, selectedEntry.criteriaState);
         const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
         const okList = crits.filter(c => c.status === "OK");
         const okCount = okList.length;
@@ -1048,7 +1070,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
   // FULL DETAILED MONTHLY VIEW IMPLEMENTATION (REPLACES TIMELINE GRID)
   // ----------------------------------------------------
   if (selectedEntry) {
-    const criteriaList = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems);
+    const criteriaList = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems, selectedEntry.criteriaState);
     const score = criteriaList.reduce((sum, c) => sum + c.pointsObtained, 0);
 
     const okList = criteriaList.filter(c => c.status === "OK");
@@ -2066,7 +2088,7 @@ export default function AdminHistory({ user, branches }: AdminHistoryProps) {
         ) : (
           <div className="relative border-l-2 border-slate-200 pl-6 ml-3 py-2 space-y-6">
             {historyList.map((entry) => {
-              const criteriaListForScore = getCriteriaForHistory(entry.score, entry.nokItems);
+              const criteriaListForScore = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
               const adjustedScore = criteriaListForScore.reduce((acc, c) => acc + c.pointsObtained, 0);
               
               return (

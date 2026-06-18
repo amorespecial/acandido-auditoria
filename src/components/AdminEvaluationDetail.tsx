@@ -34,7 +34,7 @@ export default function AdminEvaluationDetail({
         if (Array.isArray(list)) {
           const match = list.find(c => c.activeMonth === m && c.activeYear === y);
           if (match) {
-            return match.status === "NENHUM" || match.status === "FECHADO";
+            return match.status === "NENHUM" || match.status === "FECHADO" || match.status === "ARQUIVADO";
           }
         }
       }
@@ -42,7 +42,7 @@ export default function AdminEvaluationDetail({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.activeMonth === m && parsed.activeYear === y) {
-          return parsed.status === "NENHUM" || parsed.status === "FECHADO";
+          return parsed.status === "NENHUM" || parsed.status === "FECHADO" || parsed.status === "ARQUIVADO";
         }
       }
     } catch (e) {}

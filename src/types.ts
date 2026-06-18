@@ -117,4 +117,6 @@ export interface AuditHistoryEntry {
   score: number;
   nokItems: string[];
   auditedDetails?: string;
+  criteriaState?: any[];
+  branchId?: string;
 }

@@ -12,13 +12,14 @@ interface AdminPanelProps {
   cycleState: {
     activeMonth: string;
     activeYear: string;
-    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
+    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" | "ARQUIVADO";
     openedAt?: string;
     openedBy?: string;
   };
   onUpdateCycleState: (newState: any) => void;
   onArchiveCycle: (month: string, year: string, finalScore: number) => void;
   user?: any;
+  allCycles: Record<string, any>;
 }
 
 export default function AdminPanel({
@@ -32,6 +33,7 @@ export default function AdminPanel({
   onUpdateCycleState,
   onArchiveCycle,
   user,
+  allCycles,
 }: AdminPanelProps) {
   const [selectedGroup, setSelectedGroup] = useState<"TODOS" | "A" | "B">("TODOS");
   const [filterType, setFilterType] = useState<"TODOS" | "OK" | "PENDENTE" | "NOK">("TODOS");
@@ -367,34 +369,43 @@ export default function AdminPanel({
           const hasRegisteredEvaluation = branch.criteria.some((c) => c.status === "OK" || c.status === "NOK");
           const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO").length;
 
+          const selectedCycleKey = `${selectedMonth}_${selectedYear}`;
+          const currentFilteredCycle = (allCycles && allCycles[selectedCycleKey]) || cycleState;
+          const isNotStarted = currentFilteredCycle.status === "NENHUM";
+          const isArchived = currentFilteredCycle.status === "ARQUIVADO";
+
           let badgeColor = "bg-stone-150 text-stone-700 font-extrabold";
           let badgeText: string = branch.status;
-          if (cycleState.status === "NENHUM") {
+          if (isNotStarted) {
             badgeColor = "bg-slate-100/80 text-slate-400 border border-slate-200/50 font-black tracking-wide";
             badgeText = "Ciclo não iniciado";
+          } else if (isArchived) {
+            badgeColor = "bg-emerald-600 text-white font-extrabold";
+            badgeText = "Arquivado";
           } else {
             if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white font-extrabold";
             if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white font-extrabold";
             if (branch.status === "NOK") badgeColor = "bg-red-500 text-white font-extrabold";
           }
 
-          const scoreToDisplay = branch.pointsObtainedSum ?? branch.currentScore;
+          const scoreToDisplay = isNotStarted ? 0 : (branch.pointsObtainedSum ?? branch.currentScore);
           const maxPoints = branch.maxAuditablePoints ?? 75;
           const progressWidth = Math.min((scoreToDisplay / maxPoints) * 100, 100);
 
+          const categoryToDisplay = isNotStarted ? "Sem avaliação" : branch.scoreCategory;
           let scoreTextClass = "text-slate-400 font-medium";
           let progressBgClass = "bg-slate-200";
 
-          if (branch.scoreCategory === "Excelente") {
+          if (categoryToDisplay === "Excelente") {
             scoreTextClass = "text-emerald-600 font-extrabold";
             progressBgClass = "bg-emerald-500";
-          } else if (branch.scoreCategory === "Bom") {
+          } else if (categoryToDisplay === "Bom") {
             scoreTextClass = "text-indigo-600 font-extrabold";
             progressBgClass = "bg-indigo-500";
-          } else if (branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio") {
+          } else if (categoryToDisplay === "Regular" || categoryToDisplay === "Médio") {
             scoreTextClass = "text-amber-500 font-extrabold";
             progressBgClass = "bg-amber-500";
-          } else if (branch.scoreCategory === "Parcial") {
+          } else if (categoryToDisplay === "Parcial") {
             scoreTextClass = "text-slate-500 font-bold uppercase tracking-wider";
             progressBgClass = "bg-slate-400";
           } else {
@@ -436,7 +447,7 @@ export default function AdminPanel({
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-[11px] font-medium text-slate-500">
                     <span>{maxPoints} pts auditáveis este mês</span>
-                    <span className={scoreTextClass}>{branch.scoreCategory}</span>
+                    <span className={scoreTextClass}>{categoryToDisplay}</span>
                   </div>
                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                     <div
@@ -449,21 +460,29 @@ export default function AdminPanel({
 
               <div className="border-t pt-3 flex justify-between items-center bg-slate-50/10 mt-1">
                 <span className="text-[10px] text-slate-400 font-bold tracking-wide">
-                  {pendingCount > 0 ? (
+                  {isNotStarted ? (
+                    <span className="text-slate-400 font-semibold flex items-center gap-1">
+                      ⏳ Ciclo não iniciado
+                    </span>
+                  ) : pendingCount > 0 ? (
                     <span className="text-amber-500 font-extrabold">🔔 {pendingCount} envios pendentes</span>
                   ) : hasRegisteredEvaluation ? (
                     <span className="text-emerald-600">✓ Tudo avaliado</span>
                   ) : (
-                    <span className="text-slate-400 font-semibold flex items-center gap-1">
-                      ⏳ Ciclo não avaliado
+                    <span className="text-[#C8A84B] font-extrabold flex items-center gap-1">
+                      ✓ Avaliação Concluída
                     </span>
                   )}
                 </span>
                 <button
                   onClick={() => onSelectBranch(branch.id)}
-                  className="px-3 py-1.5 bg-[#1B2A4A] hover:bg-[#121C34] active:scale-95 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm"
+                  className={`px-3 py-1.5 active:scale-95 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm ${
+                    isArchived
+                      ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                      : "bg-[#1B2A4A] hover:bg-[#121C34] text-white"
+                  }`}
                 >
-                  Auditar
+                  {isArchived ? "Ver Detalhes" : "Auditar"}
                 </button>
               </div>
             </div>
