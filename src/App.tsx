@@ -124,55 +124,6 @@ export default function App() {
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
-    try {
-      let initM = "Janeiro";
-      let initY = "2026";
-      const savedManual = localStorage.getItem("acandido_cycle_state_manual");
-      if (savedManual) {
-        const parsed = JSON.parse(savedManual);
-        if (parsed.activeMonth) initM = parsed.activeMonth;
-        if (parsed.activeYear) initY = parsed.activeYear;
-      }
-      if (["Fevereiro", "Julho", "Agosto"].includes(initM) && initY === "2026") {
-        return getCleanDefaultBranches();
-      }
-      const specificKey = `acandido_evaluations_${initM}_${initY}`;
-      const saved = localStorage.getItem(specificKey) || localStorage.getItem("acandido_branches");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === initialBranches.length) {
-          const hasAllCriteria = parsed.every(b => b.criteria && Array.isArray(b.criteria) && b.criteria.length > 0);
-          if (hasAllCriteria) {
-            const nameMap: Record<string, string> = {
-              "1": "Inventário",
-              "2": "TOP 10",
-              "3": "Nota Fiscal",
-              "4": "LayOut",
-              "5": "Recebimento de Material",
-              "6": "Curso Unimobin",
-              "7": "Nível de Serviço",
-              "8": "Registro de Requisições",
-              "9": "Controle de Garantia",
-              "10": "Material Sem Movimentação"
-            };
-            return parsed.map((b) => {
-              const initBranch = initialBranches.find(ib => ib.id === b.id);
-              return {
-                ...b,
-                semestralScore: initBranch ? initBranch.semestralScore : b.semestralScore,
-                criteria: b.criteria.map((c) => ({
-                  ...c,
-                  name: nameMap[c.id] || c.name,
-                  auditMode: c.auditMode || getInitialAuditMode(b.id, b.ownerName, c.id)
-                }))
-              };
-            });
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Local storage branches parsed failed, resetting:", e);
-    }
     return getCleanDefaultBranches();
   });
 
@@ -664,26 +615,7 @@ export default function App() {
         }
       }
 
-      if (!loadedFromSupabase) {
-        try {
-          const lKey = `acandido_evaluations_${activeMonth}_${activeYear}`;
-          const savedLocal = localStorage.getItem(lKey);
-          if (savedLocal) {
-            const parsedLocal = JSON.parse(savedLocal);
-            if (Array.isArray(parsedLocal) && parsedLocal.length === defaultBranches.length) {
-              const currentBrief = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-              const localBrief = JSON.stringify(parsedLocal.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-              if (currentBrief !== localBrief) {
-                setBranches(parsedLocal);
-              }
-              setLoadedPeriod({ month: activeMonth, year: activeYear });
-              return;
-            }
-          }
-        } catch (e) {
-          console.error("Local storage active evaluations parse error:", e);
-        }
-      }
+      // No localStorage loading / fallback - evaluations must be fetched from Supabase strictly to ensure same data across sessions
 
       const updatedBranches = defaultBranches.map((branch) => {
         const dbEvaluations = evaluationsMap[branch.name];
@@ -736,36 +668,9 @@ export default function App() {
     fetchEvaluationsFromSupabase();
   }, [activeMonth, activeYear, refetchTrigger]);
 
-  // Sync branches to local storage
-  useEffect(() => {
-    if (loadedPeriod && loadedPeriod.month === activeMonth && loadedPeriod.year === activeYear) {
-      const key = `${activeMonth}_${activeYear}`;
-      const statusFromAll = allCycles[key]?.status;
-      const statusFromCurrent = (cycleState?.activeMonth === activeMonth && cycleState?.activeYear === activeYear) ? cycleState?.status : null;
-      const combinedStatus = statusFromAll || statusFromCurrent;
-      
-      if (combinedStatus !== "FECHADO" && combinedStatus !== "ARQUIVADO") {
-        localStorage.setItem("acandido_branches", JSON.stringify(branches));
-        localStorage.setItem(`acandido_evaluations_${activeMonth}_${activeYear}`, JSON.stringify(branches));
-      }
-    }
-  }, [branches, activeMonth, activeYear, loadedPeriod, allCycles, cycleState]);
-
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
     const handleSync = () => {
-      // 1. Sync branches
-      const specificKey = `acandido_evaluations_${activeMonth}_${activeYear}`;
-      const storedBranches = localStorage.getItem(specificKey) || localStorage.getItem("acandido_branches");
-      if (storedBranches) {
-        try {
-          const parsed = JSON.parse(storedBranches);
-          if (JSON.stringify(parsed) !== JSON.stringify(branches)) {
-            setBranches(parsed);
-          }
-        } catch (e) {}
-      }
-
       // 2. Sync cycleState
       const storedCycle = localStorage.getItem("acandido_cycle_state_manual");
       if (storedCycle) {
@@ -823,7 +728,7 @@ export default function App() {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("focus", handleSync);
     };
-  }, [branches, cycleState, cycleConfigs]);
+  }, [cycleState, cycleConfigs]);
 
   // Keep localStorage manual state in sync with current cycleState without triggering state updates or saving to the database
   useEffect(() => {
