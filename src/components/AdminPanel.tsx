@@ -44,6 +44,7 @@ export default function AdminPanel({
 
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [challengeNameInput, setChallengeNameInput] = useState("");
+  const [closeStage, setCloseStage] = useState<1 | 2>(1);
 
   const months = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -211,6 +212,7 @@ export default function AdminPanel({
                 <button
                   onClick={() => {
                     setChallengeNameInput("");
+                    setCloseStage(1);
                     setShowCloseModal(true);
                   }}
                   className="px-3.5 py-2 bg-red-650 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow flex items-center gap-1.5 transition"
@@ -366,6 +368,9 @@ export default function AdminPanel({
       {/* Bento grid list of Branches */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredBranches.map((branch) => {
+          const monthlyCriteria = branch.criteria.filter((c) => c.id !== "1" && c.id !== "10");
+          const allMonthlyEvaluated = monthlyCriteria.every((c) => c.status === "OK" || c.status === "NOK");
+          const anyMonthlyEvaluated = monthlyCriteria.some((c) => c.status === "OK" || c.status === "NOK");
           const hasRegisteredEvaluation = branch.criteria.some((c) => c.status === "OK" || c.status === "NOK");
           const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO").length;
 
@@ -464,13 +469,19 @@ export default function AdminPanel({
                     <span className="text-slate-400 font-semibold flex items-center gap-1">
                       ⏳ Ciclo não iniciado
                     </span>
-                  ) : pendingCount > 0 ? (
-                    <span className="text-amber-500 font-extrabold">🔔 {pendingCount} envios pendentes</span>
-                  ) : hasRegisteredEvaluation ? (
-                    <span className="text-emerald-600">✓ Tudo avaliado</span>
-                  ) : (
+                  ) : allMonthlyEvaluated ? (
                     <span className="text-[#C8A84B] font-extrabold flex items-center gap-1">
                       ✓ Avaliação Concluída
+                    </span>
+                  ) : pendingCount > 0 ? (
+                    <span className="text-amber-500 font-extrabold">🔔 {pendingCount} envios pendentes</span>
+                  ) : anyMonthlyEvaluated ? (
+                    <span className="text-slate-500 font-semibold flex items-center gap-1">
+                      ⚙️ Avaliação parcial
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-semibold flex items-center gap-1">
+                      ⏳ Aguardando avaliações
                     </span>
                   )}
                 </span>
@@ -549,67 +560,148 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* ================= MODAL: FECHAR CICLO E ARQUIVAR ================= */}
-      {showCloseModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-red-200">
-            <header className="border-b border-red-100 pb-3 mb-4 flex items-center gap-2 text-red-600">
-              <span className="material-symbols-outlined text-[24px]">lock_person</span>
-              <h3 className="text-sm font-black uppercase tracking-wider">🔒 Fechar e Arquivar Ciclo Corporativo</h3>
-            </header>
+       {/* ================= MODAL: FECHAR CICLO E ARQUIVAR ================= */}
+      {showCloseModal && (() => {
+        const branchesCount = branches.length;
+        const completedBranchesCount = branches.filter((b) => {
+          const monthlyCriteria = b.criteria.filter((c) => c.id !== "1" && c.id !== "10");
+          return monthlyCriteria.every((c) => c.status === "OK" || c.status === "NOK");
+        }).length;
+        const pendingBranchesCount = branchesCount - completedBranchesCount;
 
-            <div className="space-y-4 text-xs">
-              <p className="leading-relaxed font-semibold text-slate-800">
-                Você trancará de forma irrecuperável o ciclo de <span className="font-black text-bold underline">{cycleState.activeMonth} {cycleState.activeYear}</span>.
-              </p>
+        const pendingBranchesDetailedList = branches.map((b) => {
+          const pendingC = b.criteria
+            .filter((c) => c.id !== "1" && c.id !== "10" && c.status !== "OK" && c.status !== "NOK")
+            .map((c) => c.name);
+          return { name: b.name, pending: pendingC };
+        }).filter((item) => item.pending.length > 0);
 
-              {/* Pending checks */}
-              <div className="bg-slate-50 p-3 rounded-lg border text-slate-600 space-y-1.5">
-                <span className="font-bold block text-slate-700 uppercase text-[10px]">Resumo de Lançamentos Pendentes:</span>
-                <p>• {branches.filter(b => b.status !== "OK").length} de 14 filiais estão abaixo da nota de meta mínima recomendada.</p>
-                <p>• Os scores finais das filiais e as vistorias submetidas serão consolidados e travados como somente-leitura permanentemente.</p>
-              </div>
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-150 animate-in fade-in zoom-in duration-150 font-sans">
+              <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">lock_person</span>
+                Confirmar Fechamento e Arquivamento (Mês: {cycleState?.activeMonth} {cycleState?.activeYear})
+              </h3>
+              
+              {closeStage === 1 ? (
+                <div className="space-y-4 text-xs font-sans">
+                  <div className="p-3 bg-red-50 border border-red-150 rounded-lg text-red-800 font-extrabold text-xs">
+                    Tem certeza? Todos os critérios foram avaliados? Esta ação não pode ser desfeita sem intervenção manual.
+                  </div>
+                  
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-slate-500 block">Status das Avaliações do Ciclo</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white p-2 rounded border border-slate-200">
+                        <span className="text-[9px] text-slate-400 font-bold block uppercase">Total de Almoxarifados</span>
+                        <strong className="text-slate-700 font-black">{branchesCount}</strong>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-slate-200">
+                        <span className="text-[9px] text-slate-400 font-bold block uppercase font-sans">Avaliações Completas</span>
+                        <strong className="text-emerald-600 font-black">{completedBranchesCount} de {branchesCount}</strong>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="bg-red-50 text-red-900 rounded-xl p-3 px-3.5 space-y-1.5 leading-normal">
-                <strong className="font-bold">Aviso Crítico:</strong> Esta operação arquiva definitivamente as avaliações no Histórico Consolidado. Nenhuma alteração retroativa poderá ser inserida por qualquer usuário a partir de agora!
-              </div>
+                  {pendingBranchesCount > 0 ? (
+                    <div className="space-y-1.5 font-sans">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-amber-600 block">
+                        ⚠️ Atenção: {pendingBranchesCount} almoxarifado(s) com critérios pendentes de avaliação!
+                      </span>
+                      <div className="max-h-36 overflow-y-auto border border-amber-250/50 bg-amber-50/20 p-2.5 rounded-lg space-y-2 text-[11px] font-sans">
+                        {pendingBranchesDetailedList.map((pi, idx) => (
+                          <div key={idx} className="pb-1 border-b border-amber-100 last:border-b-0">
+                            <strong className="text-amber-800 block font-extrabold">{pi.name}</strong>
+                            <span className="text-slate-500 font-medium leading-relaxed block mt-0.5">
+                              Pendente(s): {pi.pending.join(", ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-50 border border-emerald-150 text-emerald-800 rounded-lg font-bold text-xs flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px]">verified</span>
+                      Todos os 14 almoxarifados estão 100% avaliados! Pronto para fechamento seguro.
+                    </div>
+                  )}
 
-              <div className="space-y-1 pt-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase block">Digite o seu nome para confirmar o lacre: {user?.name || "Fernando Silva"}</label>
-                <input
-                  type="text"
-                  value={challengeNameInput}
-                  onChange={(e) => setChallengeNameInput(e.target.value)}
-                  placeholder={user?.name || "Fernando Silva"}
-                  className="w-full border border-slate-300 p-2.5 text-xs font-bold rounded-lg focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                />
-              </div>
+                  <div className="text-[11px] text-slate-400 font-semibold leading-relaxed space-y-1">
+                    <p>• O fechamento mudará o status do ciclo ativo para <strong className="text-[#1B2A4A] font-black">{cycleState?.activeMonth} {cycleState?.activeYear} (ARQUIVADO)</strong>.</p>
+                    <p>• Novas avaliações e envios de fotos serão impedidos de forma permanente.</p>
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowCloseModal(false)}
-                  className="px-4 py-2 border rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50"
-                >
-                  Voltar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCloseAndArchiveCycle}
-                  disabled={challengeNameInput.trim().toLowerCase() !== (user?.name || "Fernando Silva").trim().toLowerCase()}
-                  className={`px-4 py-2 text-white text-xs font-black uppercase rounded-lg shadow ${
-                    challengeNameInput.trim().toLowerCase() === (user?.name || "Fernando Silva").trim().toLowerCase()
-                      ? "bg-red-650 bg-red-600 hover:bg-red-700 cursor-pointer active:scale-95"
-                      : "bg-slate-150 text-slate-400 cursor-not-allowed border"
-                  }`}
-                >
-                  Confirmar e Arquivar
-                </button>
-              </div>
+                  <div className="flex gap-2 justify-end mt-6 pt-3 border-t">
+                    <button
+                      type="button"
+                      onClick={() => setShowCloseModal(false)}
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all font-sans"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCloseStage(2)}
+                      className="px-4 py-2 bg-[#1B2A4A] hover:bg-[#121C34] active:scale-95 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm font-sans"
+                    >
+                      Continuar para etapa final
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-red-900 font-semibold leading-relaxed text-[11px] space-y-1.5">
+                    <p className="font-extrabold text-red-800 uppercase flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px]">lock</span>
+                      CHAVE DE SEGURANÇA OBRIGATÓRIA
+                    </p>
+                    <p>Para concluir temporariamente o período e salvar todas as pontuações do mês atual, confirme digitando a chave de segurança abaixo:</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block font-sans">
+                      Digite exatamente a chave <strong className="text-red-700 font-extrabold font-mono text-center block text-sm bg-stone-100 py-1 border rounded my-1.5 font-sans">FECHAR {cycleState?.activeMonth?.toUpperCase()}</strong> para confirmar:
+                    </label>
+                    <input
+                      type="text"
+                      value={challengeNameInput}
+                      onChange={(e) => setChallengeNameInput(e.target.value)}
+                      placeholder={`FECHAR ${cycleState?.activeMonth?.toUpperCase()}`}
+                      className="w-full border border-slate-300 p-2.5 text-xs font-black uppercase rounded-lg focus:border-red-500 focus:ring-1 focus:ring-red-500 text-center font-mono placeholder:text-slate-350"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 justify-end mt-6 pt-3 border-t">
+                    <button
+                      type="button"
+                      onClick={() => setCloseStage(1)}
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all font-sans"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={challengeNameInput.trim().toUpperCase() !== `FECHAR ${cycleState?.activeMonth?.toUpperCase()}`}
+                      onClick={() => {
+                        setShowCloseModal(false);
+                        handleCloseAndArchiveCycle();
+                      }}
+                      className={`px-4 py-2 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm font-sans ${
+                        challengeNameInput.trim().toUpperCase() === `FECHAR ${cycleState?.activeMonth?.toUpperCase()}`
+                          ? "bg-red-650 bg-red-650 hover:bg-red-700 cursor-pointer active:scale-95"
+                          : "bg-slate-200 text-slate-400 cursor-not-allowed border"
+                      }`}
+                    >
+                      Confirmar e Fechar Período
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

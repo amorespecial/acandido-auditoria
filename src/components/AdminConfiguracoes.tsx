@@ -111,6 +111,14 @@ interface AdminConfiguracoesProps {
   onUpdateCycleState?: (newState: any) => void;
   onArchiveCycle?: (month: string, year: string, score: number) => void;
   user?: any;
+  allCycles?: Record<string, {
+    activeMonth: string;
+    activeYear: string;
+    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "ARQUIVADO" | "NENHUM";
+    openedAt?: string;
+    openedBy?: string;
+  }>;
+  onReopenCycle?: (month: string, year: string) => void;
 }
 
 interface MiniCollaborator {
@@ -126,9 +134,29 @@ export default function AdminConfiguracoes({
   onUpdateCycleState,
   onArchiveCycle,
   user,
+  allCycles,
+  onReopenCycle,
 }: AdminConfiguracoesProps) {
   const [activeTab, setActiveTab] = useState<"USUARIOS" | "ALMOXARIFADOS" | "COLABORADORES" | "GARANTIAS" | "CICLO" | "SUPERVISOR" | "CRITERIOS" | "INVENTARIOS">("USUARIOS");
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [closeStage, setCloseStage] = useState<1 | 2>(1);
+  const [typedConfirmation, setTypedConfirmation] = useState("");
+
+  // Calculations for pending branches
+  const branchesCount = branches.length;
+  const completedBranchesCount = branches.filter((b) => {
+    // 8 monthly criteria (excluding Inventário (1) and Material Sem Mov (10))
+    const monthlyCriteria = b.criteria.filter((c) => c.id !== "1" && c.id !== "10");
+    return monthlyCriteria.every((c) => c.status === "OK" || c.status === "NOK");
+  }).length;
+  const pendingBranchesCount = branchesCount - completedBranchesCount;
+
+  const pendingBranchesDetailedList = branches.map((b) => {
+    const pendingC = b.criteria
+      .filter((c) => c.id !== "1" && c.id !== "10" && c.status !== "OK" && c.status !== "NOK")
+      .map((c) => c.name);
+    return { name: b.name, pending: pendingC };
+  }).filter((item) => item.pending.length > 0);
 
   // Dynamic names list derived from active branches
   const activeAlmoxNames = [...new Set(branches.map((b) => b.name))].sort((a, b) => a.localeCompare(b));
@@ -1762,13 +1790,101 @@ export default function AdminConfiguracoes({
                 <button
                   type="button"
                   disabled={cycleState?.status === "NENHUM" || !onArchiveCycle}
-                  onClick={() => setShowArchiveConfirm(true)}
+                  onClick={() => {
+                    setCloseStage(1);
+                    setTypedConfirmation("");
+                    setShowArchiveConfirm(true);
+                  }}
                   className="w-full py-2 border rounded-lg text-xs font-black uppercase tracking-wider text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed justify-center flex items-center gap-1.5 transition-all font-sans"
                 >
                   <span className="material-symbols-outlined text-[16px]">archive</span>
                   FECHAR E ARQUIVAR CICLO
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* ================= SECTOR: HISTÓRICO E REABERTURA DE CICLOS ================= */}
+          <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+            <div>
+              <span className="text-[11px] font-black tracking-wider uppercase text-slate-400 block font-sans">Histórico e Controle de Ciclos de Auditoria</span>
+              <p className="text-[10px] text-slate-500 font-sans mt-0.5">Veja a listagem de todos os ciclos existentes e force a reabertura caso necessário.</p>
+            </div>
+            
+            <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white">
+              <table className="w-full text-left border-collapse font-sans text-xs">
+                <thead>
+                  <tr className="bg-slate-100/75 border-b border-slate-200 text-[10px] uppercase font-black tracking-wider text-slate-500">
+                    <th className="p-3">Mês / Ano</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Data de Abertura</th>
+                    <th className="p-3">Iniciado Por</th>
+                    <th className="p-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-150">
+                  {Object.values(allCycles || {}).length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400 font-medium">Nenhum ciclo registrado no histórico.</td>
+                    </tr>
+                  ) : (
+                    Object.values(allCycles || {})
+                      .sort((a: any, b: any) => {
+                        const monthsMap: Record<string, number> = {
+                          Janeiro: 1, Fevereiro: 2, Março: 3, Abril: 4, Maio: 5, Junho: 6,
+                          Julho: 7, Agosto: 8, Setembro: 9, Outubro: 10, Novembro: 11, Dezembro: 12
+                        };
+                        const keyA = (parseInt(a.activeYear) * 100) + (monthsMap[a.activeMonth] || 0);
+                        const keyB = (parseInt(b.activeYear) * 100) + (monthsMap[b.activeMonth] || 0);
+                        return keyB - keyA;
+                      })
+                      .map((c: any) => {
+                        const isActive = cycleState?.activeMonth === c.activeMonth && cycleState?.activeYear === c.activeYear;
+                        const statusColor = 
+                          c.status === "ABERTO" ? "bg-emerald-100 text-emerald-800" :
+                          c.status === "AGUARDANDO_FECHAMENTO" ? "bg-amber-100 text-amber-800" :
+                          "bg-slate-100 text-slate-700";
+
+                        return (
+                          <tr key={`${c.activeMonth}_${c.activeYear}`} className="hover:bg-slate-50/50">
+                            <td className="p-3 font-extrabold text-[#1B2A4A]">{c.activeMonth} {c.activeYear}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}`}>
+                                {c.status} {isActive && "(Ativo no Painel)"}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-500 font-medium">{c.openedAt || "--"}</td>
+                            <td className="p-3 text-slate-500 font-medium">{c.openedBy || "--"}</td>
+                            <td className="p-3 text-center">
+                              {c.status !== "ABERTO" && c.status !== "AGUARDANDO_FECHAMENTO" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const confirmReopen = window.confirm(
+                                      `Tem certeza que deseja REABRIR o ciclo de ${c.activeMonth} ${c.activeYear}? Todos os dados de notas e avaliações que já haviam sido preenchidos serão totalmente restaurados para o painel.`
+                                    );
+                                    if (confirmReopen && onReopenCycle) {
+                                      onReopenCycle(c.activeMonth, c.activeYear);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-[#1B2A4A] text-[10px] font-black uppercase rounded shadow-xs transition-all flex items-center gap-1 mx-auto"
+                                >
+                                  <span className="material-symbols-outlined text-[13px]">replay</span>
+                                  Reabrir Ciclo
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-emerald-600 font-black flex items-center justify-center gap-0.5">
+                                  <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                  Já Ativo
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -2638,54 +2754,136 @@ export default function AdminConfiguracoes({
       {/* ================= MODAL: SHOW ARCHIVE CONFIRMATION ================= */}
       {showArchiveConfirm && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-150 animate-in fade-in zoom-in duration-150">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-150 animate-in fade-in zoom-in duration-150 font-sans">
             <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider border-b pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-red-600">report</span>
-              Confirmar Fechamento e Arquivamento
+              <span className="material-symbols-outlined text-[20px] text-amber-600">report</span>
+              Confirmar Fechamento e Arquivamento (Mês: {cycleState?.activeMonth} {cycleState?.activeYear})
             </h3>
-            <div className="space-y-4 text-xs font-semibold text-slate-700 leading-relaxed font-sans">
-              <p className="p-3 bg-red-50 border border-red-100 rounded-lg text-red-800 font-extrabold text-xs">
-                Tem certeza? Todos os critérios foram avaliados? Esta ação não pode ser desfeita sem intervenção manual.
-              </p>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Ao confirmar, o ciclo ativo <strong className="text-slate-650">{cycleState?.activeMonth} {cycleState?.activeYear}</strong> será arquivado permanentemente no histórico. Os almoxarifes não conseguirão enviar novas evidências.
-              </p>
-            </div>
-            <div className="flex gap-3 justify-end mt-6 pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setShowArchiveConfirm(false)}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-[11px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowArchiveConfirm(false);
-                  if (!cycleState) return;
-                  const currentAudName = user?.name || "Fernando Silva";
-                  const challenge = prompt(`Para arquivar e fechar o ciclo permanentemente, digite seu nome completo (${currentAudName}):`);
-                  if (challenge !== currentAudName) {
-                    alert("Entrada incorreta. Cancelado.");
-                    return;
-                  }
-                  if (onArchiveCycle) {
-                    onArchiveCycle(cycleState.activeMonth, cycleState.activeYear, 95);
-                  }
-                  if (onUpdateCycleState) {
-                    onUpdateCycleState({
-                      ...cycleState,
-                      status: "NENHUM"
-                    });
-                  }
-                  alert("Ciclo encerrado e arquivado permanentemente no Histórico!");
-                }}
-                className="px-4 py-2 bg-red-650 hover:bg-red-700 active:scale-95 text-white rounded-lg text-[11px] font-black uppercase tracking-wider transition-all shadow-sm"
-              >
-                Confirmar
-              </button>
-            </div>
+            
+            {closeStage === 1 ? (
+              <div className="space-y-4 font-sans">
+                <div className="p-3 bg-red-50 border border-red-150 rounded-lg text-red-800 font-extrabold text-xs">
+                  Tem certeza? Todos os critérios foram avaliados? Esta ação não pode ser desfeita sem intervenção manual.
+                </div>
+                
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                  <span className="text-[10px] uppercase font-black tracking-wider text-slate-500 block">Status das Avaliações do Ciclo</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white p-2 rounded border border-slate-200">
+                      <span className="text-[9px] text-slate-400 font-bold block uppercase">Total de Almoxarifados</span>
+                      <strong className="text-slate-700 font-black">{branchesCount}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-slate-200">
+                      <span className="text-[9px] text-slate-400 font-bold block uppercase font-sans">Avaliações Completas</span>
+                      <strong className="text-emerald-600 font-black">{completedBranchesCount} de {branchesCount}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {pendingBranchesCount > 0 ? (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-amber-600 block">
+                      ⚠️ Atenção: {pendingBranchesCount} almoxarifado(s) com critérios pendentes de avaliação!
+                    </span>
+                    <div className="max-h-36 overflow-y-auto border border-amber-250/50 bg-amber-50/20 p-2.5 rounded-lg space-y-2 text-[11px]">
+                      {pendingBranchesDetailedList.map((pi, idx) => (
+                        <div key={idx} className="pb-1 border-b border-amber-100 last:border-b-0">
+                          <strong className="text-amber-800 block font-extrabold">{pi.name}</strong>
+                          <span className="text-slate-500 font-medium leading-relaxed block mt-0.5">
+                            Pendente(s): {pi.pending.join(", ")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-emerald-50 border border-emerald-150 text-emerald-800 rounded-lg font-bold text-xs flex items-center gap-1.5 animate-pulse">
+                    <span className="material-symbols-outlined text-[18px]">verified</span>
+                    Todos os 14 almoxarifados estão 100% avaliados! Pronto para fechamento seguro.
+                  </div>
+                )}
+
+                <div className="text-[11px] text-slate-400 font-semibold leading-relaxed space-y-1">
+                  <p>• O fechamento mudará o status do ciclo ativo para <strong className="text-[#1B2A4A] font-black">{cycleState?.activeMonth} {cycleState?.activeYear} (ARQUIVADO)</strong>.</p>
+                  <p>• Novas avaliações e envios de fotos serão impedidos de forma permanente.</p>
+                </div>
+
+                <div className="flex gap-2 justify-end mt-6 pt-3 border-t font-sans">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchiveConfirm(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all font-sans"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCloseStage(2)}
+                    className="px-4 py-2 bg-[#1B2A4A] hover:bg-[#121C34] active:scale-95 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm font-sans"
+                  >
+                    Continuar para etapa final
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-red-900 font-semibold leading-relaxed text-[11px] space-y-1.5">
+                  <p className="font-extrabold text-red-800 uppercase flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">lock</span>
+                    CHAVE DE SEGURANÇA OBRIGATÓRIAS
+                  </p>
+                  <p>Para concluir temporariamente o período e salvar todas as pontuações do mês atual, confirme digitando a chave de segurança abaixo:</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase block font-sans">
+                    Digite exatamente a chave <strong className="text-red-700 font-extrabold font-mono text-center block text-sm bg-stone-100 py-1 border rounded my-1.5">FECHAR {cycleState?.activeMonth?.toUpperCase()}</strong> para confirmar:
+                  </label>
+                  <input
+                    type="text"
+                    value={typedConfirmation}
+                    onChange={(e) => setTypedConfirmation(e.target.value)}
+                    placeholder={`FECHAR ${cycleState?.activeMonth?.toUpperCase()}`}
+                    className="w-full border border-slate-300 p-2.5 text-xs font-black uppercase rounded-lg focus:border-red-500 focus:ring-1 focus:ring-red-500 text-center font-mono placeholder:text-slate-350"
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end mt-6 pt-3 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setCloseStage(1)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all font-sans"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={typedConfirmation.trim().toUpperCase() !== `FECHAR ${cycleState?.activeMonth?.toUpperCase()}`}
+                    onClick={() => {
+                      if (!cycleState) return;
+                      setShowArchiveConfirm(false);
+                      if (onArchiveCycle) {
+                        onArchiveCycle(cycleState.activeMonth, cycleState.activeYear, 95);
+                      }
+                      if (onUpdateCycleState) {
+                        onUpdateCycleState({
+                          ...cycleState,
+                          status: "NENHUM"
+                        });
+                      }
+                      alert("Ciclo encerrado e arquivado permanentemente no Histórico!");
+                    }}
+                    className={`px-4 py-2 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm font-sans ${
+                      typedConfirmation.trim().toUpperCase() === `FECHAR ${cycleState?.activeMonth?.toUpperCase()}`
+                        ? "bg-red-650 hover:bg-red-700 cursor-pointer active:scale-95"
+                        : "bg-slate-200 text-slate-400 cursor-not-allowed border"
+                    }`}
+                  >
+                    Confirmar e Fechar Período
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

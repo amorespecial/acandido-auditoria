@@ -629,10 +629,17 @@ export default function App() {
   // Sync branches to local storage
   useEffect(() => {
     if (loadedPeriod && loadedPeriod.month === activeMonth && loadedPeriod.year === activeYear) {
-      localStorage.setItem("acandido_branches", JSON.stringify(branches));
-      localStorage.setItem(`acandido_evaluations_${activeMonth}_${activeYear}`, JSON.stringify(branches));
+      const key = `${activeMonth}_${activeYear}`;
+      const statusFromAll = allCycles[key]?.status;
+      const statusFromCurrent = (cycleState?.activeMonth === activeMonth && cycleState?.activeYear === activeYear) ? cycleState?.status : null;
+      const combinedStatus = statusFromAll || statusFromCurrent;
+      
+      if (combinedStatus !== "FECHADO" && combinedStatus !== "ARQUIVADO") {
+        localStorage.setItem("acandido_branches", JSON.stringify(branches));
+        localStorage.setItem(`acandido_evaluations_${activeMonth}_${activeYear}`, JSON.stringify(branches));
+      }
     }
-  }, [branches, activeMonth, activeYear, loadedPeriod]);
+  }, [branches, activeMonth, activeYear, loadedPeriod, allCycles, cycleState]);
 
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
@@ -1420,8 +1427,13 @@ export default function App() {
       const finalScore = obtained;
       const key_query = `${activeMonth}_${activeYear}`;
       const query_match = allCycles[key_query];
+      
+      const isCurrentPeriod = cycleState && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear;
+      const currentPeriodStatus = isCurrentPeriod ? cycleState.status : "NENHUM";
+      const cycleStatusToUse = query_match ? query_match.status : (isCurrentPeriod ? currentPeriodStatus : "NENHUM");
+      
       // A cycle is active (evaluations are loadable/visible) if its status is defined and is NOT NENHUM
-      const isCycleActive = query_match ? (query_match.status !== "NENHUM") : false;
+      const isCycleActive = cycleStatusToUse !== "NENHUM";
       const liveActiveScore = isCycleActive ? finalScore : 0;
 
       return {
@@ -1763,6 +1775,150 @@ export default function App() {
       activeYear: year,
       status: "NENHUM" as const
     });
+  };
+
+  const handleReopenCycle = (month: string, year: string) => {
+    const key = `${month}_${year}`;
+    
+    // Set the cycle to status "ABERTO" in allCycles map
+    setAllCycles((prev) => {
+      const existing = prev[key] || {
+        activeMonth: month,
+        activeYear: year,
+        status: "ABERTO" as const,
+        openedAt: new Date().toLocaleDateString("pt-BR"),
+        openedBy: "Fernando Silva"
+      };
+      
+      const updatedCycle = {
+        ...existing,
+        status: "ABERTO" as const
+      };
+      
+      const updatedAll = {
+        ...prev,
+        [key]: updatedCycle
+      };
+      
+      const list = Object.values(updatedAll);
+      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
+      return updatedAll;
+    });
+
+    // Update active cycleState
+    const openedAtStamp = allCycles[key]?.openedAt || new Date().toLocaleDateString("pt-BR");
+    const nextState = {
+      activeMonth: month,
+      activeYear: year,
+      status: "ABERTO" as const,
+      openedAt: openedAtStamp,
+      openedBy: allCycles[key]?.openedBy || "Fernando Silva"
+    };
+    
+    localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(nextState));
+    setCycleState(nextState);
+
+    // Update selected session month & year
+    setActiveMonth(month);
+    setActiveYear(year);
+
+    // Try to load evaluations from storage specific key
+    const specificKey = `acandido_evaluations_${month}_${year}`;
+    const savedLocal = localStorage.getItem(specificKey);
+    let restoredBranches = null;
+
+    if (savedLocal) {
+      try {
+        const parsed = JSON.parse(savedLocal);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          restoredBranches = parsed;
+        }
+      } catch (e) {}
+    }
+
+    // Try constructing from history list
+    if (!restoredBranches) {
+      let historyList = [];
+      const savedHistory = localStorage.getItem("acandido_history");
+      if (savedHistory) {
+        try {
+          historyList = JSON.parse(savedHistory);
+        } catch (e) {}
+      }
+
+      const mKey = `${month} ${year}`;
+      const foundInHist = Array.isArray(historyList)
+        ? historyList.filter((item) => item.monthYear === mKey)
+        : [];
+
+      if (foundInHist.length > 0) {
+        restoredBranches = getCleanDefaultBranches().map((b) => {
+          const matchedItem = foundInHist.find((e) => e.branchId === b.id || e.branchName === b.name);
+          if (matchedItem && matchedItem.criteriaState) {
+            const criteriaWithScore = b.criteria.map((c) => {
+              const savedC = matchedItem.criteriaState.find((x: any) => x.id === c.id);
+              if (savedC) {
+                return {
+                  ...c,
+                  status: savedC.status || c.status,
+                  pointsObtained: savedC.pointsObtained !== undefined ? savedC.pointsObtained : (savedC.score !== undefined ? savedC.score : c.pointsObtained),
+                  notes: savedC.notes || c.notes,
+                  evidenceNotes: savedC.evidenceNotes || c.evidenceNotes,
+                  submittedPhotos: savedC.submittedPhotos || [],
+                  submittedAt: savedC.submittedAt,
+                  nokEvidenceLinks: savedC.nokEvidenceLinks || [],
+                  nokEvidenceLink: savedC.nokEvidenceLink,
+                  nokEvidenceDescription: savedC.nokEvidenceDescription
+                };
+              }
+              return c;
+            });
+
+            const { score, status, scoreCategory } = calculateDerivedMetrics(criteriaWithScore);
+
+            return {
+              ...b,
+              criteria: criteriaWithScore,
+              currentScore: score,
+              status,
+              scoreCategory
+            };
+          }
+          return b;
+        });
+      }
+    }
+
+    if (restoredBranches) {
+      localStorage.setItem("acandido_branches", JSON.stringify(restoredBranches));
+      localStorage.setItem(specificKey, JSON.stringify(restoredBranches));
+      setBranches(restoredBranches);
+    } else {
+      const cleanB = getCleanDefaultBranches();
+      localStorage.setItem("acandido_branches", JSON.stringify(cleanB));
+      localStorage.setItem(specificKey, JSON.stringify(cleanB));
+      setBranches(cleanB);
+    }
+
+    // Filter out of consolidation history
+    let historyList = [];
+    const savedHistory = localStorage.getItem("acandido_history");
+    if (savedHistory) {
+      try {
+        historyList = JSON.parse(savedHistory);
+        if (Array.isArray(historyList)) {
+          const filtered = historyList.filter((entry) => entry.monthYear !== `${month} ${year}`);
+          localStorage.setItem("acandido_history", JSON.stringify(filtered));
+        }
+      } catch (e) {}
+    }
+
+    // Sync state on Supabase if ready
+    if (isSupabaseReady()) {
+      dbSaveCycleState(nextState);
+    }
+
+    alert(`O ciclo de ${month}/${year} foi reaberto com sucesso! Todas as avaliações, pontuações e histórico de evidências anteriores foram restaurados.`);
   };
 
   const handleLogout = () => {
@@ -2178,6 +2334,8 @@ export default function App() {
                     onUpdateCycleState={handleUpdateCycleState}
                     onArchiveCycle={handleArchiveCycle}
                     user={user}
+                    allCycles={allCycles}
+                    onReopenCycle={handleReopenCycle}
                   />
                 )}
                 {adminTab === "RANKING" && (
