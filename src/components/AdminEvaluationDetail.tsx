@@ -2457,8 +2457,9 @@ export default function AdminEvaluationDetail({
                 Cancelar
               </button>
               {(() => {
+                const isInventario = selectedCriterion?.id === "1";
                 const hasAnyNokCollab = selectedCriterion?.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
-                const isNok = statusInput === "NOK" || hasAnyNokCollab;
+                const isNok = !isInventario && (statusInput === "NOK" || hasAnyNokCollab);
                 const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
 
                 const handleSaveClick = () => {
