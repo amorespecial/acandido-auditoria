@@ -617,179 +617,152 @@ export default function AdminEvaluationDetail({
       return;
     }
 
-    // Custom Save for TOP 10 (ID "2")
-    if (selectedCriterion.id === "2" && top10Config?.itens) {
-      const answers = top10Config.itens.map((item: any, idx: number) => {
-        const qtyAlmoxarife = selectedCriterion.top10AlmoxarifeQuantities?.[idx] ?? 0;
-        const qtyAuditorStr = top10AuditorQuantitiesInput[item.code] ?? "";
-        const qtyAuditor = qtyAuditorStr === "" ? 0 : Number(qtyAuditorStr);
-        return {
-          code: item.code,
-          qtyAlmoxarife,
-          qtyAuditor,
-          divergent: qtyAlmoxarife !== qtyAuditor || qtyAuditorStr === ""
-        };
-      });
+    try {
+      // Custom Save for TOP 10 (ID "2")
+      if (selectedCriterion.id === "2" && top10Config?.itens) {
+        const answers = top10Config.itens.map((item: any, idx: number) => {
+          const qtyAlmoxarife = selectedCriterion.top10AlmoxarifeQuantities?.[idx] ?? 0;
+          const qtyAuditorStr = top10AuditorQuantitiesInput[item.code] ?? "";
+          const qtyAuditor = qtyAuditorStr === "" ? 0 : Number(qtyAuditorStr);
+          return {
+            code: item.code,
+            qtyAlmoxarife,
+            qtyAuditor,
+            divergent: qtyAlmoxarife !== qtyAuditor || qtyAuditorStr === ""
+          };
+        });
 
-      const hasEmpty = top10Config.itens.some((item: any) => {
-        return top10AuditorQuantitiesInput[item.code] === undefined || top10AuditorQuantitiesInput[item.code] === "";
-      });
+        const hasEmpty = top10Config.itens.some((item: any) => {
+          return top10AuditorQuantitiesInput[item.code] === undefined || top10AuditorQuantitiesInput[item.code] === "";
+        });
 
-      if (hasEmpty) {
-        alert("Erro de Validação: Por favor, digite a 'Qtd Auditor' de todos os itens antes de salvar a avaliação.");
+        if (hasEmpty) {
+          alert("Erro de Validação: Por favor, digite a 'Qtd Auditor' de todos os itens antes de salvar a avaliação.");
+          return;
+        }
+
+        const anyNok = answers.some(a => a.divergent);
+        const computedStatus = anyNok ? "NOK" : "OK";
+
+        if (computedStatus === "NOK") {
+          const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
+          if (!isNokLinkValid) {
+            alert("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
+            return;
+          }
+        }
+
+        const finalQuantitiesList = top10Config.itens.map((item: any) => {
+          return Number(top10AuditorQuantitiesInput[item.code]) || 0;
+        });
+
+        const updated = branch.criteria.map((c) => {
+          if (c.id === "2") {
+            return {
+              ...c,
+              status: computedStatus as any,
+              pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
+              top10AuditorQuantities: finalQuantitiesList,
+              notes: notesInput,
+              nokEvidenceLink: computedStatus === "NOK" ? nokLink1Input.trim() : undefined,
+              nokEvidenceDescription: computedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+              nokEvidenceFileName: computedStatus === "NOK" ? "Link" : undefined,
+              nokEvidenceFileType: computedStatus === "NOK" ? "url" : undefined,
+              nokEvidenceFileData: computedStatus === "NOK" ? "" : undefined,
+              nokEvidenceLinks: computedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+            };
+          }
+          return c;
+        });
+
+        onUpdateCriteria(branch.id, updated);
+        setSelectedCriterion(null);
+        alert(`Avaliação do TOP 10 concluída com sucesso! Status Geral: ${computedStatus === "OK" ? "✓ CONFORME (OK)" : "❌ DIVERGENTE (NOK)"}`);
         return;
       }
 
-      const anyNok = answers.some(a => a.divergent);
-      const computedStatus = anyNok ? "NOK" : "OK";
+      // Custom Save for Inventário (ID "1")
+      if (selectedCriterion.id === "1") {
+        const missingLinkItem = branchCalendar.find(b => b.status === "NOK" && !b.nokEvidenceLink?.trim());
+        if (missingLinkItem) {
+          alert("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
+          return;
+        }
 
-      if (computedStatus === "NOK") {
+        const fullCalendar = calendarData || [];
+        const globalCalendar = fullCalendar.map(g => {
+          const match = branchCalendar.find(b => b.id === g.id);
+          if (match) {
+            return {
+              ...g,
+              status: match.status,
+              nokEvidenceLink: match.status === "NOK" ? (match.nokEvidenceLink || "").trim() : ""
+            };
+          }
+          return g;
+        });
+
+        await dbSaveSchedules(globalCalendar);
+
+        const okCount = branchCalendar.filter(b => b.status === "OK").length;
+        const totalCount = branchCalendar.length;
+        const pointsObtained = totalCount > 0 ? Math.round(((okCount / totalCount) * 20) / 5) * 5 : 0;
+        
+        let finalStatus = "PENDENTE";
+        if (totalCount > 0 && okCount === totalCount) finalStatus = "OK";
+        else if (totalCount > 0 && okCount === 0 && branchCalendar.some(b => b.status === "NOK")) finalStatus = "NOK";
+
+        const parentNokEvidenceLinks = branchCalendar
+          .filter(b => b.status === "NOK" && b.nokEvidenceLink?.trim())
+          .map(b => b.nokEvidenceLink.trim());
+        const parentNokEvidenceLink = parentNokEvidenceLinks[0] || undefined;
+
+        const updated = branch.criteria.map((c) => {
+          if (c.id === "1") {
+            return {
+              ...c,
+              status: finalStatus as any,
+              pointsObtained: pointsObtained,
+              notes: notesInput || `Média semestral: ${okCount} de ${totalCount} OK.`,
+              isAguardandoRealizacao: totalCount > 0 && branchCalendar.every(b => !b.status || b.status === "PENDENTE"),
+              nokEvidenceLink: parentNokEvidenceLink,
+              nokEvidenceDescription: parentNokEvidenceLink ? "Link de Evidência de Inconformidade do Inventário" : undefined,
+              nokEvidenceFileName: parentNokEvidenceLink ? "Link" : undefined,
+              nokEvidenceFileType: parentNokEvidenceLink ? "url" : undefined,
+              nokEvidenceFileData: parentNokEvidenceLink ? "" : undefined,
+              nokEvidenceLinks: parentNokEvidenceLinks.length > 0 ? parentNokEvidenceLinks : undefined
+            };
+          }
+          return c;
+        });
+
+        onUpdateCriteria(branch.id, updated);
+        setSelectedCriterion(null);
+        return;
+      }
+
+      // Critério 6 — Curso Unimobin
+      // Se algum colaborador ainda estiver "Aguardando envio", força NOK
+      const hasAnyNokCollab = selectedCriterion.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
+      const enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
+
+      if (enforcedStatus === "NOK") {
         const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
         if (!isNokLinkValid) {
-          alert("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
+          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
       }
 
-      // Prepare quantities to persist on CriterionState
-      const finalQuantitiesList = top10Config.itens.map((item: any) => {
-        return Number(top10AuditorQuantitiesInput[item.code]) || 0;
-      });
-
       const updated = branch.criteria.map((c) => {
-        if (c.id === "2") {
-          return {
-            ...c,
-            status: computedStatus as any,
-            pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
-            top10AuditorQuantities: finalQuantitiesList,
-            notes: notesInput,
-            nokEvidenceLink: computedStatus === "NOK" ? nokLink1Input.trim() : undefined,
-            nokEvidenceDescription: computedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-            nokEvidenceFileName: computedStatus === "NOK" ? "Link" : undefined,
-            nokEvidenceFileType: computedStatus === "NOK" ? "url" : undefined,
-            nokEvidenceFileData: computedStatus === "NOK" ? "" : undefined,
-            nokEvidenceLinks: computedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
-          };
-        }
-        return c;
-      });
-
-      onUpdateCriteria(branch.id, updated);
-      setSelectedCriterion(null);
-      alert(`Avaliação do TOP 10 concluída com sucesso! Status Geral: ${computedStatus === "OK" ? "✓ CONFORME (OK)" : "❌ DIVERGENTE (NOK)"}`);
-      return;
-    }
-
-    // Custom Save for Inventário (ID "1")
-    if (selectedCriterion.id === "1") {
-      // Validate that every Inventário item with NOK has a Link da Evidência
-      const missingLinkItem = branchCalendar.find(b => b.status === "NOK" && !b.nokEvidenceLink?.trim());
-      if (missingLinkItem) {
-        alert("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
-        return;
-      }
-
-      // Update global calendar state using Supabase
-      const fullCalendar = calendarData || [];
-      const globalCalendar = fullCalendar.map(g => {
-        const match = branchCalendar.find(b => b.id === g.id);
-        if (match) {
-          return { 
-            ...g, 
-            status: match.status,
-            nokEvidenceLink: match.status === "NOK" ? (match.nokEvidenceLink || "").trim() : ""
-          };
-        }
-        return g;
-      });
-
-      await dbSaveSchedules(globalCalendar);
-
-      const okCount = branchCalendar.filter(b => b.status === "OK").length;
-      const totalCount = branchCalendar.length;
-      const pointsObtained = Math.round(((okCount / totalCount) * 20) / 5) * 5;
-      let finalStatus = "PENDENTE";
-      if (okCount === totalCount) finalStatus = "OK";
-      else if (okCount === 0) finalStatus = "NOK";
-
-      const parentNokEvidenceLinks = branchCalendar
-        .filter(b => b.status === "NOK" && b.nokEvidenceLink?.trim())
-        .map(b => b.nokEvidenceLink.trim());
-      const parentNokEvidenceLink = parentNokEvidenceLinks[0] || undefined;
-
-      const updated = branch.criteria.map((c) => {
-        if (c.id === "1") {
-          return {
-            ...c,
-            status: finalStatus as any,
-            pointsObtained: pointsObtained,
-            notes: notesInput || `Média semestral: ${okCount} de ${totalCount} OK.`,
-            isAguardandoRealizacao: totalCount > 0 && branchCalendar.every(b => !b.status || b.status === "PENDENTE"),
-            nokEvidenceLink: parentNokEvidenceLink,
-            nokEvidenceDescription: parentNokEvidenceLink ? "Link de Evidência de Inconformidade do Inventário" : undefined,
-            nokEvidenceFileName: parentNokEvidenceLink ? "Link" : undefined,
-            nokEvidenceFileType: parentNokEvidenceLink ? "url" : undefined,
-            nokEvidenceFileData: parentNokEvidenceLink ? "" : undefined,
-            nokEvidenceLinks: parentNokEvidenceLinks.length > 0 ? parentNokEvidenceLinks : undefined
-          };
-        }
-        return c;
-      });
-
-      onUpdateCriteria(branch.id, updated);
-      setSelectedCriterion(null);
-      return;
-    }
-
-    // Automatic Unimobin NOK Rule: if any collaborator has pending status ("Aguardando envio"), entire criterion is forced to NOK
-    const hasAnyNokCollab = selectedCriterion.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
-    const enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
-
-    if (enforcedStatus === "NOK") {
-      const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
-      if (!isNokLinkValid) {
-        alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
-        return;
-      }
-    }
-
-    const updated = branch.criteria.map((c) => {
-      if (c.id === selectedCriterion.id) {
-        return {
-          ...c,
-          status: enforcedStatus,
-          pointsObtained: enforcedStatus === "OK" ? selectedCriterion.pointsPossible : 0,
-          notes: notesInput,
-          evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
-          submittedPhotos: selectedCriterion.auditMode === "Presencial" 
-            ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
-            : c.submittedPhotos,
-          submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
-          nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
-          nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
-          nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
-          nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
-          nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
-          nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
-        };
-      }
-      return c;
-    });
-
-    onUpdateCriteria(branch.id, updated);
-
-    const isShared = selectedCriterion.id === "10";
-    if (isShared && twinBranch) {
-      const twinUpdated = twinBranch.criteria.map((c) => {
         if (c.id === selectedCriterion.id) {
           return {
             ...c,
             status: enforcedStatus,
-            pointsObtained: enforcedStatus === "OK" ? c.pointsPossible : 0,
-            notes: notesInput ? (notesInput + ` (Avaliado na unidade par ${branch.name.replace("ALMOXARIFADO ", "")})`) : `Avaliado no almoxarifado par ${branch.name.replace("ALMOXARIFADO ", "")}.`,
+            pointsObtained: enforcedStatus === "OK" ? selectedCriterion.pointsPossible : 0,
+            notes: notesInput,
             evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
-            submittedPhotos: selectedCriterion.auditMode === "Presencial" 
+            submittedPhotos: selectedCriterion.auditMode === "Presencial"
               ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
               : c.submittedPhotos,
             submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
@@ -803,10 +776,45 @@ export default function AdminEvaluationDetail({
         }
         return c;
       });
-      onUpdateCriteria(twinBranch.id, twinUpdated);
-    }
 
-    setSelectedCriterion(null);
+      onUpdateCriteria(branch.id, updated);
+
+      // Critério 10 — Material sem movimentação: propaga para almoxarifado twin
+      const isShared = selectedCriterion.id === "10";
+      if (isShared && twinBranch) {
+        const twinUpdated = twinBranch.criteria.map((c) => {
+          if (c.id === selectedCriterion.id) {
+            return {
+              ...c,
+              status: enforcedStatus,
+              pointsObtained: enforcedStatus === "OK" ? c.pointsPossible : 0,
+              notes: notesInput
+                ? (notesInput + ` (Avaliado na unidade par ${branch.name.replace("ALMOXARIFADO ", "")})`)
+                : `Avaliado no almoxarifado par ${branch.name.replace("ALMOXARIFADO ", "")}.`,
+              evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
+              submittedPhotos: selectedCriterion.auditMode === "Presencial"
+                ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
+                : c.submittedPhotos,
+              submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
+              nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
+              nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+              nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
+              nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
+              nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
+              nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+            };
+          }
+          return c;
+        });
+        onUpdateCriteria(twinBranch.id, twinUpdated);
+      }
+
+      setSelectedCriterion(null);
+
+    } catch (error: any) {
+      console.error("[Erro ao Salvar Avaliação]", error);
+      alert("Erro ao salvar avaliação: " + (error.message || error));
+    }
   };
 
   const handleAuditorQtyChange = (itemCode: string, value: string, itemsList: any[]) => {
