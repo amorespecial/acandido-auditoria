@@ -56,9 +56,19 @@ try {
 export const supabase = supabaseInstance;
 
 // Global tracking to prevent self-update reload loops on Realtime events
-export const realtimeFlags = {
-  isLocalUpdate: false
-};
+export const realtimeFlags: {
+  isLocalUpdate: boolean;
+  activeLocalUpdatesCount: number;
+} = {
+  get isLocalUpdate() {
+    return (this as any)._isLocalUpdate || (this as any).activeLocalUpdatesCount > 0;
+  },
+  set isLocalUpdate(val: boolean) {
+    (this as any)._isLocalUpdate = val;
+  },
+  _isLocalUpdate: false,
+  activeLocalUpdatesCount: 0
+} as any;
 
 // Helper check to see if we have valid Supabase credentials
 export const isSupabaseReady = (): boolean => {

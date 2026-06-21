@@ -1442,9 +1442,22 @@ export default function App() {
 
           // Save evaluations to Supabase in the background
           if (isSupabaseReady()) {
-            finalCriteria.forEach((crit) => {
-              dbSaveEvaluation(b.name, activeMonth, activeYear, crit.id, crit.name, crit, user?.name || "Auditor");
-            });
+            (async () => {
+              try {
+                realtimeFlags.activeLocalUpdatesCount += finalCriteria.length;
+                await Promise.all(
+                  finalCriteria.map((crit) =>
+                    dbSaveEvaluation(b.name, activeMonth, activeYear, crit.id, crit.name, crit, user?.name || "Auditor")
+                  )
+                );
+              } catch (err) {
+                console.error("Error batch saving evaluations:", err);
+              } finally {
+                realtimeFlags.activeLocalUpdatesCount = Math.max(0, realtimeFlags.activeLocalUpdatesCount - finalCriteria.length);
+                // Force a single, clean database fetch once all writes have completed on Supabase
+                setRefetchTrigger((prev) => prev + 1);
+              }
+            })();
           }
 
           return {
@@ -2169,7 +2182,7 @@ export default function App() {
             {selectedBranchId ? (
               <AdminEvaluationDetail
                 branch={rawSelectedBranch}
-                allBranches={processedBranches}
+                allBranches={branches}
                 onBack={() => setSelectedBranchId(null)}
                 onUpdateCriteria={handleUpdateCriteria}
                 isSemestralMonth={activeMonth.toLowerCase() === "janeiro" || activeMonth.toLowerCase() === "julho"}
