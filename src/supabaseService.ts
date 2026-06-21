@@ -124,36 +124,36 @@ export const seedDatabaseIfEmpty = async () => {
     if (!calError && (!existingCal || existingCal.length === 0)) {
       console.log("Seeding 2026 inventory schedule table ('calendario_inventarios')...");
       const CALENDAR_ENTRIES_2026 = [
-        { almoxarifado_id:"unitrans-jp", ano:2026, semestre:1, data_agendada:"2026-06-26", status: "PENDENTE" },
-        { almoxarifado_id:"unitrans-jp", ano:2026, semestre:2, data_agendada:"2026-11-27", status: "PENDENTE" },
-        { almoxarifado_id:"santa-maria-jp", ano:2026, semestre:1, data_agendada:"2026-06-26", status: "PENDENTE" },
-        { almoxarifado_id:"santa-maria-jp", ano:2026, semestre:2, data_agendada:"2026-11-27", status: "PENDENTE" },
-        { almoxarifado_id:"expresso-nacional", ano:2026, semestre:1, data_agendada:"2026-01-17", status: "PENDENTE" },
-        { almoxarifado_id:"expresso-nacional", ano:2026, semestre:2, data_agendada:"2026-07-18", status: "PENDENTE" },
-        { almoxarifado_id:"acandido-cg", ano:2026, semestre:1, data_agendada:"2026-01-17", status: "PENDENTE" },
-        { almoxarifado_id:"acandido-cg", ano:2026, semestre:2, data_agendada:"2026-07-18", status: "PENDENTE" },
-        { almoxarifado_id:"trans-cg-bayeux", ano:2026, semestre:1, data_agendada:"2026-02-10", status: "PENDENTE" },
-        { almoxarifado_id:"trans-cg-bayeux", ano:2026, semestre:2, data_agendada:"2026-08-12", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-cabedelo", ano:2026, semestre:1, data_agendada:"2026-02-10", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-cabedelo", ano:2026, semestre:2, data_agendada:"2026-08-12", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-maracanau", ano:2026, semestre:1, data_agendada:"2026-06-09", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-maracanau", ano:2026, semestre:2, data_agendada:"2026-11-10", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-fortaleza", ano:2026, semestre:1, data_agendada:"2026-06-09", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-fortaleza", ano:2026, semestre:2, data_agendada:"2026-11-10", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-goiana", ano:2026, semestre:1, data_agendada:"2026-05-16", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-goiana", ano:2026, semestre:2, data_agendada:"2026-10-31", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-pb", ano:2026, semestre:1, data_agendada:"2026-03-03", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-pb", ano:2026, semestre:2, data_agendada:"2026-09-23", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-jaboatao", ano:2026, semestre:1, data_agendada:"2026-04-24", status: "PENDENTE" },
-        { almoxarifado_id:"fretamento-jaboatao", ano:2026, semestre:2, data_agendada:"2026-10-16", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-jaboatao", ano:2026, semestre:1, data_agendada:"2026-04-24", status: "PENDENTE" },
-        { almoxarifado_id:"rodoviario-jaboatao", ano:2026, semestre:2, data_agendada:"2026-10-16", status: "PENDENTE" },
-        { almoxarifado_id:"reunidas-nat", ano:2026, semestre:1, data_agendada:"2026-03-07", status: "PENDENTE" },
-        { almoxarifado_id:"reunidas-nat", ano:2026, semestre:2, data_agendada:"2026-09-26", status: "PENDENTE" },
-        { almoxarifado_id:"unissana-rn", ano:2026, semestre:1, data_agendada:"2026-03-06", status: "PENDENTE" },
-        { almoxarifado_id:"unissana-rn", ano:2026, semestre:2, data_agendada:"2026-09-25", status: "PENDENTE" }
+        { almoxarifado: "unitrans-jp", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "unitrans-jp", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "santa-maria-jp", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-26", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "santa-maria-jp", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-27", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "expresso-nacional", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "expresso-nacional", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-18", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "acandido-cg", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-01-17", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "acandido-cg", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-07-18", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "trans-cg-bayeux", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "trans-cg-bayeux", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-12", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-cabedelo", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-02-10", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-cabedelo", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-08-12", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-maracanau", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-09", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-maracanau", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-10", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-fortaleza", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-06-09", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-fortaleza", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-11-10", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-goiana", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-05-16", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-goiana", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-31", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-pb", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-03", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-pb", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-23", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-jaboatao", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-04-24", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "fretamento-jaboatao", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-16", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-jaboatao", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-04-24", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "rodoviario-jaboatao", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-10-16", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "reunidas-nat", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-07", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "reunidas-nat", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-26", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "unissana-rn", ano: 2026, semestre: 1, indice: 1, data_agendada: "2026-03-06", status: "PENDENTE", sequencia: "#1" },
+        { almoxarifado: "unissana-rn", ano: 2026, semestre: 2, indice: 1, data_agendada: "2026-09-25", status: "PENDENTE", sequencia: "#1" }
       ];
-      await supabase.from('calendario_inventarios').upsert(CALENDAR_ENTRIES_2026, { onConflict: 'almoxarifado_id,ano,semestre' });
+      await supabase.from('calendario_inventarios').upsert(CALENDAR_ENTRIES_2026, { onConflict: 'almoxarifado,ano,semestre,indice' });
     }
   } catch (e) {
     console.error("Auto seeding exception:", e);
@@ -562,23 +562,25 @@ export const dbFetchSchedules = async (): Promise<any[]> => {
     return [];
   }
 
-  const { data, error } = await supabase.from('calendario_inventarios').select('*').order('updated_at', { ascending: true });
+  const { data, error } = await supabase.from('calendario_inventarios').select('*').order('id', { ascending: true });
   if (error || !data) {
     return [];
   }
 
   return data.map(item => {
-    const bId = item.almoxarifado_id || "";
+    const bId = item.almoxarifado || "";
+    const idx = Number(item.indice || 1);
     return {
-      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}`,
+      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}-${idx}`,
       branchId: bId,
       almoxarifado_id: bId,
       almoxarifado: bId,
       ano: Number(item.ano || 2026),
       semestre: Number(item.semestre || 1),
+      indice: idx,
       data_agendada: item.data_agendada || "",
       status: item.status || "PENDENTE",
-      nokEvidenceLink: item.nok_evidence_link || ""
+      nokEvidenceLink: item.nokEvidenceLink || ""
     };
   });
 };
@@ -593,16 +595,18 @@ export const dbSaveSchedules = async (schedules: any[], forceYear?: number) => {
       if (!bId) continue;
       const yr = forceYear || Number(item.ano || 2026);
       const sem = Number(item.semestre || 1);
+      const ind = Number(item.indice || 1);
 
       await supabase.from('calendario_inventarios').upsert({
-        almoxarifado_id: bId,
+        almoxarifado: bId,
         ano: yr,
         semestre: sem,
+        indice: ind,
         data_agendada: item.data_agendada || null,
         status: item.status || "PENDENTE",
-        nok_evidence_link: item.nokEvidenceLink || null,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'almoxarifado_id,ano,semestre' });
+        nokEvidenceLink: item.nokEvidenceLink || null,
+        sequencia: item.sequencia || `#${ind}`
+      }, { onConflict: 'almoxarifado,ano,semestre,indice' });
     }
   } finally {
     realtimeFlags.isLocalUpdate = false;
@@ -612,7 +616,7 @@ export const dbSaveSchedules = async (schedules: any[], forceYear?: number) => {
 export const dbFetchBranchSchedules = async (branchId: string, options?: { ano?: number; semestre?: number }): Promise<any[]> => {
   if (!isSupabaseReady()) return [];
 
-  let query = supabase.from('calendario_inventarios').select('*').eq('almoxarifado_id', branchId);
+  let query = supabase.from('calendario_inventarios').select('*').eq('almoxarifado', branchId);
   if (options?.ano) query = query.eq('ano', options.ano);
   if (options?.semestre) query = query.eq('semestre', options.semestre);
 
@@ -620,17 +624,19 @@ export const dbFetchBranchSchedules = async (branchId: string, options?: { ano?:
   if (error || !data) return [];
 
   return data.map(item => {
-    const bId = item.almoxarifado_id || "";
+    const bId = item.almoxarifado || "";
+    const idx = Number(item.indice || 1);
     return {
-      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}`,
+      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}-${idx}`,
       branchId: bId,
       almoxarifado_id: bId,
       almoxarifado: bId,
       ano: Number(item.ano || 2026),
       semestre: Number(item.semestre || 1),
+      indice: idx,
       data_agendada: item.data_agendada || "",
       status: item.status || "PENDENTE",
-      nokEvidenceLink: item.nok_evidence_link || ""
+      nokEvidenceLink: item.nokEvidenceLink || ""
     };
   });
 };
@@ -640,16 +646,20 @@ export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string) 
   try {
     realtimeFlags.isLocalUpdate = true;
     const bId = item.branchId || item.almoxarifado_id || item.almoxarifado || "";
+    const yr = Number(item.ano || 2026);
+    const sem = Number(item.semestre || 1);
+    const ind = Number(item.indice || 1);
     const record = {
-      almoxarifado_id: bId,
-      ano: Number(item.ano || 2026),
-      semestre: Number(item.semestre || 1),
+      almoxarifado: bId,
+      ano: yr,
+      semestre: sem,
+      indice: ind,
       data_agendada: item.data_agendada || item.data || null,
       status: item.status || "PENDENTE",
-      nok_evidence_link: item.nokEvidenceLink || null,
-      updated_at: new Date().toISOString()
+      nokEvidenceLink: item.nokEvidenceLink || null,
+      sequencia: item.sequencia || `#${ind}`
     };
-    await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'almoxarifado_id,ano,semestre' });
+    await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'almoxarifado,ano,semestre,indice' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
