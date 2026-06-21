@@ -351,36 +351,60 @@ export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
 
 // ======================= CRITERIA EVALUATIONS (avaliacoes) =======================
 export async function dbSalvarAvaliacao(avaliacao: {
-  almoxarifado_id: string, mes: string, ano: string,
+  almoxarifado_id: string, mes: string | number, ano: string | number,
   criterio_id: string, criterio_nome: string, status: string,
   pontos_obtidos: number, pontos_possiveis: number,
   notes?: string, nok_link1?: string, nok_link2?: string,
   nok_link3?: string, nok_descricao?: string, avaliado_por?: string
 }) {
+  const mesNum = typeof avaliacao.mes === "string" ? monthNameToNum(avaliacao.mes) : avaliacao.mes;
+  const anoNum = typeof avaliacao.ano === "string" ? parseInt(avaliacao.ano) : avaliacao.ano;
+  const links = [avaliacao.nok_link1, avaliacao.nok_link2, avaliacao.nok_link3].filter(Boolean) as string[];
+
   const { error } = await supabase
     .from('avaliacoes')
-    .upsert({ ...avaliacao, avaliado_em: new Date().toISOString(), updated_at: new Date().toISOString() },
-      { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
+    .upsert({
+      almoxarifado: avaliacao.almoxarifado_id,
+      mes: mesNum,
+      ano: anoNum,
+      criterio_codigo: avaliacao.criterio_id,
+      criterio_nome: avaliacao.criterio_nome,
+      resultado: avaliacao.status,
+      pontuacao: avaliacao.pontos_obtidos,
+      descricao_evidencia: avaliacao.nok_descricao || avaliacao.notes || "",
+      links_evidencia: links,
+      avaliado_por: avaliacao.avaliado_por || "Fernando Silva",
+      avaliado_em: new Date().toISOString()
+    }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+
   if (error) throw error;
 }
 
-export async function dbBuscarAvaliacoes(almoxarifado_id: string, mes: string, ano: string) {
+export async function dbBuscarAvaliacoes(almoxarifado_id: string, mes: string | number, ano: string | number) {
+  const mesNum = typeof mes === "string" ? monthNameToNum(mes) : mes;
+  const anoNum = typeof ano === "string" ? parseInt(ano) : ano;
+
   const { data, error } = await supabase
     .from('avaliacoes')
     .select('*')
-    .eq('almoxarifado_id', almoxarifado_id)
-    .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('almoxarifado', almoxarifado_id)
+    .eq('mes', mesNum)
+    .eq('ano', anoNum);
+
   if (error) throw error;
   return data || [];
 }
 
-export async function dbBuscarTodasAvaliacoes(mes: string, ano: string) {
+export async function dbBuscarTodasAvaliacoes(mes: string | number, ano: string | number) {
+  const mesNum = typeof mes === "string" ? monthNameToNum(mes) : mes;
+  const anoNum = typeof ano === "string" ? parseInt(ano) : ano;
+
   const { data, error } = await supabase
     .from('avaliacoes')
     .select('*')
-    .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('mes', mesNum)
+    .eq('ano', anoNum);
+
   if (error) throw error;
   return data || [];
 }
@@ -390,12 +414,15 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     return {};
   }
 
+  const mesNum = monthNameToNum(mesName);
+  const anoNum = parseInt(anoStr);
+
   const { data, error } = await supabase
     .from('avaliacoes')
     .select('*')
-    .eq('almoxarifado_id', almoxarifado)
-    .eq('mes', mesName)
-    .eq('ano', anoStr);
+    .eq('almoxarifado', almoxarifado)
+    .eq('mes', mesNum)
+    .eq('ano', anoNum);
 
   if (error || !data) {
     return {};
@@ -403,15 +430,15 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
 
   const mapped: Record<string, Partial<CriterionState>> = {};
   data.forEach(row => {
-    const links = [row.nok_link1, row.nok_link2, row.nok_link3].filter(Boolean) as string[];
-    mapped[row.criterio_id] = {
-      status: row.status as EvaluationStatus,
-      pointsObtained: row.pontos_obtidos ?? 0,
-      pointsPossible: row.pontos_possiveis ?? 20,
-      notes: row.notes || row.nok_descricao || "",
-      evidenceNotes: row.nok_descricao || row.notes || "",
+    const links = Array.isArray(row.links_evidencia) ? row.links_evidencia : [];
+    mapped[row.criterio_codigo] = {
+      status: (row.resultado || "PENDENTE") as EvaluationStatus,
+      pointsObtained: row.pontuacao ?? 0,
+      pointsPossible: ["7", "8", "9", "10"].includes(row.criterio_codigo) ? 5 : 20,
+      notes: row.descricao_evidencia || "",
+      evidenceNotes: row.descricao_evidencia || "",
       nokEvidenceLinks: links,
-      auditMode: row.audit_mode
+      auditMode: "A_Distancia"
     };
   });
   return mapped;
@@ -444,29 +471,24 @@ export const dbSaveEvaluation = async (
     }
   }
 
-  const maxPoints = evaluation.pointsPossible ?? 20;
+  const mesNum = monthNameToNum(mesName);
+  const anoNum = parseInt(anoStr);
 
   try {
     realtimeFlags.isLocalUpdate = true;
     await supabase.from('avaliacoes').upsert({
-      almoxarifado_id: almoxarifado,
-      mes: mesName,
-      ano: anoStr,
-      criterio_id: criterionId,
+      almoxarifado: almoxarifado,
+      mes: mesNum,
+      ano: anoNum,
+      criterio_codigo: criterionId,
       criterio_nome: criterionName,
-      status: evaluation.status || "PENDENTE",
-      pontos_obtidos: evaluation.pointsObtained ?? 0,
-      pontos_possiveis: maxPoints,
-      audit_mode: evaluation.auditMode || "A_Distancia",
-      notes: evaluation.notes || "",
-      nok_descricao: evaluation.evidenceNotes || "",
-      nok_link1: finalLinks[0] || null,
-      nok_link2: finalLinks[1] || null,
-      nok_link3: finalLinks[2] || null,
+      resultado: evaluation.status || "PENDENTE",
+      pontuacao: evaluation.pointsObtained ?? 0,
+      descricao_evidencia: evaluation.evidenceNotes || evaluation.notes || "",
+      links_evidencia: finalLinks,
       avaliado_por: evaluatedBy,
-      avaliado_em: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
+      avaliado_em: new Date().toISOString()
+    }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
