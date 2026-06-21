@@ -99,8 +99,10 @@ export const seedDatabaseIfEmpty = async () => {
   }
 
   try {
-    const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('id').limit(1);
-    if (usersError || !existingUsers || existingUsers.length === 0) {
+    const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('email');
+    const hasFernando = existingUsers && existingUsers.some(u => u.email.toLowerCase().trim() === "estoque01jp@gmail.com");
+    
+    if (usersError || !existingUsers || existingUsers.length < OFFICIAL_CREDENTIALS.length || !hasFernando) {
       console.log("Seeding system users table ('usuarios') with complete profiles...");
       const usersToInsert = OFFICIAL_CREDENTIALS.map(u => ({
         nome: u.name,

@@ -156,9 +156,13 @@ export default function Login({ onLogin }: LoginProps) {
     setIsLoading(true);
     setErrorMsg("");
 
+    console.log("=== DEBUG LOGIN ===");
+    console.log("Email digitado:", email);
+    console.log("Senha digitada:", password);
+
     try {
       // Dynamic loading/validation of database users
-      let currentUsersList: any[] = OFFICIAL_CREDENTIALS;
+      let currentUsersList: any[] = [];
       if (isSupabaseReady()) {
         try {
           const dbUsers = await dbFetchUsers();
@@ -166,55 +170,68 @@ export default function Login({ onLogin }: LoginProps) {
             currentUsersList = dbUsers;
           }
         } catch (dbErr) {
-          console.warn("Could not sync users from db on login, using local storage/fallback:", dbErr);
-          const saved = localStorage.getItem("acandido_users");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              currentUsersList = parsed;
-            }
-          }
-        }
-      } else {
-        const saved = localStorage.getItem("acandido_users");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            currentUsersList = parsed;
-          }
+          console.error("Erro ao buscar usuários do banco:", dbErr);
         }
       }
 
+      // Se não trouxe nenhum usuário do banco, usa OFFICIAL_CREDENTIALS direto
+      if (!currentUsersList || currentUsersList.length === 0) {
+        console.warn("Banco vazio ou inacessível — usando credenciais oficiais locais");
+        currentUsersList = OFFICIAL_CREDENTIALS;
+      }
+
+      console.log("Usuários carregados do banco / fallback:", currentUsersList.length);
+      console.log("Lista de emails carregada:", currentUsersList.map(u => u.email));
+
+      // Busca por email (case insensitive, sem espaços)
       const matchedUser = currentUsersList.find(
-        (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password
+        (u) => u.email.toLowerCase().trim() === email.toLowerCase().trim()
       );
 
-      if (matchedUser) {
-        if (matchedUser.status === "SUSPENSO") {
-          setErrorMsg("Acesso suspenso. Entre em contato com o auditor Fernando Silva.");
-          setIsLoading(false);
-          return;
-        }
+      console.log("Usuário encontrado pelo email:", matchedUser ? "SIM" : "NÃO");
 
-        // Clean up any stale data, cache or sessions from previous users on login
-        try {
-          localStorage.clear();
-          sessionStorage.clear();
-        } catch (e) {
-          console.error("Failed to clear local/session storage on login:", e);
-        }
-
-        onLogin({
-          name: matchedUser.name,
-          role: matchedUser.role,
-          email: matchedUser.email,
-          ownerName: matchedUser.ownerName || matchedUser.name.split(" ")[0],
-          group: matchedUser.group || "A",
-          almoxarifados: matchedUser.almoxarifados || []
-        });
-      } else {
-        setErrorMsg("E-mail ou senha incorretos.");
+      if (!matchedUser) {
+        setErrorMsg("E-mail não encontrado no sistema.");
+        setIsLoading(false);
+        return;
       }
+
+      console.log("Senha no banco / fallback:", matchedUser.password);
+      console.log("Senha digitada:", password);
+      console.log("Senhas conferem:", matchedUser.password === password);
+
+      // Compara senha
+      if (matchedUser.password !== password) {
+        setErrorMsg("Senha incorreta.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (matchedUser.status === "SUSPENSO") {
+        setErrorMsg("Acesso suspenso. Entre em contato com o auditor Fernando Silva.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Clean up any stale data, cache or sessions from previous users on login
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (errClear) {
+        console.error("Failed to clear local/session storage on login:", errClear);
+      }
+
+      // Login OK
+      const finalUserPayload = {
+        name: matchedUser.name,
+        role: matchedUser.role,
+        email: matchedUser.email,
+        ownerName: matchedUser.ownerName || matchedUser.name.split(" ")[0],
+        group: matchedUser.group || "A",
+        almoxarifados: matchedUser.almoxarifados || []
+      };
+
+      onLogin(finalUserPayload);
     } catch (err) {
       console.error("Login verification exception:", err);
       setErrorMsg("Ocorreu um erro ao realizar o login.");
