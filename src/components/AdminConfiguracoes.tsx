@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
-import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules } from "../supabaseService";
+import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules, dbFetchOccurrences, dbSaveOccurrences } from "../supabaseService";
 import { supabase } from "../supabaseClient";
 
 const ALMOXARIFADOS_LIST = [
@@ -1114,24 +1114,46 @@ export default function AdminConfiguracoes({
     }
 
     // 4. Cascade rename inside supervisor occurrences list
-    const savedOccs = localStorage.getItem("acandido_occurrences");
-    if (savedOccs) {
+    let occurrencesList: any[] = [];
+    if (isSupabaseReady()) {
       try {
-        const occs = JSON.parse(savedOccs);
-        const updatedO = occs.map((o: any) => {
+        occurrencesList = await dbFetchOccurrences();
+      } catch (err) {
+        console.error("Failed to fetch occurrences for cascade rename in AdminConfiguracoes:", err);
+      }
+    }
+    if (!occurrencesList || occurrencesList.length === 0) {
+      const savedOccs = localStorage.getItem("acandido_occurrences");
+      if (savedOccs) {
+        try {
+          occurrencesList = JSON.parse(savedOccs);
+        } catch (e) {}
+      }
+    }
+
+    if (occurrencesList && occurrencesList.length > 0) {
+      try {
+        const updatedO = occurrencesList.map((o: any) => {
           let updatedItem = { ...o };
-          let changed = false;
-          if (o.branchName && o.branchName.toLowerCase() === oldName.toLowerCase()) {
+          if (o.branchName?.toLowerCase() === oldName.toLowerCase()) {
             updatedItem.branchName = newName;
-            changed = true;
           }
-          if (o.filial && o.filial.toLowerCase() === oldName.toLowerCase()) {
+          if (o.filial?.toLowerCase() === oldName.toLowerCase()) {
             updatedItem.filial = newName;
-            changed = true;
+          }
+          if (o.branchId?.toLowerCase() === oldName.toLowerCase()) {
+            updatedItem.branchId = newName;
           }
           return updatedItem;
         });
         localStorage.setItem("acandido_occurrences", JSON.stringify(updatedO));
+        if (isSupabaseReady()) {
+          try {
+            await dbSaveOccurrences(updatedO);
+          } catch (e) {
+            console.error("Failed to save updated occurrences on rename:", e);
+          }
+        }
       } catch (e) {}
     }
 

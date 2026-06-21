@@ -319,35 +319,35 @@ export default function AlmoxarifeHome({
                           return (
                             <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs flex flex-col gap-1.5">
                               <div className="flex items-center justify-between">
-                                  <div>
-                                    <span className="text-[10px] font-extrabold text-slate-600 block">
-                                      Inventário Semestral #{idx + 1}
-                                    </span>
-                                    <span className={dateFormatted === "Não agendado" ? "text-[10px] text-rose-500 font-bold block mt-0.5" : "text-[9px] text-slate-400 font-mono block"}>
-                                      Agendado: {dateFormatted}
-                                    </span>
-                                  </div>
-                                  <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
-                                    {itemStatus}
+                                <div>
+                                  <span className="text-[10px] font-extrabold text-slate-600 block">
+                                    Inventário Semestral #{idx + 1}
+                                  </span>
+                                  <span className={dateFormatted === "Não agendado" ? "text-[10px] text-rose-500 font-bold block mt-0.5" : "text-[9px] text-slate-400 font-mono block"}>
+                                    Agendado: {dateFormatted}
                                   </span>
                                 </div>
+                                <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider border font-black leading-none ${badgeColor}`}>
+                                  {itemStatus}
+                                </span>
+                              </div>
 
-                                {itemStatus === "NOK" && item.nokEvidenceLink && (
-                                  <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
-                                    <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
-                                      <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>
-                                      <span>Evidência da Inconformidade:</span>
-                                    </div>
-                                    <a
-                                      href={item.nokEvidenceLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-indigo-600 hover:text-[#1B2A4A] hover:underline font-black truncate max-w-full block"
-                                    >
-                                      {item.nokEvidenceLink} ↗
-                                    </a>
+                              {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
+                                  <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
+                                    <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>
+                                    <span>Evidência da Inconformidade:</span>
                                   </div>
-                                )}
+                                  <a
+                                    href={item.nokEvidenceLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 hover:text-[#1B2A4A] hover:underline font-black truncate max-w-full block"
+                                  >
+                                    {item.nokEvidenceLink} ↗
+                                  </a>
+                                </div>
+                              )}
                             </div>
                           );
                         })

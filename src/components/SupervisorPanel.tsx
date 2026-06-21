@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, MaterialOccurrence, AppUser } from "../types";
 import { initialOccurrences } from "../mockData";
+import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady } from "../supabaseService";
 
 interface SupervisorPanelProps {
   user: AppUser;
@@ -88,6 +89,30 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
     };
   }, []);
 
+  // Handle Supabase Realtime and Initial Load for Supervisor
+  useEffect(() => {
+    const loadFromDb = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbOccs = await dbFetchOccurrences();
+          if (dbOccs && dbOccs.length > 0) {
+            setOccurrences(dbOccs);
+            localStorage.setItem("acandido_occurrences", JSON.stringify(dbOccs));
+            window.dispatchEvent(new Event("storage"));
+          }
+        } catch (e) {
+          console.error("Failed to fetch occurrences from Supabase in SupervisorPanel:", e);
+        }
+      }
+    };
+    loadFromDb();
+
+    window.addEventListener("realtime-nivel-servico-update", loadFromDb);
+    return () => {
+      window.removeEventListener("realtime-nivel-servico-update", loadFromDb);
+    };
+  }, []);
+
   // Form states
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [targetBranchId, setTargetBranchId] = useState("fretamento-jaboatao");
@@ -96,9 +121,17 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
   const [temporalSearchDate, setTemporalSearchDate] = useState(""); // empty means no filter
   const [temporalMonth, setTemporalMonth] = useState<string>(getCurrentMonthName());
 
-  const saveOccurrences = (updated: MaterialOccurrence[]) => {
+  const saveOccurrences = async (updated: MaterialOccurrence[]) => {
     setOccurrences(updated);
     localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveOccurrences(updated);
+      } catch (err) {
+        console.error("Failed to save occurrences in Supabase:", err);
+      }
+    }
+    window.dispatchEvent(new Event("storage"));
   };
 
   const handleSendForm = (e: React.FormEvent) => {

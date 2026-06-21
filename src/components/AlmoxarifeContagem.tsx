@@ -30,10 +30,11 @@ export default function AlmoxarifeContagem({
   activeMonth,
   activeYear
 }: AlmoxarifeContagemProps) {
-  const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
+  const [monthlyConfig, setMonthlyConfig] = useState<any>(null);
 
   // 1. Fetch monthly top 10 configurations from database on mount/change
   useEffect(() => {
+    let active = true;
     const loadConfig = async () => {
       try {
         if (branchId && isSupabaseReady()) {
@@ -42,10 +43,8 @@ export default function AlmoxarifeContagem({
             activeMonth,
             activeYear
           );
-          if (remoteConfig?.itens) {
-            const key = `acandido_top10_config_${branchId}_${activeMonth}_${activeYear}`;
-            localStorage.setItem(key, JSON.stringify({ itens: remoteConfig.itens }));
-            setTop10ConfigUpdatedCount((prev) => prev + 1);
+          if (remoteConfig?.itens && active) {
+            setMonthlyConfig(remoteConfig);
           }
         }
       } catch (error) {
@@ -53,23 +52,10 @@ export default function AlmoxarifeContagem({
       }
     };
     loadConfig();
+    return () => {
+      active = false;
+    };
   }, [branchId, activeMonth, activeYear]);
-
-  const monthlyConfig = (() => {
-    const _dummy = top10ConfigUpdatedCount;
-    if (!branchId) return null;
-    const key = `acandido_top10_config_${branchId}_${activeMonth}_${activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed?.itens && Array.isArray(parsed.itens)) {
-          return parsed;
-        }
-      } catch (e) {}
-    }
-    return null;
-  })();
 
   const items = monthlyConfig?.itens || top10?.map(it => ({
     code: it.code,

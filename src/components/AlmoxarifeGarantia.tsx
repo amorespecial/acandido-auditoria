@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties } from "../supabaseService";
 
 interface AlmoxarifeGarantiaProps {
   onBack: () => void;
@@ -85,6 +86,28 @@ export default function AlmoxarifeGarantia({
     const saved = localStorage.getItem("acandido_warranties");
     return saved ? JSON.parse(saved) : initialWarranties;
   });
+
+  useEffect(() => {
+    const loadWarrantiesData = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbData = await dbFetchWarranties();
+          if (dbData && dbData.length > 0) {
+            setWarranties(dbData);
+            localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
+          }
+        } catch (e) {
+          console.error("Error fetching warranties from Supabase in AlmoxarifeGarantia:", e);
+        }
+      }
+    };
+    loadWarrantiesData();
+
+    window.addEventListener("realtime-garantias-update", loadWarrantiesData);
+    return () => {
+      window.removeEventListener("realtime-garantias-update", loadWarrantiesData);
+    };
+  }, []);
 
   const [garantiaConfig, setGarantiaConfig] = useState(() => {
     try {
@@ -187,6 +210,11 @@ export default function AlmoxarifeGarantia({
   const persistChange = (updated: WarrantyItem[]) => {
     setWarranties(updated);
     localStorage.setItem("acandido_warranties", JSON.stringify(updated));
+    if (isSupabaseReady()) {
+      dbSaveWarranties(updated).catch((err) => {
+        console.error("Error saving warranties to Supabase in AlmoxarifeGarantia:", err);
+      });
+    }
   };
 
   const handleOpenAdd = () => {

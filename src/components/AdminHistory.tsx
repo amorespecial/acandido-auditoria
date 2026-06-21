@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { jsPDF } from "jspdf";
 import { initialHistory } from "../mockData";
 import { AuditHistoryEntry, AppUser, Branch, CriterionState } from "../types";
+import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
 
 interface AdminHistoryProps {
   user: AppUser;
@@ -273,7 +274,7 @@ const getScheduledInventoryDate = (branchName: string, monthYear: string, branch
   return sem === 1 ? "26/06/2026" : "27/11/2026";
 };
 
-const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
+const getHistoryForBranch = (bId: string, historyList: any[]): AuditHistoryEntry[] => {
   const monthlyScoresMap: Record<string, number[]> = {
     "unitrans-jp": [],
     "santa-maria-jp": [],
@@ -291,22 +292,7 @@ const getHistoryForBranch = (bId: string): AuditHistoryEntry[] => {
     "rodoviario-fortaleza": [],
   };
 
-  let savedEntries: any[] = [];
-  if (typeof window !== "undefined" && window.localStorage) {
-    const saved = localStorage.getItem("acandido_history");
-    if (saved) {
-      try {
-        savedEntries = JSON.parse(saved);
-        if (!Array.isArray(savedEntries)) {
-          savedEntries = [];
-        } else {
-          savedEntries = savedEntries.filter((h: any) => h.monthYear);
-        }
-      } catch (e) {
-        savedEntries = [];
-      }
-    }
-  }
+  const savedEntries = Array.isArray(historyList) ? historyList.filter((h: any) => h.monthYear) : [];
 
   // Filter real entries that belong to this branch
   const realBranchEntries = savedEntries.filter((e) => e.branchId === bId);
@@ -365,6 +351,40 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
   const [editedSummaries, setEditedSummaries] = useState<Record<string, string>>({});
   const [editedConclusions, setEditedConclusions] = useState<Record<string, string>>({});
 
+  const [rawHistoryList, setRawHistoryList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadAdminHist = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbHistory = await dbFetchHistory();
+          if (dbHistory) {
+            setRawHistoryList(dbHistory);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to load history list in AdminHistory:", e);
+        }
+      }
+      // Fallback
+      try {
+        const saved = localStorage.getItem("acandido_history");
+        if (saved) {
+          setRawHistoryList(JSON.parse(saved));
+        }
+      } catch (e) {
+        setRawHistoryList([]);
+      }
+    };
+    loadAdminHist();
+    window.addEventListener("realtime-historico-update", loadAdminHist);
+    window.addEventListener("storage", loadAdminHist);
+    return () => {
+      window.removeEventListener("realtime-historico-update", loadAdminHist);
+      window.removeEventListener("storage", loadAdminHist);
+    };
+  }, []);
+
   const [historyList, setHistoryList] = useState<AuditHistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
   const [selectedEntry, setSelectedEntry] = useState<AuditHistoryEntry | null>(null);
@@ -377,10 +397,10 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
     // Simulate async database/network search
     await new Promise((resolve) => setTimeout(resolve, 600));
 
-    const data = getHistoryForBranch(almoxarifadoId);
+    const data = getHistoryForBranch(almoxarifadoId, rawHistoryList);
     setHistoryList(data);
     setIsHistoryLoading(false);
-  }, []);
+  }, [rawHistoryList]);
 
   useEffect(() => {
     if (selectedBranchId) {
@@ -598,7 +618,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
       .filter((b) => b.group === activeBranch.group)
       .map((b) => ({
         id: b.id,
-        semestralScore: getHistoryForBranch(b.id).reduce((sum, h) => {
+        semestralScore: getHistoryForBranch(b.id, rawHistoryList).reduce((sum, h) => {
           return sum + getCriteriaForHistory(h.score, h.nokItems, h.criteriaState).reduce((acc, c) => acc + c.pointsObtained, 0);
         }, 0)
       }))

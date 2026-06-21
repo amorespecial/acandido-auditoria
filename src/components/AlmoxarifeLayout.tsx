@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { CriterionState } from "../types";
+import { dbFetchLayoutConfig, isSupabaseReady } from "../supabaseService";
 
 interface AlmoxarifeLayoutProps {
   onBack: () => void;
@@ -34,23 +35,25 @@ export default function AlmoxarifeLayout({
     return criterionState?.evidenceNotes || "";
   });
   const [isSending, setIsSending] = useState(false);
+  const [layoutConfig, setLayoutConfig] = useState<any>(null);
 
-  // Retrieve layout configuration from parent or local storage for this branch, month and year
-  const parsedLayoutConfig = (() => {
-    if (!branchId) return null;
-    const key = `acandido_layout_config_${branchId}_${activeMonth}_${activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return null;
-  })();
+  React.useEffect(() => {
+    const loadLayout = async () => {
+      if (branchId && isSupabaseReady()) {
+        try {
+          const config = await dbFetchLayoutConfig(branchId, activeMonth, activeYear);
+          setLayoutConfig(config);
+        } catch (e) {
+          console.error("Error loading layout config in AlmoxarifeLayout:", e);
+        }
+      }
+    };
+    loadLayout();
+  }, [branchId, activeMonth, activeYear]);
 
-  const isConfigured = !!parsedLayoutConfig?.location;
+  const isConfigured = !!layoutConfig?.location;
   const locationText = isConfigured 
-    ? parsedLayoutConfig.location 
+    ? layoutConfig.location 
     : "Aguardando definição da localização pelo auditor.";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,10 +141,10 @@ export default function AlmoxarifeLayout({
           Tire ou anexe até 5 fotos focando na prateleira inteira e nos itens a serem auditados, mostrando claramente a identificação visual dos códigos que se encontram na área indicada.
         </p>
 
-        {parsedLayoutConfig?.instructions && (
+        {layoutConfig?.instructions && (
           <div className="pt-2 border-t border-amber-200/60 text-slate-700 mt-2">
             <span className="font-bold block text-[10px] uppercase text-amber-900">Observação do auditor:</span>
-            <p className="italic font-medium text-amber-950">"{parsedLayoutConfig.instructions}"</p>
+            <p className="italic font-medium text-amber-950">"{layoutConfig.instructions}"</p>
           </div>
         )}
       </div>

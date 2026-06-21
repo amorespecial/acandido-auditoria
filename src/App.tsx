@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 
 // View components
@@ -68,10 +68,8 @@ export default function App() {
       const savedUsersList = localStorage.getItem("acandido_users");
       
       // Clear all mock data keys
-      localStorage.removeItem("acandido_history");
       localStorage.removeItem("acandido_cycle_configs3");
       localStorage.removeItem("acandido_warranties");
-      localStorage.removeItem("acandido_occurrences");
       localStorage.removeItem("acandido_cycle_state_manual");
       localStorage.removeItem("acandido_all_cycles_list");
       localStorage.removeItem("acandido_calendario_inventarios");
@@ -315,6 +313,15 @@ export default function App() {
   const [dbConnectionError, setDbConnectionError] = useState(false);
   const [showLiveUpdateToast, setShowLiveUpdateToast] = useState(false);
 
+  const [allNonMovingSummaries, setAllNonMovingSummaries] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("acandido_material_sem_movimentacao");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
     // Database seeding
     seedDatabaseIfEmpty();
@@ -380,6 +387,33 @@ export default function App() {
             }
           } catch (calErr) {
             console.error("Failed to load initial schedules in App.tsx:", calErr);
+          }
+          try {
+            const dbHistory = await dbFetchHistory();
+            if (dbHistory) {
+              localStorage.setItem("acandido_history", JSON.stringify(dbHistory));
+              window.dispatchEvent(new Event("realtime-historico-update"));
+            }
+          } catch (histErr) {
+            console.error("Failed to load initial history in App.tsx:", histErr);
+          }
+          try {
+            const MONTH_MAP_INITIAL: Record<string, number> = {
+              "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+              "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+            };
+            const actMonthLower = activeMonth.toLowerCase();
+            const activeMonthNum = MONTH_MAP_INITIAL[actMonthLower] || 6;
+            const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+            const activeYearNum = parseInt(activeYear) || 2026;
+
+            const dbData = await dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre);
+            if (dbData && dbData.length > 0) {
+              setAllNonMovingSummaries(dbData);
+              localStorage.setItem("acandido_material_sem_movimentacao", JSON.stringify(dbData));
+            }
+          } catch (matsErr) {
+            console.error("Failed to fetch initial materials parados summaries in App.tsx:", matsErr);
           }
         }
       } catch (err) {
@@ -499,6 +533,20 @@ export default function App() {
       )
       .subscribe();
 
+    const historicoChannel = supabase
+      .channel("realtime-historico")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "historico_avaliacoes" },
+        () => {
+          console.log("Realtime update on historico_avaliacoes!");
+          if (realtimeFlags.isLocalUpdate) return;
+          triggerLiveToast();
+          window.dispatchEvent(new Event("realtime-historico-update"));
+        }
+      )
+      .subscribe();
+
     const garantiasChannel = supabase
       .channel("realtime-garantias")
       .on(
@@ -531,9 +579,9 @@ export default function App() {
       .channel("realtime-materials-sem-mov")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "material_sem_movimentacao" },
+        { event: "*", schema: "public", table: "materiais_parados" },
         () => {
-          console.log("Realtime update on material_sem_movimentacao!");
+          console.log("Realtime update on materiais_parados!");
           if (realtimeFlags.isLocalUpdate) return;
           triggerLiveToast();
           window.dispatchEvent(new Event("realtime-material-sem-mov-update"));
@@ -590,6 +638,7 @@ export default function App() {
       supabase.removeChannel(evaluationsChannel);
       supabase.removeChannel(submissionsChannel);
       supabase.removeChannel(usersChannel);
+      supabase.removeChannel(historicoChannel);
       supabase.removeChannel(garantiasChannel);
       supabase.removeChannel(nivelServicoChannel);
       supabase.removeChannel(materialsNoMovChannel);
@@ -612,6 +661,53 @@ export default function App() {
     };
     fetchSchedules();
   }, [refetchTrigger]);
+
+  useEffect(() => {
+    const fetchNonMovingSummaries = async () => {
+      try {
+        const MONTH_MAP_RELOAD: Record<string, number> = {
+          "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+        };
+        const actMonthLower = activeMonth.toLowerCase();
+        const activeMonthNum = MONTH_MAP_RELOAD[actMonthLower] || 6;
+        const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+        const activeYearNum = parseInt(activeYear) || 2026;
+
+        const dbData = await dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre);
+        if (dbData) {
+          setAllNonMovingSummaries(dbData);
+          localStorage.setItem("acandido_material_sem_movimentacao", JSON.stringify(dbData));
+        }
+      } catch (e) {
+        console.error("Failed to fetch non moving summaries active period trigger:", e);
+      }
+    };
+    fetchNonMovingSummaries();
+
+    window.addEventListener("realtime-material-sem-mov-update", fetchNonMovingSummaries);
+    return () => {
+      window.removeEventListener("realtime-material-sem-mov-update", fetchNonMovingSummaries);
+    };
+  }, [refetchTrigger, activeMonth, activeYear]);
+
+  useEffect(() => {
+    const updateHistoryFromDb = async () => {
+      try {
+        const dbHistory = await dbFetchHistory();
+        if (dbHistory) {
+          localStorage.setItem("acandido_history", JSON.stringify(dbHistory));
+          window.dispatchEvent(new Event("storage"));
+        }
+      } catch (e) {
+        console.error("Failed to fetch history on realtime trigger:", e);
+      }
+    };
+    window.addEventListener("realtime-historico-update", updateHistoryFromDb);
+    return () => {
+      window.removeEventListener("realtime-historico-update", updateHistoryFromDb);
+    };
+  }, []);
 
   const handleClearLegacyLocalStorage = () => {
     const savedUser = localStorage.getItem("acandido_app_user");
@@ -843,124 +939,144 @@ export default function App() {
   useEffect(() => {
     const revertKey = "acandido_revert_janeiro_2026_v4";
     if (localStorage.getItem(revertKey) !== "true") {
-      let historyList: any[] = [];
-      const savedHistory = localStorage.getItem("acandido_history");
-      if (savedHistory) {
-        try {
-          historyList = JSON.parse(savedHistory);
-          if (!Array.isArray(historyList)) historyList = [];
-        } catch (e) {
-          historyList = [];
-        }
-      }
-
-      const defaultBranches = getCleanDefaultBranches();
-      setBranches(defaultBranches);
-
-      // Now set the cycle state back to Janeiro 2026 ABERTO
-      const restoredCycle = {
-        activeMonth: "Janeiro",
-        activeYear: "2026",
-        status: "ABERTO" as const,
-        openedAt: "01/01/2026",
-        openedBy: "Fernando Silva"
-      };
-      localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(restoredCycle));
-      setCycleState(restoredCycle);
-      setActiveMonth("Janeiro");
-      setActiveYear("2026");
-
-      // Update cycles list to make Janeiro 2026 active and Fevereiro 2026 inactive
-      let allCyclesList: any[] = [];
-      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) {
-        try {
-          allCyclesList = JSON.parse(savedCycles);
-          if (!Array.isArray(allCyclesList)) allCyclesList = [];
-        } catch (e) {
-          allCyclesList = [];
-        }
-      }
-
-      let janeiroFound = false;
-      let fevereiroFound = false;
-      allCyclesList = allCyclesList.map((c) => {
-        if (c.activeMonth === "Janeiro" && c.activeYear === "2026") {
-          janeiroFound = true;
-          return { ...c, status: "ABERTO" as const };
-        }
-        if (c.activeMonth === "Fevereiro" && c.activeYear === "2026") {
-          fevereiroFound = true;
-          return { ...c, status: "NENHUM" as const };
-        }
-        return c;
-      });
-
-      if (!janeiroFound) {
-        allCyclesList.push(restoredCycle);
-      }
-      if (!fevereiroFound) {
-        allCyclesList.push({
-          activeMonth: "Fevereiro",
-          activeYear: "2026",
-          status: "NENHUM" as const,
-          openedAt: new Date().toLocaleDateString("pt-BR"),
-          openedBy: "Fernando Silva"
-        });
-      }
-
-      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(allCyclesList));
-      
-      const newCyclesMap: Record<string, any> = {};
-      allCyclesList.forEach((c) => {
-        if (c.activeMonth && c.activeYear) {
-          newCyclesMap[`${c.activeMonth}_${c.activeYear}`] = c;
-        }
-      });
-      setAllCycles(newCyclesMap);
-
-      // Filter January 2026 out of the historical logs so they are active and not represented as closed in consolidation
-      const filteredHistoryList = historyList.filter(
-        (entry) => entry.monthYear !== "Janeiro 2026"
-      );
-      localStorage.setItem("acandido_history", JSON.stringify(filteredHistoryList));
-
-      // Reset any calendar scheduled events inside Janeira 2026 to PENDENTE
-      let calendarData = [];
-      const savedCal = localStorage.getItem("acandido_calendario_inventarios");
-      if (savedCal) {
-        try {
-          calendarData = JSON.parse(savedCal);
-          if (Array.isArray(calendarData)) {
-            calendarData = calendarData.map((item: any) => {
-              let isJan = false;
-              if (item.data_agendada) {
-                const parts = item.data_agendada.split("-");
-                if (parts.length >= 2 && parseInt(parts[1]) === 1) {
-                  isJan = true;
-                }
-              }
-              if (isJan && item.status !== "PENDENTE") {
-                return {
-                  ...item,
-                  status: "PENDENTE",
-                  nokEvidenceLink: ""
-                };
-              }
-              return item;
-            });
-            localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(calendarData));
+      const restoreJaneiroFlow = async () => {
+        let historyList: any[] = [];
+        if (isSupabaseReady()) {
+          try {
+            historyList = await dbFetchHistory();
+          } catch (e) {
+            console.error("Failed to fetch history during restore auto-check:", e);
           }
-        } catch (e) {
-          console.error("Failed to restore calendar items:", e);
         }
-      }
+        if (!historyList || historyList.length === 0) {
+          const savedHistory = localStorage.getItem("acandido_history");
+          if (savedHistory) {
+            try {
+              historyList = JSON.parse(savedHistory);
+              if (!Array.isArray(historyList)) historyList = [];
+            } catch (e) {
+              historyList = [];
+            }
+          }
+        }
 
-      // Mark the revert as done
-      localStorage.setItem(revertKey, "true");
-      
-      // Force a single clean reload to ensure state is completely rebuilt
-      window.location.reload();
+        const defaultBranches = getCleanDefaultBranches();
+        setBranches(defaultBranches);
+
+        // Now set the cycle state back to Janeiro 2026 ABERTO
+        const restoredCycle = {
+          activeMonth: "Janeiro",
+          activeYear: "2026",
+          status: "ABERTO" as const,
+          openedAt: "01/01/2026",
+          openedBy: "Fernando Silva"
+        };
+        localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(restoredCycle));
+        setCycleState(restoredCycle);
+        setActiveMonth("Janeiro");
+        setActiveYear("2026");
+
+        // Update cycles list to make Janeiro 2026 active and Fevereiro 2026 inactive
+        let allCyclesList: any[] = [];
+        const savedCycles = localStorage.getItem("acandido_all_cycles_list");
+        if (savedCycles) {
+          try {
+            allCyclesList = JSON.parse(savedCycles);
+            if (!Array.isArray(allCyclesList)) allCyclesList = [];
+          } catch (e) {
+            allCyclesList = [];
+          }
+        }
+
+        let janeiroFound = false;
+        let fevereiroFound = false;
+        allCyclesList = allCyclesList.map((c) => {
+          if (c.activeMonth === "Janeiro" && c.activeYear === "2026") {
+            janeiroFound = true;
+            return { ...c, status: "ABERTO" as const };
+          }
+          if (c.activeMonth === "Fevereiro" && c.activeYear === "2026") {
+            fevereiroFound = true;
+            return { ...c, status: "NENHUM" as const };
+          }
+          return c;
+        });
+
+        if (!janeiroFound) {
+          allCyclesList.push(restoredCycle);
+        }
+        if (!fevereiroFound) {
+          allCyclesList.push({
+            activeMonth: "Fevereiro",
+            activeYear: "2026",
+            status: "NENHUM" as const,
+            openedAt: new Date().toLocaleDateString("pt-BR"),
+            openedBy: "Fernando Silva"
+          });
+        }
+
+        localStorage.setItem("acandido_all_cycles_list", JSON.stringify(allCyclesList));
+        
+        const newCyclesMap: Record<string, any> = {};
+        allCyclesList.forEach((c) => {
+          if (c.activeMonth && c.activeYear) {
+            newCyclesMap[`${c.activeMonth}_${c.activeYear}`] = c;
+          }
+        });
+        setAllCycles(newCyclesMap);
+
+        // Filter January 2026 out of the historical logs so they are active and not represented as closed in consolidation
+        const filteredHistoryList = historyList.filter(
+          (entry) => entry.monthYear !== "Janeiro 2026"
+        );
+        localStorage.setItem("acandido_history", JSON.stringify(filteredHistoryList));
+        if (isSupabaseReady()) {
+          try {
+            await dbSaveHistory(filteredHistoryList);
+          } catch (e) {
+            console.error("Failed to save filtered history list to Supabase:", e);
+          }
+        }
+
+        // Reset any calendar scheduled events inside Janeira 2026 to PENDENTE
+        let calendarData: any[] = [];
+        const savedCal = localStorage.getItem("acandido_calendario_inventarios");
+        if (savedCal) {
+          try {
+            calendarData = JSON.parse(savedCal);
+            if (Array.isArray(calendarData)) {
+              calendarData = calendarData.map((item: any) => {
+                let isJan = false;
+                if (item.data_agendada) {
+                  const parts = item.data_agendada.split("-");
+                  if (parts.length >= 2 && parseInt(parts[1]) === 1) {
+                    isJan = true;
+                  }
+                }
+                if (isJan && item.status !== "PENDENTE") {
+                  return {
+                    ...item,
+                    status: "PENDENTE",
+                    nokEvidenceLink: ""
+                  };
+                }
+                return item;
+              });
+              localStorage.setItem("acandido_calendario_inventarios", JSON.stringify(calendarData));
+            }
+          } catch (e) {
+            console.error("Failed to restore calendar items:", e);
+          }
+        }
+
+        // Mark the revert as done
+        localStorage.setItem(revertKey, "true");
+        
+        // Force a single clean reload to ensure state is completely rebuilt
+        window.location.reload();
+      };
+
+      restoreJaneiroFlow();
     }
   }, []);
 
@@ -1003,11 +1119,13 @@ export default function App() {
     const localCalendar = calendarData;
 
     // Load material sem movimentacao data
-    let localMatSemMov: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-      localMatSemMov = saved ? JSON.parse(saved) : [];
-    } catch (e) {}
+    let localMatSemMov: any[] = allNonMovingSummaries;
+    if (!localMatSemMov || localMatSemMov.length === 0) {
+      try {
+        const saved = localStorage.getItem("acandido_material_sem_movimentacao");
+        localMatSemMov = saved ? JSON.parse(saved) : [];
+      } catch (e) {}
+    }
 
     const matchBranch = (almoxName: string, bId: string, bName?: string) => {
       const name = almoxName.toLowerCase().trim();
@@ -1652,15 +1770,24 @@ export default function App() {
     alert("Evidência transmitida com sucesso! Fernando Silva receberá uma notificação para auditar seu envio.");
   };
 
-  const handleArchiveCycle = (month: string, year: string, finalScore: number) => {
-    const saved = localStorage.getItem("acandido_history");
+  const handleArchiveCycle = async (month: string, year: string, finalScore: number) => {
     let previousSaved: any[] = [];
-    if (saved) {
+    if (isSupabaseReady()) {
       try {
-        previousSaved = JSON.parse(saved);
-        if (!Array.isArray(previousSaved)) previousSaved = [];
+        previousSaved = await dbFetchHistory();
       } catch (e) {
-        previousSaved = [];
+        console.error("Failed to fetch evaluation history from Supabase on archive:", e);
+      }
+    }
+    if (!previousSaved || previousSaved.length === 0) {
+      const saved = localStorage.getItem("acandido_history");
+      if (saved) {
+        try {
+          previousSaved = JSON.parse(saved);
+          if (!Array.isArray(previousSaved)) previousSaved = [];
+        } catch (e) {
+          previousSaved = [];
+        }
       }
     }
 
@@ -1695,6 +1822,14 @@ export default function App() {
         nokEvidenceFileData: c.nokEvidenceFileData
       }))
     }));
+
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveHistory(newHistoryEntries);
+      } catch (err) {
+        console.error("Failed to post archive logs to database:", err);
+      }
+    }
 
     const finalHistoryToSave = [...newHistoryEntries, ...previousSaved];
     localStorage.setItem("acandido_history", JSON.stringify(finalHistoryToSave));
@@ -1743,7 +1878,7 @@ export default function App() {
     });
   };
 
-  const handleReopenCycle = (month: string, year: string) => {
+  const handleReopenCycle = async (month: string, year: string) => {
     const key = `${month}_${year}`;
     
     // Set the cycle to status "ABERTO" in allCycles map
@@ -1807,7 +1942,12 @@ export default function App() {
 
     // Sync state on Supabase if ready
     if (isSupabaseReady()) {
-      dbSaveCycleState(nextState);
+      try {
+        dbSaveCycleState(nextState);
+        await supabase.from('historico_avaliacoes').delete().eq('month_year', `${month} ${year}`);
+      } catch (e) {
+        console.error("Failed to delete history on reopen cycle in Supabase:", e);
+      }
     }
 
     alert(`O ciclo de ${month}/${year} foi reaberto com sucesso! Todas as avaliações, pontuações e histórico de evidências anteriores foram restaurados.`);

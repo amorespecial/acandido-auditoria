@@ -1,12 +1,11 @@
 import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
-import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus } from "./types";
+import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus, CollaboratorCertificate } from "./types";
 import { OFFICIAL_CREDENTIALS } from "./components/Login";
 
-// Helper variables for fallback / mock mode
 const STORAGE_PREFIX = "acandido_";
 
-// Month conversion helpers
+// Month helper functions
 export const monthNameToNum = (name: string): number => {
   const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const index = months.findIndex(m => m.toLowerCase() === name.toLowerCase());
@@ -18,7 +17,7 @@ export const monthNumToName = (num: number): string => {
   return months[num - 1] || "Maio";
 };
 
-// Base64 helper for image uploads
+// Base64 to Blob helper
 export const base64ToBlob = (base64: string): Blob => {
   try {
     const parts = base64.split(';base64,');
@@ -53,9 +52,8 @@ export const uploadFile = async (
 
   if (!isSupabaseReady()) {
     console.warn(`[Supabase Storage Offline] Simulating upload of ${cleanPath} to bucket: ${bucket}`);
-    // Return a data URL or helper URL
     if (typeof fileSource === 'string' && fileSource.startsWith('data:')) {
-      return fileSource; // keep raw image data for mockup view
+      return fileSource;
     }
     return `https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600`;
   }
@@ -70,7 +68,6 @@ export const uploadFile = async (
     throw error;
   }
 
-  // Generate signed URL (expiring in 1 hour)
   const { data, error: signedError } = await supabase.storage
     .from(bucket)
     .createSignedUrl(cleanPath, 3600);
@@ -83,291 +80,133 @@ export const uploadFile = async (
   return data.signedUrl;
 };
 
+// UUID helper generator
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // Auto Seeding function
 export const seedDatabaseIfEmpty = async () => {
   if (!isSupabaseReady()) {
-    console.log("[Supabase Offline] Seeding skipped (running in offline simulation mode)");
     return;
   }
 
   try {
-    // 1. Seed system users
     const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('id').limit(1);
     if (usersError || !existingUsers || existingUsers.length === 0) {
       console.log("Seeding system users table ('usuarios') with complete profiles...");
       const usersToInsert = OFFICIAL_CREDENTIALS.map(u => ({
         nome: u.name,
         email: u.email.toLowerCase().trim(),
-        perfil: JSON.stringify({
-          role: u.role,
-          group: u.group,
-          cargo: u.cargo || "",
-          password: u.password || "",
-          almoxarifados: (u as any).almoxarifados || []
-        }),
-        almoxarifado: u.ownerName,
+        perfil: u.role === "ADMIN" ? "auditor" : u.role === "SUPERVISOR" ? "supervisor" : "almoxarife",
+        almoxarifados: (u as any).almoxarifados || [],
         ativo: true
       }));
       await supabase.from('usuarios').upsert(usersToInsert, { onConflict: 'email' });
     }
 
-    // 2. Seed calendario_inventarios 2026
     const { data: existingCal, error: calError } = await supabase.from('calendario_inventarios').select('id').limit(1);
     if (!calError && (!existingCal || existingCal.length === 0)) {
       console.log("Seeding 2026 inventory schedule table ('calendario_inventarios')...");
       const CALENDAR_ENTRIES_2026 = [
-        { almoxarifado:"unitrans-jp", ano:2026, semestre:1, indice:1, data_agendada:"2026-06-26" },
-        { almoxarifado:"unitrans-jp", ano:2026, semestre:2, indice:1, data_agendada:"2026-11-27" },
-        { almoxarifado:"santa-maria-jp", ano:2026, semestre:1, indice:1, data_agendada:"2026-06-26" },
-        { almoxarifado:"santa-maria-jp", ano:2026, semestre:2, indice:1, data_agendada:"2026-11-27" },
-        { almoxarifado:"expresso-nacional", ano:2026, semestre:1, indice:1, data_agendada:"2026-01-17" },
-        { almoxarifado:"expresso-nacional", ano:2026, semestre:2, indice:1, data_agendada:"2026-07-18" },
-        { almoxarifado:"acandido-cg", ano:2026, semestre:1, indice:1, data_agendada:"2026-01-17" },
-        { almoxarifado:"acandido-cg", ano:2026, semestre:2, indice:1, data_agendada:"2026-07-18" },
-        { almoxarifado:"trans-cg-bayeux", ano:2026, semestre:1, indice:1, data_agendada:"2026-02-10" },
-        { almoxarifado:"trans-cg-bayeux", ano:2026, semestre:2, indice:1, data_agendada:"2026-08-12" },
-        { almoxarifado:"rodoviario-cabedelo", ano:2026, semestre:1, indice:1, data_agendada:"2026-02-10" },
-        { almoxarifado:"rodoviario-cabedelo", ano:2026, semestre:2, indice:1, data_agendada:"2026-08-12" },
-        { almoxarifado:"fretamento-maracanau", ano:2026, semestre:1, indice:1, data_agendada:"2026-06-09" },
-        { almoxarifado:"fretamento-maracanau", ano:2026, semestre:2, indice:1, data_agendada:"2026-11-10" },
-        { almoxarifado:"rodoviario-fortaleza", ano:2026, semestre:1, indice:1, data_agendada:"2026-06-09" },
-        { almoxarifado:"rodoviario-fortaleza", ano:2026, semestre:2, indice:1, data_agendada:"2026-11-10" },
-        { almoxarifado:"fretamento-goiana", ano:2026, semestre:1, indice:1, data_agendada:"2026-05-16" },
-        { almoxarifado:"fretamento-goiana", ano:2026, semestre:2, indice:1, data_agendada:"2026-10-31" },
-        { almoxarifado:"fretamento-pb", ano:2026, semestre:1, indice:1, data_agendada:"2026-03-03" },
-        { almoxarifado:"fretamento-pb", ano:2026, semestre:2, indice:1, data_agendada:"2026-09-23" },
-        { almoxarifado:"fretamento-jaboatao", ano:2026, semestre:1, indice:1, data_agendada:"2026-04-24" },
-        { almoxarifado:"fretamento-jaboatao", ano:2026, semestre:2, indice:1, data_agendada:"2026-10-16" },
-        { almoxarifado:"rodoviario-jaboatao", ano:2026, semestre:1, indice:1, data_agendada:"2026-04-24" },
-        { almoxarifado:"rodoviario-jaboatao", ano:2026, semestre:2, indice:1, data_agendada:"2026-10-16" },
-        { almoxarifado:"reunidas-nat", ano:2026, semestre:1, indice:1, data_agendada:"2026-03-07" },
-        { almoxarifado:"reunidas-nat", ano:2026, semestre:2, indice:1, data_agendada:"2026-09-26" },
-        { almoxarifado:"unissana-rn", ano:2026, semestre:1, indice:1, data_agendada:"2026-03-06" },
-        { almoxarifado:"unissana-rn", ano:2026, semestre:2, indice:1, data_agendada:"2026-09-25" },
+        { almoxarifado_id:"unitrans-jp", ano:2026, semestre:1, data_agendada:"2026-06-26", status: "PENDENTE" },
+        { almoxarifado_id:"unitrans-jp", ano:2026, semestre:2, data_agendada:"2026-11-27", status: "PENDENTE" },
+        { almoxarifado_id:"santa-maria-jp", ano:2026, semestre:1, data_agendada:"2026-06-26", status: "PENDENTE" },
+        { almoxarifado_id:"santa-maria-jp", ano:2026, semestre:2, data_agendada:"2026-11-27", status: "PENDENTE" },
+        { almoxarifado_id:"expresso-nacional", ano:2026, semestre:1, data_agendada:"2026-01-17", status: "PENDENTE" },
+        { almoxarifado_id:"expresso-nacional", ano:2026, semestre:2, data_agendada:"2026-07-18", status: "PENDENTE" },
+        { almoxarifado_id:"acandido-cg", ano:2026, semestre:1, data_agendada:"2026-01-17", status: "PENDENTE" },
+        { almoxarifado_id:"acandido-cg", ano:2026, semestre:2, data_agendada:"2026-07-18", status: "PENDENTE" },
+        { almoxarifado_id:"trans-cg-bayeux", ano:2026, semestre:1, data_agendada:"2026-02-10", status: "PENDENTE" },
+        { almoxarifado_id:"trans-cg-bayeux", ano:2026, semestre:2, data_agendada:"2026-08-12", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-cabedelo", ano:2026, semestre:1, data_agendada:"2026-02-10", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-cabedelo", ano:2026, semestre:2, data_agendada:"2026-08-12", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-maracanau", ano:2026, semestre:1, data_agendada:"2026-06-09", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-maracanau", ano:2026, semestre:2, data_agendada:"2026-11-10", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-fortaleza", ano:2026, semestre:1, data_agendada:"2026-06-09", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-fortaleza", ano:2026, semestre:2, data_agendada:"2026-11-10", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-goiana", ano:2026, semestre:1, data_agendada:"2026-05-16", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-goiana", ano:2026, semestre:2, data_agendada:"2026-10-31", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-pb", ano:2026, semestre:1, data_agendada:"2026-03-03", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-pb", ano:2026, semestre:2, data_agendada:"2026-09-23", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-jaboatao", ano:2026, semestre:1, data_agendada:"2026-04-24", status: "PENDENTE" },
+        { almoxarifado_id:"fretamento-jaboatao", ano:2026, semestre:2, data_agendada:"2026-10-16", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-jaboatao", ano:2026, semestre:1, data_agendada:"2026-04-24", status: "PENDENTE" },
+        { almoxarifado_id:"rodoviario-jaboatao", ano:2026, semestre:2, data_agendada:"2026-10-16", status: "PENDENTE" },
+        { almoxarifado_id:"reunidas-nat", ano:2026, semestre:1, data_agendada:"2026-03-07", status: "PENDENTE" },
+        { almoxarifado_id:"reunidas-nat", ano:2026, semestre:2, data_agendada:"2026-09-26", status: "PENDENTE" },
+        { almoxarifado_id:"unissana-rn", ano:2026, semestre:1, data_agendada:"2026-03-06", status: "PENDENTE" },
+        { almoxarifado_id:"unissana-rn", ano:2026, semestre:2, data_agendada:"2026-09-25", status: "PENDENTE" }
       ];
-      const seededWithUuids = CALENDAR_ENTRIES_2026.map(entry => ({
-        id: generateUUID(),
-        ...entry
-      }));
-      await supabase.from('calendario_inventarios').insert(seededWithUuids);
+      await supabase.from('calendario_inventarios').upsert(CALENDAR_ENTRIES_2026, { onConflict: 'almoxarifado_id,ano,semestre' });
     }
-
-    // 3. Seed almoxarifados metadata
-    const { data: existingAlms, error: almsError } = await supabase.from('almoxarifados').select('id').limit(1);
-    if (!almsError && (!existingAlms || existingAlms.length === 0)) {
-      console.log("Seeding warehouses table ('almoxarifados')...");
-      const initialWarehousesMap = [
-        { nome: "ALMOXARIFADO UNITRANS JP", cidade: "João Pessoa", estado: "PB", grupo: "A", responsavel: "Robson", ativo: true },
-        { nome: "SANTA MARIA JP", cidade: "João Pessoa", estado: "PB", grupo: "A", responsavel: "Robson", ativo: true },
-        { nome: "TRANS CG", cidade: "Campina Grande", estado: "PB", grupo: "A", responsavel: "Paulo", ativo: true },
-        { nome: "A.CÂNDIDO CG", cidade: "Campina Grande", estado: "PB", grupo: "A", responsavel: "Paulo", ativo: true },
-        { nome: "FRETAMENTO GOIANA", cidade: "Goiana", estado: "PE", grupo: "A", responsavel: "Ezequiel", ativo: true },
-        { nome: "FRETAMENTO PE", cidade: "Recife", estado: "PE", grupo: "A", responsavel: "Sérgio", ativo: true },
-        { nome: "RODOVIÁRIO PE", cidade: "Recife", estado: "PE", grupo: "A", responsavel: "Sérgio", ativo: true },
-        { nome: "RODOVIÁRIO METROP CT", cidade: "Cabedelo", estado: "PB", grupo: "B", responsavel: "Robson", ativo: true },
-        { nome: "FRETAMENTO PB", cidade: "João Pessoa", estado: "PB", group: "B", responsavel: "Lucas", ativo: true },
-        { nome: "TRANS CG METROP BY", cidade: "Bayeux", estado: "PB", grupo: "B", responsavel: "Matheus", ativo: true },
-        { nome: "RODOVIÁRIO RETROP BY", cidade: "Bayeux", estado: "PB", grupo: "B", responsavel: "Matheus", ativo: true },
-        { nome: "TRANSNACIONAL RN", cidade: "Natal", estado: "RN", grupo: "B", responsavel: "Raimundo", ativo: true },
-        { nome: "UNISSANTA RN", cidade: "Natal", estado: "RN", grupo: "B", responsavel: "Joel", ativo: true },
-        { nome: "FRETAMENTO CE", cidade: "Fortaleza", estado: "CE", grupo: "B", responsavel: "Arline", ativo: true },
-        { nome: "RODOVIÁRIO CE", cidade: "Fortaleza", estado: "CE", grupo: "B", responsavel: "Arline", ativo: true }
-      ];
-      await supabase.from('almoxarifados').insert(initialWarehousesMap);
-    }
-  } catch (error) {
-    console.error("Failed to seed database tables:", error);
+  } catch (e) {
+    console.error("Auto seeding exception:", e);
   }
 };
 
-// ======================= SYSTEM USERS (usuarios) =======================
+// ======================= USERS (usuarios) =======================
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
-  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-  let localUsers: AppUser[] = OFFICIAL_CREDENTIALS;
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localUsers = parsed;
-      }
-    } catch (e) {
-      console.warn("Error parsing saved users in dbFetchUsers:", e);
-    }
-  }
-
   if (!isSupabaseReady()) {
-    return localUsers;
+    const saved = localStorage.getItem("acandido_users");
+    return saved ? JSON.parse(saved) : [];
   }
 
-  try {
-    const { data, error } = await supabase.from('usuarios').select('*');
-    if (error) {
-      console.warn("dbFetchUsers error from Supabase, falling back:", error);
-      return localUsers;
-    }
-
-    if (!data || data.length === 0) {
-      // If Supabase has no data or RLS prevents reading, preserve existing localUsers
-      return localUsers;
-    }
-
-    const dbUsersMapped = data.map(u => {
-      let role: "ADMIN" | "ALMOXARIFE" | "SUPERVISOR" = "ALMOXARIFE";
-      let group: "A" | "B" = "A";
-      let cargo = "";
-      let password = "";
-      let almoxarifados: string[] = [];
-
-      let parsed: any = null;
-      if (u.perfil) {
-        if (typeof u.perfil === "object") {
-          parsed = u.perfil;
-        } else if (typeof u.perfil === "string") {
-          const trimmed = u.perfil.trim();
-          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            try {
-              parsed = JSON.parse(trimmed);
-            } catch (e) {
-              console.warn("Error parsing perfil string as JSON:", e);
-            }
-          }
-        }
-      }
-
-      if (parsed && typeof parsed === "object") {
-        role = (parsed.role || "ALMOXARIFE").toUpperCase() as any;
-        group = parsed.group || "A";
-        cargo = parsed.cargo || "";
-        password = parsed.password || "";
-        almoxarifados = parsed.almoxarifados || [];
-      } else {
-        // Legacy simple role string
-        const roleStr = String(u.perfil || "ALMOXARIFE").toUpperCase();
-        role = (roleStr === "AUDITOR" ? "ADMIN" : roleStr) as any;
-        
-        const matchedOfficial = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === u.email.toLowerCase().trim());
-        if (matchedOfficial) {
-          group = matchedOfficial.group;
-          cargo = matchedOfficial.cargo || "";
-          password = matchedOfficial.password || "";
-          almoxarifados = (matchedOfficial as any).almoxarifados || [];
-        } else {
-          if (role === "ADMIN") {
-            cargo = "Auditor Geral";
-          } else if (role === "SUPERVISOR") {
-            cargo = "Supervisor de Manutenção";
-          } else {
-            cargo = "Almoxarife";
-          }
-        }
-      }
-
-      return {
-        id: u.id,
-        name: u.nome,
-        email: u.email,
-        role,
-        ownerName: u.almoxarifado || u.nome.split(" ")[0],
-        group,
-        status: u.ativo ? "ATIVO" : "SUSPENSO",
-        cargo,
-        password,
-        almoxarifados
-      };
-    });
-
-    // Merge database users with local users, letting database take precedence 
-    // but preserving any local-only custom entries or passwords
-    let merged = [...dbUsersMapped];
-    for (const lu of localUsers) {
-      const idx = merged.findIndex(mu => mu.email.toLowerCase().trim() === lu.email.toLowerCase().trim());
-      if (idx === -1) {
-        merged.push(lu);
-      } else {
-        // If the database user row exists but has no password or empty password,
-        // and our local storage has the password, use/keep the local storage password to avoid breaking login!
-        if (!merged[idx].password && lu.password) {
-          merged[idx].password = lu.password;
-        }
-        if (merged[idx].id) {
-          lu.id = merged[idx].id;
-        }
-      }
-    }
-
-    // Filter out any user from merged that has been explicitly deleted locally
-    try {
-      const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
-      if (deletedListSaved) {
-        const deletedList: string[] = JSON.parse(deletedListSaved);
-        if (deletedList.length > 0) {
-          merged = merged.filter(u => !deletedList.includes(u.email.toLowerCase().trim()));
-        }
-      }
-    } catch (err) {
-      console.warn("Could not apply deleted emails filter:", err);
-    }
-
-    // Keep state synced in localStorage
-    localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(merged));
-    return merged;
-  } catch (err) {
-    console.error("Critical error in dbFetchUsers:", err);
-    return localUsers;
+  const { data, error } = await supabase.from('usuarios').select('*');
+  if (error || !data) {
+    const saved = localStorage.getItem("acandido_users");
+    return saved ? JSON.parse(saved) : [];
   }
+
+  return data.map(u => ({
+    id: u.id,
+    name: u.nome,
+    email: u.email,
+    role: u.perfil === "auditor" ? "ADMIN" : u.perfil === "supervisor" ? "SUPERVISOR" : "ALMOXARIFE",
+    ownerName: u.nome,
+    group: "A",
+    status: u.ativo ? "ATIVO" : "DESATIVADO",
+    almoxarifados: u.almoxarifados || []
+  }));
 };
 
 export const dbSaveUser = async (user: AppUser) => {
-  // Always update local storage first to guarantee immediate success
-  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-  const users: AppUser[] = saved ? JSON.parse(saved) : [...OFFICIAL_CREDENTIALS];
-  
-  const index = users.findIndex(u => u.email.toLowerCase().trim() === user.email.toLowerCase().trim());
-  if (index !== -1) {
-    users[index] = user;
-  } else {
-    users.push(user);
+  if (!isSupabaseReady()) {
+    return;
   }
-  localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(users));
 
-  // Remove from explicitly deleted registry since the user is recreated/updated
+  const perf = user.role === "ADMIN" ? "auditor" : user.role === "SUPERVISOR" ? "supervisor" : "almoxarife";
+  await supabase.from('usuarios').upsert({
+    id: user.id && user.id.length > 5 ? user.id : undefined,
+    nome: user.name,
+    email: user.email.toLowerCase().trim(),
+    perfil: perf,
+    almoxarifados: user.almoxarifados || [],
+    ativo: user.status !== "DESATIVADO"
+  }, { onConflict: 'email' });
+};
+
+export const dbDeleteUser = async (email: string, id?: any) => {
+  if (!isSupabaseReady()) return;
+
   try {
-    const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
-    if (deletedListSaved) {
-      const deletedList: string[] = JSON.parse(deletedListSaved);
-      const filtered = deletedList.filter(e => e !== user.email.toLowerCase().trim());
-      localStorage.setItem(`${STORAGE_PREFIX}deleted_user_emails`, JSON.stringify(filtered));
+    realtimeFlags.isLocalUpdate = true;
+    let query = supabase.from('usuarios').delete();
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.eq('email', email.toLowerCase().trim());
     }
-  } catch (err) {}
-
-  // If Supabase is ready, attempt to save to the database in background/safe mode
-  if (isSupabaseReady()) {
-    try {
-      realtimeFlags.isLocalUpdate = true;
-      const perfilData = {
-        role: user.role,
-        group: user.group || "A",
-        cargo: user.cargo || "",
-        password: user.password || "",
-        almoxarifados: user.almoxarifados || []
-      };
-
-      const { error } = await supabase.from('usuarios').upsert({
-        nome: user.name,
-        email: user.email.toLowerCase().trim(),
-        perfil: JSON.stringify(perfilData),
-        almoxarifado: user.ownerName,
-        ativo: user.status !== "SUSPENSO"
-      }, { onConflict: 'email' });
-
-      if (error) {
-        console.warn("Supabase user persist failed (already saved in Local Storage):", error);
-      }
-    } catch (err) {
-      console.warn("Critical exception saving user to Supabase:", err);
-    } finally {
-      realtimeFlags.isLocalUpdate = false;
-    }
+    await query;
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
   }
 };
 
@@ -380,24 +219,46 @@ export interface CycleState {
   openedBy?: string;
 }
 
+export async function dbGetCicloAtivo() {
+  const { data } = await supabase
+    .from('ciclos')
+    .select('*')
+    .eq('status', 'ABERTO')
+    .single();
+  return data;
+}
+
+export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string) {
+  const { data, error } = await supabase
+    .from('ciclos')
+    .upsert({ mes, ano, status: 'ABERTO', aberto_por, aberto_em: new Date().toISOString() })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function dbFecharCiclo(mes: string, ano: string) {
+  const { error } = await supabase
+    .from('ciclos')
+    .update({ status: 'FECHADO', fechado_em: new Date().toISOString() })
+    .eq('mes', mes).eq('ano', ano);
+  if (error) throw error;
+}
+
 export const dbFetchCycleState = async (): Promise<CycleState> => {
   const defaultState: CycleState = { activeMonth: "Janeiro", activeYear: "2026", status: "ABERTO", openedAt: "01/01/2026", openedBy: "Fernando Silva" };
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_cycle_state_manual");
-    return saved ? JSON.parse(saved) : defaultState;
+    return defaultState;
   }
 
-  // Seeks specifically for a cycle with status 'aberto' (open) first
-  let { data, error } = await supabase.from('ciclos').select('*').eq('status', 'aberto').limit(1);
+  let { data, error } = await supabase.from('ciclos').select('*').eq('status', 'ABERTO').limit(1);
 
   if (error || !data || data.length === 0) {
-    // Fallback search for a cycle with status 'bloqueado'
-    const resBloq = await supabase.from('ciclos').select('*').eq('status', 'bloqueado').limit(1);
+    const resBloq = await supabase.from('ciclos').select('*').eq('status', 'AGUARDANDO_FECHAMENTO').limit(1);
     if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
       data = resBloq.data;
     } else {
-      // Final fallback to the latest initiated cycle
-      const resLatest = await supabase.from('ciclos').select('*').order('iniciado_em', { ascending: false }).limit(1);
+      const resLatest = await supabase.from('ciclos').select('*').order('aberto_em', { ascending: false }).limit(1);
       if (!resLatest.error && resLatest.data && resLatest.data.length > 0) {
         data = resLatest.data;
       }
@@ -409,37 +270,27 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   }
 
   const current = data[0];
-  let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
-  if (current.status === 'bloqueado') statusStr = "AGUARDANDO_FECHAMENTO";
-  else if (current.status === 'fechado') statusStr = "FECHADO";
-
   return {
-    activeMonth: monthNumToName(current.mes),
+    activeMonth: current.mes,
     activeYear: String(current.ano),
-    status: statusStr,
-    openedAt: current.iniciado_em,
-    openedBy: current.iniciado_por
+    status: current.status as any,
+    openedAt: current.aberto_em,
+    openedBy: current.aberto_por
   };
 };
 
 export const dbSaveCycleState = async (cycle: CycleState) => {
-  // Sync to localstorage too
-  localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cycle));
-
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  const statusDb = cycle.status === "ABERTO" ? "aberto" : cycle.status === "AGUARDANDO_FECHAMENTO" ? "bloqueado" : "fechado";
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
     await supabase.from('ciclos').upsert({
-      mes: monthNameToNum(cycle.activeMonth),
-      ano: Number(cycle.activeYear),
-      status: statusDb,
-      iniciado_por: cycle.openedBy || "Fernando Silva",
-      fechado_em: cycle.status === "NENHUM" || cycle.status === "FECHADO" ? new Date().toISOString() : null
+      mes: cycle.activeMonth,
+      ano: cycle.activeYear,
+      status: cycle.status === "NENHUM" ? "ABERTO" : cycle.status,
+      aberto_por: cycle.openedBy || "Fernando Silva",
+      aberto_em: cycle.openedAt || new Date().toISOString(),
+      fechado_em: cycle.status === "FECHADO" ? new Date().toISOString() : null
     }, { onConflict: 'mes,ano' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
@@ -447,31 +298,55 @@ export const dbSaveCycleState = async (cycle: CycleState) => {
 };
 
 export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_all_cycles_list");
-    return saved ? JSON.parse(saved) : [];
-  }
+  if (!isSupabaseReady()) return [];
   const { data, error } = await supabase.from('ciclos').select('*');
   if (error || !data) return [];
-  return data.map(item => {
-    let statusStr: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
-    if (item.status === 'bloqueado') statusStr = "AGUARDANDO_FECHAMENTO";
-    else if (item.status === 'fechado') statusStr = "FECHADO";
-    return {
-      activeMonth: monthNumToName(item.mes),
-      activeYear: String(item.ano),
-      status: statusStr,
-      openedAt: item.iniciado_em,
-      openedBy: item.iniciado_por
-    };
-  });
+  return data.map(item => ({
+    activeMonth: item.mes,
+    activeYear: String(item.ano),
+    status: item.status as any,
+    openedAt: item.aberto_em,
+    openedBy: item.aberto_por
+  }));
 };
 
 // ======================= CRITERIA EVALUATIONS (avaliacoes) =======================
-export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, anoStr: string): Promise<Record<string, Partial<CriterionState>>> => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
+export async function dbSalvarAvaliacao(avaliacao: {
+  almoxarifado_id: string, mes: string, ano: string,
+  criterio_id: string, criterio_nome: string, status: string,
+  pontos_obtidos: number, pontos_possiveis: number,
+  notes?: string, nok_link1?: string, nok_link2?: string,
+  nok_link3?: string, nok_descricao?: string, avaliado_por?: string
+}) {
+  const { error } = await supabase
+    .from('avaliacoes')
+    .upsert({ ...avaliacao, avaliado_em: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
+  if (error) throw error;
+}
 
+export async function dbBuscarAvaliacoes(almoxarifado_id: string, mes: string, ano: string) {
+  const { data, error } = await supabase
+    .from('avaliacoes')
+    .select('*')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('mes', mes)
+    .eq('ano', ano);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function dbBuscarTodasAvaliacoes(mes: string, ano: string) {
+  const { data, error } = await supabase
+    .from('avaliacoes')
+    .select('*')
+    .eq('mes', mes)
+    .eq('ano', ano);
+  if (error) throw error;
+  return data || [];
+}
+
+export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, anoStr: string): Promise<Record<string, Partial<CriterionState>>> => {
   if (!isSupabaseReady()) {
     return {};
   }
@@ -479,9 +354,9 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
   const { data, error } = await supabase
     .from('avaliacoes')
     .select('*')
-    .eq('almoxarifado', almoxarifado)
-    .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('almoxarifado_id', almoxarifado)
+    .eq('mes', mesName)
+    .eq('ano', anoStr);
 
   if (error || !data) {
     return {};
@@ -489,12 +364,15 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
 
   const mapped: Record<string, Partial<CriterionState>> = {};
   data.forEach(row => {
-    mapped[row.criterio_codigo] = {
-      status: row.resultado as EvaluationStatus,
-      pointsObtained: row.pontuacao ?? 0,
-      notes: row.descricao_evidencia,
-      evidenceNotes: row.descricao_evidencia,
-      nokEvidenceLinks: row.links_evidencia || []
+    const links = [row.nok_link1, row.nok_link2, row.nok_link3].filter(Boolean) as string[];
+    mapped[row.criterio_id] = {
+      status: row.status as EvaluationStatus,
+      pointsObtained: row.pontos_obtidos ?? 0,
+      pointsPossible: row.pontos_possiveis ?? 20,
+      notes: row.notes || row.nok_descricao || "",
+      evidenceNotes: row.nok_descricao || row.notes || "",
+      nokEvidenceLinks: links,
+      auditMode: row.audit_mode
     };
   });
   return mapped;
@@ -513,9 +391,6 @@ export const dbSaveEvaluation = async (
     return;
   }
 
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-
   let finalLinks = evaluation.nokEvidenceLinks || [];
   if (evaluation.nokEvidenceFileData && evaluation.nokEvidenceFileData.trim().length > 0) {
     try {
@@ -530,43 +405,45 @@ export const dbSaveEvaluation = async (
     }
   }
 
+  const maxPoints = evaluation.pointsPossible ?? 20;
+
   try {
     realtimeFlags.isLocalUpdate = true;
     await supabase.from('avaliacoes').upsert({
-      almoxarifado,
-      mes,
-      ano,
-      criterio_codigo: criterionId,
+      almoxarifado_id: almoxarifado,
+      mes: mesName,
+      ano: anoStr,
+      criterio_id: criterionId,
       criterio_nome: criterionName,
-      resultado: evaluation.status || "PENDENTE",
-      pontuacao: evaluation.pointsObtained ?? 0,
+      status: evaluation.status || "PENDENTE",
+      pontos_obtidos: evaluation.pointsObtained ?? 0,
+      pontos_possiveis: maxPoints,
+      audit_mode: evaluation.auditMode || "A_Distancia",
+      notes: evaluation.notes || "",
+      nok_descricao: evaluation.evidenceNotes || "",
+      nok_link1: finalLinks[0] || null,
+      nok_link2: finalLinks[1] || null,
+      nok_link3: finalLinks[2] || null,
       avaliado_por: evaluatedBy,
       avaliado_em: new Date().toISOString(),
-      descricao_evidencia: evaluation.notes || evaluation.evidenceNotes || "",
-      links_evidencia: finalLinks
-    }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
 };
 
-// ======================= EVIDENCE SUBMISSIONS (envios_almoxarife) =======================
+// ======================= ALMOXARIFE EVIDENCE SUBMISSIONS =======================
 export const dbFetchAlmoxarifeSubmissions = async (almoxarifado: string, mesName: string, anoStr: string) => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-
-  if (!isSupabaseReady()) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from('envios_almoxarife')
+  if (!isSupabaseReady()) return [];
+  // Fallback map envios_almoxarife to top10_envios
+  const { data } = await supabase
+    .from('top10_envios')
     .select('*')
-    .eq('almoxarifado', almoxarifado)
-    .eq('mes', mes)
-    .eq('ano', ano);
-
-  return error ? [] : data;
+    .eq('almoxarifado_id', almoxarifado)
+    .eq('mes', mesName)
+    .eq('ano', anoStr);
+  return data || [];
 };
 
 export const dbSubmitAlmoxarifeEvidence = async (
@@ -578,298 +455,140 @@ export const dbSubmitAlmoxarifeEvidence = async (
   comment: string,
   storageUrls: string[]
 ) => {
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    await supabase.from('envios_almoxarife').insert({
-      almoxarifado,
-      mes,
-      ano,
-      criterio_codigo: criterionId,
-      enviado_por: submittedBy,
-      comentario: comment,
-      storage_paths: storageUrls
-    });
+    // Map submissions of TOP 10 (which is criterion 1) or keep it recorded
+    if (criterionId === "1") {
+      await supabase.from('top10_envios').upsert({
+        almoxarifado_id: almoxarifado,
+        mes: mesName,
+        ano: anoStr,
+        quantidades: [],
+        fotos: storageUrls,
+        enviado_por: submittedBy,
+        enviado_em: new Date().toISOString()
+      }, { onConflict: 'almoxarifado_id,mes,ano' });
+    } else {
+      // Save other criterion updates as and general evaluations if required
+      await supabase.from('avaliacoes').upsert({
+        almoxarifado_id: almoxarifado,
+        mes: mesName,
+        ano: anoStr,
+        criterio_id: criterionId,
+        criterio_nome: "Evidência Almoxarife",
+        status: "ENVIADO",
+        pontos_obtidos: 0,
+        pontos_possiveis: 20,
+        notes: comment,
+        nok_link1: storageUrls[0] || null,
+        nok_link2: storageUrls[1] || null,
+        nok_link3: storageUrls[2] || null,
+        avaliado_por: submittedBy,
+        avaliado_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
+    }
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
 };
 
 // ======================= CALENDAR SCHEDULES (calendario_inventarios) =======================
-const generateUUID = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
 export const dbFetchSchedules = async (): Promise<any[]> => {
   if (!isSupabaseReady()) {
     return [];
   }
 
-  const { data, error } = await supabase.from('calendario_inventarios').select('*').order('indice', { ascending: true });
+  const { data, error } = await supabase.from('calendario_inventarios').select('*').order('updated_at', { ascending: true });
   if (error || !data) {
-    console.error("Failed to fetch calendar schedules from Supabase:", error);
     return [];
   }
 
-  console.log(`[dbFetchSchedules] READ ALL SUCCESS - count: ${data.length}`);
-
   return data.map(item => {
-    const bId = item.almoxarifado || item.almoxarifado_id || item.branchId || "";
-    let idx = 1;
-    if (item.indice !== undefined) {
-      idx = Number(item.indice);
-    } else if (item.sequencia) {
-      const match = item.sequencia.match(/\d+/);
-      if (match) idx = parseInt(match[0]) || 1;
-    }
-
+    const bId = item.almoxarifado_id || "";
     return {
-      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}-${idx}`,
+      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}`,
       branchId: bId,
       almoxarifado_id: bId,
       almoxarifado: bId,
       ano: Number(item.ano || 2026),
       semestre: Number(item.semestre || 1),
-      indice: idx,
-      sequencia: item.sequencia || `#${idx}`,
       data_agendada: item.data_agendada || "",
       status: item.status || "PENDENTE",
-      nokEvidenceLink: item.nokEvidenceLink || "",
-      created_by: item.created_by || "",
-      created_at: item.created_at || ""
+      nokEvidenceLink: item.nok_evidence_link || ""
     };
   });
 };
 
 export const dbSaveSchedules = async (schedules: any[], forceYear?: number) => {
-  if (!isSupabaseReady()) {
-    throw new Error("Supabase não está configurada ou pronta.");
-  }
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    console.log("Starting dbSaveSchedules. Total items received:", schedules.length, "forceYear:", forceYear);
-
-    // 1. Determine unique combinations of (almoxarifado, semestre, ano) to delete and insert
-    // We will group items by key: almoxarifado_semestre_ano
-    const groups = new Map<string, { almoxarifado: string; semestre: number; ano: number; items: any[] }>();
-
-    // If forceYear is provided, we can pre-populate groups for all branchIds present in the schedules for that year
-    if (forceYear) {
-      const branchIds = Array.from(new Set(schedules.map(s => s.branchId || s.almoxarifado || s.almoxarifado_id).filter(Boolean)));
-      for (const bId of branchIds) {
-        for (const sem of [1, 2]) {
-          const key = `${bId}_${sem}_${forceYear}`;
-          groups.set(key, { almoxarifado: bId, semestre: sem, ano: forceYear, items: [] });
-        }
-      }
-    }
-
-    // Populate groups with items
     for (const item of schedules) {
-      const almoxId = item.branchId || item.almoxarifado || item.almoxarifado_id;
-      if (!almoxId) continue;
+      const bId = item.branchId || item.almoxarifado_id || item.almoxarifado || "";
+      if (!bId) continue;
+      const yr = forceYear || Number(item.ano || 2026);
       const sem = Number(item.semestre || 1);
-      const year = Number(item.ano || 2026);
 
-      // If forceYear is set, only process items belonging to forceYear
-      if (forceYear && year !== forceYear) {
-        continue;
-      }
-
-      const key = `${almoxId}_${sem}_${year}`;
-      if (!groups.has(key)) {
-        groups.set(key, { almoxarifado: almoxId, semestre: sem, ano: year, items: [] });
-      }
-
-      // Only add items that have a valid data_agendada or status/link update
-      if (item.data_agendada && item.data_agendada.trim() !== "") {
-        groups.get(key)!.items.push(item);
-      }
+      await supabase.from('calendario_inventarios').upsert({
+        almoxarifado_id: bId,
+        ano: yr,
+        semestre: sem,
+        data_agendada: item.data_agendada || null,
+        status: item.status || "PENDENTE",
+        nok_evidence_link: item.nokEvidenceLink || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'almoxarifado_id,ano,semestre' });
     }
-
-    // 2. Perform DELETE + INSERT for each group
-    for (const [key, group] of groups.entries()) {
-      console.log(`[dbSaveSchedules] Deleting existing records for - Almox/Slug: ${group.almoxarifado}, Semestre: ${group.semestre}, Ano: ${group.ano}`);
-      
-      // Execute DELETE
-      const { error: deleteError } = await supabase
-        .from('calendario_inventarios')
-        .delete()
-        .eq('almoxarifado', group.almoxarifado)
-        .eq('semestre', group.semestre)
-        .eq('ano', group.ano);
-
-      if (deleteError) {
-        console.error("Delete error in dbSaveSchedules:", deleteError);
-        throw new Error(`Falha ao limpar agendamentos antigos para ${group.almoxarifado}: ${deleteError.message}`);
-      }
-
-      // Execute INSERT if we have any items for this group
-      if (group.items.length > 0) {
-        const recordsToInsert = group.items.map((item, idx) => {
-          const idxVal = item.indice || (idx + 1);
-          const seqVal = item.sequencia || `#${idxVal}`;
-          
-          // Generate a valid RFC4122 UUID if not already present
-          const isUuid = item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id);
-          const useId = isUuid ? item.id : generateUUID();
-          
-          console.log(`[dbSaveSchedules] PREPARING INSERT - ID: ${useId}, almoxarifado: ${group.almoxarifado}, DATA: ${item.data_agendada}`);
-
-          return {
-            id: useId,
-            almoxarifado: group.almoxarifado,
-            ano: Number(group.ano),
-            semestre: Number(group.semestre),
-            sequencia: seqVal,
-            indice: Number(idxVal),
-            data_agendada: item.data_agendada,
-            status: item.status || "PENDENTE",
-            nokEvidenceLink: item.nokEvidenceLink || ""
-          };
-        });
-
-        const { error: insertError } = await supabase
-          .from('calendario_inventarios')
-          .insert(recordsToInsert);
-
-        if (insertError) {
-          console.error("Insert error in dbSaveSchedules:", insertError);
-          throw new Error(`Falha ao inserir novos agendamentos para ${group.almoxarifado}: ${insertError.message}`);
-        }
-
-        // 3. CONFIRMATION SELECT immediately after saving
-        const { data: confirmData, error: confirmError } = await supabase
-          .from('calendario_inventarios')
-          .select('*')
-          .eq('almoxarifado', group.almoxarifado)
-          .eq('semestre', group.semestre)
-          .eq('ano', group.ano)
-          .order('indice', { ascending: true });
-
-        if (confirmError) {
-          console.error("Confirmation query error in dbSaveSchedules:", confirmError);
-          throw new Error(`Falha ao ler dados do Supabase para confirmação: ${confirmError.message}`);
-        } else if (!confirmData || confirmData.length < recordsToInsert.length) {
-          console.error("Confirmation inequality in dbSaveSchedules. Inserted:", recordsToInsert.length, "Found:", confirmData?.length);
-          throw new Error(`Confirmação falhou para ${group.almoxarifado}: Dados salvos não correspondem ao esperado.`);
-        } else {
-          console.log(`[dbSaveSchedules] SUCCESS - Confirmed ${confirmData.length} records in DB for:`, group.almoxarifado, confirmData);
-        }
-      } else {
-        console.log(`[dbSaveSchedules] Clear done (0 new schedules) for - Almox/Slug: ${group.almoxarifado}, Semestre: ${group.semestre}, Ano: ${group.ano}`);
-      }
-    }
-  } catch (err) {
-    console.error("Critical Exception in dbSaveSchedules:", err);
-    throw err;
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
 };
 
 export const dbFetchBranchSchedules = async (branchId: string, options?: { ano?: number; semestre?: number }): Promise<any[]> => {
-  if (!isSupabaseReady()) {
-    return [];
-  }
+  if (!isSupabaseReady()) return [];
 
-  try {
-    let query = supabase.from('calendario_inventarios').select('*').eq('almoxarifado', branchId);
-    if (options?.ano) {
-      query = query.eq('ano', options.ano);
-    }
-    if (options?.semestre) {
-      query = query.eq('semestre', options.semestre);
-    }
+  let query = supabase.from('calendario_inventarios').select('*').eq('almoxarifado_id', branchId);
+  if (options?.ano) query = query.eq('ano', options.ano);
+  if (options?.semestre) query = query.eq('semestre', options.semestre);
 
-    // MANDATORY FILTER / ORDER
-    query = query.order('indice', { ascending: true });
+  const { data, error } = await query;
+  if (error || !data) return [];
 
-    const { data, error } = await query;
-    if (error) {
-      console.error(`Error querying calendar from Supabase for branch ${branchId}:`, error);
-      return [];
-    }
-
-    if (!data) return [];
-
-    console.log(`[dbFetchBranchSchedules] READ SUCCESS - Almoxarifado: ${branchId}, count: ${data.length}`, data);
-
-    return data.map(item => {
-      const bId = item.almoxarifado || item.branchId || item.almoxarifado_id || "";
-      let idx = 1;
-      if (item.indice !== undefined) {
-        idx = Number(item.indice);
-      } else if (item.sequencia) {
-        const match = item.sequencia.match(/\d+/);
-        if (match) idx = parseInt(match[0]) || 1;
-      }
-
-      return {
-        id: item.id || `cal-${bId}-${item.ano}-${item.semestre}-${idx}`,
-        branchId: bId,
-        almoxarifado_id: bId,
-        almoxarifado: bId,
-        ano: Number(item.ano || 2026),
-        semestre: Number(item.semestre || 1),
-        indice: idx,
-        sequencia: item.sequencia || `#${idx}`,
-        data_agendada: item.data_agendada || "",
-        status: item.status || "PENDENTE",
-        nokEvidenceLink: item.nokEvidenceLink || "",
-        created_by: item.created_by || "",
-        created_at: item.created_at || ""
-      };
-    });
-  } catch (e) {
-    console.error("Exception in dbFetchBranchSchedules:", e);
-    return [];
-  }
+  return data.map(item => {
+    const bId = item.almoxarifado_id || "";
+    return {
+      id: item.id || `cal-${bId}-${item.ano}-${item.semestre}`,
+      branchId: bId,
+      almoxarifado_id: bId,
+      almoxarifado: bId,
+      ano: Number(item.ano || 2026),
+      semestre: Number(item.semestre || 1),
+      data_agendada: item.data_agendada || "",
+      status: item.status || "PENDENTE",
+      nokEvidenceLink: item.nok_evidence_link || ""
+    };
+  });
 };
 
 export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string) => {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
-    const idx = item.indice || 1;
-    const seq = item.sequencia || `#${idx}`;
-    
-    // Generate valid UUID if not already present
-    const isUuid = item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id);
-    const useId = isUuid ? item.id : generateUUID();
-
+    const bId = item.branchId || item.almoxarifado_id || item.almoxarifado || "";
     const record = {
-      id: useId,
-      almoxarifado: item.branchId || item.almoxarifado || item.almoxarifado_id || "",
+      almoxarifado_id: bId,
       ano: Number(item.ano || 2026),
       semestre: Number(item.semestre || 1),
-      sequencia: seq,
-      indice: idx,
-      data_agendada: item.data_agendada || item.data || "",
+      data_agendada: item.data_agendada || item.data || null,
       status: item.status || "PENDENTE",
-      nokEvidenceLink: item.nokEvidenceLink || "",
-      created_by: userEmailOrName || item.created_by || ""
+      nok_evidence_link: item.nokEvidenceLink || null,
+      updated_at: new Date().toISOString()
     };
-
-    const { error } = await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'id' });
-    if (error) {
-      console.error("Error upserting single schedule:", error);
-      throw error;
-    }
+    await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'almoxarifado_id,ano,semestre' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
@@ -879,69 +598,88 @@ export const dbDeleteSchedule = async (id: string) => {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
-    const { error } = await supabase.from('calendario_inventarios').delete().eq('id', id);
-    if (error) {
-      console.error("Error deleting schedule in DB:", error);
-      throw error;
-    }
+    await supabase.from('calendario_inventarios').delete().eq('id', id);
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
 };
 
 // ======================= WARRANTIES (garantias) =======================
+export async function dbSalvarGarantia(garantia: any) {
+  const { error } = await supabase
+    .from('garantias')
+    .upsert({
+      id: garantia.id && !garantia.id.startsWith("tmp") ? garantia.id : undefined,
+      almoxarifado_id: garantia.almoxarifado_id || garantia.almoxarifado || "",
+      mes: garantia.mes || "Janeiro",
+      ano: garantia.ano || "2026",
+      item_code: garantia.item_code || garantia.itemCode || "",
+      item_description: garantia.item_description || garantia.itemDescription || "",
+      fabricante: garantia.fabricante || "",
+      garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
+      data_nf: garantia.data_nf || garantia.nfEmissionDate || null,
+      referencia_item: garantia.referencia_item || garantia.reference || "",
+      observacao_peca: garantia.observacao_peca || garantia.pieceObservation || "Nenhuma observação",
+      observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || "",
+      updated_at: new Date().toISOString()
+    });
+  if (error) throw error;
+}
+
+export async function dbBuscarGarantias(almoxarifado_id: string, mes: string, ano: string) {
+  const { data, error } = await supabase
+    .from('garantias')
+    .select('*')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('mes', mes)
+    .eq('ano', ano);
+  if (error) throw error;
+  return data || [];
+}
+
 export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_warranties");
-    return saved ? JSON.parse(saved) : [];
-  }
-
-  const { data, error } = await supabase.from('garantias').select('*').order('registrado_em', { ascending: false });
-  if (error || !data) {
-    const saved = localStorage.getItem("acandido_warranties");
-    return saved ? JSON.parse(saved) : [];
-  }
-
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase.from('garantias').select('*').order('created_at', { ascending: false });
+  if (error || !data) return [];
   return data.map(item => ({
     id: item.id,
-    itemCode: item.item,
-    itemDescription: item.item, // fallback
+    itemCode: item.item_code,
+    itemDescription: item.item_description || "",
     manufacturer: item.fabricante || "",
     expiryDate: item.garantia_ate || "",
-    almoxarifado: item.almoxarifado,
-    nfEmissionDate: "",
-    reference: "",
-    lastUpdateDate: item.registrado_em,
-    pieceObservation: "",
-    scrapObservation: "",
-    monthYear: `${monthNumToName(item.mes)} ${item.ano}`
+    almoxarifado: item.almoxarifado_id,
+    nfEmissionDate: item.data_nf || "",
+    reference: item.referencia_item || "",
+    lastUpdateDate: item.updated_at,
+    pieceObservation: item.observacao_peca || "",
+    scrapObservation: item.observacao_sucata || "",
+    monthYear: `${item.mes} ${item.ano}`
   }));
 };
 
 export const dbSaveWarranties = async (warranties: WarrantyItem[]) => {
-  localStorage.setItem("acandido_warranties", JSON.stringify(warranties));
-
-  if (!isSupabaseReady()) {
-    return;
-  }
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
     for (const item of warranties) {
       const spaceParts = item.monthYear ? item.monthYear.split(' ') : [];
       const mesStr = spaceParts[0] || "Maio";
-      const anoNum = Number(spaceParts[1] || "2026");
+      const anoStr = spaceParts[1] || "2026";
 
-      await supabase.from('garantias').upsert({
-        id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
-        almoxarifado: item.almoxarifado,
-        mes: monthNameToNum(mesStr),
-        ano: anoNum,
-        item: item.itemCode,
+      await dbSalvarGarantia({
+        id: item.id,
+        almoxarifado_id: item.almoxarifado,
+        mes: mesStr,
+        ano: anoStr,
+        item_code: item.itemCode,
+        item_description: item.itemDescription,
         fabricante: item.manufacturer,
         garantia_ate: item.expiryDate || null,
-        registrado_por: "Almoxarife",
-        registrado_em: item.createdAt || new Date().toISOString()
+        data_nf: item.nfEmissionDate || null,
+        referencia_item: item.reference,
+        observacao_peca: item.pieceObservation,
+        observacao_sucata: item.scrapObservation
       });
     }
   } finally {
@@ -949,53 +687,96 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[]) => {
   }
 };
 
-// ======================= LEVEL OF SERVICE OCCURRENCES (nivel_servico) =======================
+// ======================= LEVEL OF SERVICE OCCURRENCES =======================
+export async function dbSalvarNivelServico(registro: any) {
+  const { error } = await supabase
+    .from('nivel_servico')
+    .upsert({
+      id: registro.id && !registro.id.startsWith("tmp") ? registro.id : undefined,
+      almoxarifado_id: registro.almoxarifado_id || registro.branchName || registro.filial || "",
+      veiculo: registro.veiculo || "",
+      codigo_material: registro.codigo_material || registro.codigoMaterial || "",
+      material_falta: registro.material_falta || registro.material || "",
+      solicitante: registro.solicitante || "",
+      data_ocorrencia: registro.data_ocorrencia || registro.date || new Date().toISOString().split("T")[0],
+      status: registro.status || "EM ABERTO",
+      observacao: registro.observacao || registro.obs || "",
+      dias_aberto: registro.dias_aberto || 0,
+      data_resolucao: registro.data_resolucao || registro.resolvedAt || null,
+      registrado_por: registro.registrado_por || "Supervisor",
+      updated_at: new Date().toISOString()
+    });
+  if (error) throw error;
+}
+
+export async function dbBuscarNivelServico(almoxarifado_id: string) {
+  const { data, error } = await supabase
+    .from('nivel_servico')
+    .select('*')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export const dbDeleteOccurrence = async (id: string): Promise<boolean> => {
+  if (!isSupabaseReady()) return false;
+  try {
+    realtimeFlags.isLocalUpdate = true;
+    const { error } = await supabase
+      .from('nivel_servico')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error("Failed to delete occurrence in Supabase:", err);
+    throw err;
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
+  }
+};
+
 export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_occurrences");
-    return saved ? JSON.parse(saved) : [];
-  }
-
-  const { data, error } = await supabase.from('nivel_servico').select('*');
-  if (error || !data) {
-    const saved = localStorage.getItem("acandido_occurrences");
-    return saved ? JSON.parse(saved) : [];
-  }
-
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase.from('nivel_servico').select('*').order('created_at', { ascending: false });
+  if (error || !data) return [];
   return data.map(o => ({
     id: o.id,
-    material: o.material_em_falta,
+    material: o.material_falta,
     date: o.data_ocorrencia || "",
-    status: "Sem Estoque Mín/Máx", // initial status
-    branchId: o.almoxarifado,
-    branchName: o.almoxarifado,
+    status: o.status as any,
+    branchId: o.almoxarifado_id,
+    branchName: o.almoxarifado_id,
     veiculo: o.veiculo || "",
     solicitante: o.solicitante || "",
     codigoMaterial: o.codigo_material || "",
-    filial: o.almoxarifado
+    filial: o.almoxarifado_id,
+    obs: o.observacao || "",
+    dias_aberto: o.dias_aberto || 0,
+    resolvedAt: o.data_resolucao || ""
   }));
 };
 
 export const dbSaveOccurrences = async (occs: MaterialOccurrence[]) => {
-  localStorage.setItem("acandido_occurrences", JSON.stringify(occs));
-  if (!isSupabaseReady()) {
-    return;
-  }
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
     for (const item of occs) {
-      const rawDate = item.date || new Date().toISOString().split('T')[0];
-      await supabase.from('nivel_servico').upsert({
-        id: item.id.includes('tmp') || item.id.length < 5 ? undefined : item.id,
-        almoxarifado: item.branchName || item.filial || "",
-        mes: Number(rawDate.split('-')[1]) || 5,
-        ano: Number(rawDate.split('-')[0]) || 2026,
+      await dbSalvarNivelServico({
+        id: item.id,
+        almoxarifado_id: item.branchName || item.filial || "",
         veiculo: item.veiculo,
         codigo_material: item.codigoMaterial,
-        material_em_falta: item.material,
-        data_ocorrencia: rawDate,
-        solicitante: item.solicitante
+        material_falta: item.material,
+        solicitante: item.solicitante,
+        data_ocorrencia: item.date,
+        status: item.status,
+        observacao: item.obs,
+        dias_aberto: item.dias_aberto || 0,
+        data_resolucao: item.resolvedAt || null,
+        registrado_por: item.registrado_por || "Supervisor"
       });
     }
   } finally {
@@ -1003,288 +784,331 @@ export const dbSaveOccurrences = async (occs: MaterialOccurrence[]) => {
   }
 };
 
-// ======================= NON-MOVING MATERIALS (material_sem_movimentacao) =======================
-export const dbFetchNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number): Promise<any> => {
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem(`acandido_materials_parados_${almoxarifado}`);
-    return saved ? JSON.parse(saved) : null;
-  }
+// ======================= MATERIAIS PARADOS =======================
+export async function dbSalvarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number, materiais: any[]) {
+  await supabase.from('materiais_parados')
+    .delete()
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('semestre', semestre)
+    .eq('ano', ano);
 
+  if (materiais.length > 0) {
+    const { error } = await supabase.from('materiais_parados')
+      .insert(materiais.map(m => ({
+        almoxarifado_id,
+        semestre,
+        ano,
+        codigo: m.codigo || m.code || "",
+        descricao: m.descricao || m.description || "",
+        ultimo_movimento: m.ultimo_movimento || m.lastMovement || "",
+        status: m.status || "OK"
+      })));
+    if (error) throw error;
+  }
+}
+
+export async function dbBuscarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number) {
   const { data, error } = await supabase
-    .from('material_sem_movimentacao')
+    .from('materiais_parados')
     .select('*')
-    .eq('almoxarifado', almoxarifado)
-    .eq('ano', ano)
-    .eq('semestre', semestre);
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('semestre', semestre)
+    .eq('ano', ano);
+  if (error) throw error;
+  return data || [];
+}
 
-  if (error || !data || data.length === 0) {
-    return null;
-  }
+export const dbFetchNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number): Promise<any> => {
+  if (!isSupabaseReady()) return null;
 
-  const item = data[0];
+  const dbRows = await dbBuscarMateriaisParados(almoxarifado, semestre, ano);
+  if (!dbRows || dbRows.length === 0) return null;
+
   return {
-    id: item.id,
-    almoxarifado: item.almoxarifado,
-    ano: item.ano,
-    semestre: item.semestre,
-    timestamp: item.lista_inserida_em,
-    insertedBy: item.lista_inserida_por,
-    materials: item.itens || [],
-    isEvaluated: !!item.resultado,
-    resultStatus: item.resultado as EvaluationStatus,
-    reviewedBy: item.avaliado_por,
-    reviewedAt: item.avaliado_em,
-    nokEvidenceLinks: item.links_evidencia || []
+    almoxarifado,
+    ano,
+    semestre,
+    timestamp: dbRows[0].inserted_em,
+    insertedBy: "Almoxarife",
+    materials: dbRows.map(r => ({
+      code: r.codigo,
+      description: r.descricao,
+      lastMovement: r.ultimo_movimento,
+      status: r.status
+    })),
+    isEvaluated: dbRows.some(r => r.status && r.status !== "OK"),
+    resultStatus: (dbRows.some(r => r.status === "NOK") ? "NOK" : "OK") as EvaluationStatus
   };
 };
 
 export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number, payload: any) => {
-  // Sync to localstorage
-  localStorage.setItem(`acandido_materials_parados_${almoxarifado}`, JSON.stringify(payload));
-
-  if (!isSupabaseReady()) {
-    return;
-  }
+  if (!isSupabaseReady()) return;
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    await supabase.from('material_sem_movimentacao').upsert({
-      almoxarifado,
-      ano,
-      semestre,
-      lista_inserida_em: payload.timestamp || new Date().toISOString(),
-      lista_inserida_por: payload.insertedBy || "Almoxarife",
-      itens: payload.materials || payload.itemsToCount || [],
-      resultado: payload.resultStatus || null,
-      avaliado_em: payload.reviewedAt || null,
-      avaliado_por: payload.reviewedBy || null,
-      links_evidencia: payload.nokEvidenceLinks || []
-    }, { onConflict: 'almoxarifado,ano,semestre' });
+    const mats = payload.materials || payload.itemsToCount || [];
+    await dbSalvarMateriaisParados(almoxarifado, semestre, ano, mats);
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
 };
 
-// ======================= TOP 10 CONFIG (top10_configuracao) =======================
-export const dbFetchTop10Config = async (almoxarifado: string, mesName: string, anoStr: string) => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-  const lsKey = `acandido_top10_config_${almoxarifado}_${mesName}_${anoStr}`;
-
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem(lsKey);
-    return saved ? JSON.parse(saved) : null;
-  }
-
+export async function dbFetchAllNonMovingSummaries(ano: number, semestre: number): Promise<any[]> {
+  if (!isSupabaseReady()) return [];
   const { data, error } = await supabase
-    .from('top10_configuracao')
-    .select('*')
-    .eq('almoxarifado', almoxarifado)
-    .eq('mes', mes)
-    .eq('ano', ano);
+    .from('materiais_parados')
+    .select('almoxarifado_id, status')
+    .eq('ano', ano)
+    .eq('semestre', semestre);
 
-  if (error || !data || data.length === 0) {
-    // try to read fallback
-    const saved = localStorage.getItem(lsKey);
-    return saved ? JSON.parse(saved) : null;
+  if (error) {
+    console.error("Error in dbFetchAllNonMovingSummaries:", error);
+    return [];
   }
 
+  // Group by almoxarifado_id
+  const groups: Record<string, string[]> = {};
+  data.forEach((row) => {
+    const id = row.almoxarifado_id;
+    if (!groups[id]) groups[id] = [];
+    groups[id].push(row.status);
+  });
+
+  const summaries = Object.keys(groups).map((almoxarifado) => {
+    const statuses = groups[almoxarifado];
+    const hasNok = statuses.some(s => s === "NOK");
+    return {
+      almoxarifado,
+      ano,
+      semestre,
+      status: hasNok ? "NOK" : "OK"
+    };
+  });
+
+  return summaries;
+}
+
+// ======================= TOP 10 CONFIG =======================
+export async function dbSalvarTop10Config(almoxarifado_id: string, mes: string, ano: string, itens: any[], configurado_por: string) {
+  const { error } = await supabase
+    .from('top10_config')
+    .upsert({ almoxarifado_id, mes, ano, itens, configurado_por, updated_at: new Date().toISOString() },
+      { onConflict: 'almoxarifado_id,mes,ano' });
+  if (error) throw error;
+}
+
+export async function dbBuscarTop10Config(almoxarifado_id: string, mes: string, ano: string) {
+  const { data } = await supabase
+    .from('top10_config')
+    .select('*')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('mes', mes)
+    .eq('ano', ano)
+    .single();
+  return data;
+}
+
+export const dbFetchTop10Config = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  if (!isSupabaseReady()) return null;
+  const data = await dbBuscarTop10Config(almoxarifado, mesName, anoStr);
+  if (!data) return null;
   return {
-    itens: data[0].itens,
-    configurado_por: data[0].configurado_por,
-    configurado_em: data[0].configurado_em
+    itens: data.itens,
+    configurado_por: data.configurado_por,
+    configurado_em: data.updated_at
   };
 };
 
 export const dbSaveTop10Config = async (almoxarifado: string, mesName: string, anoStr: string, itens: any[], user: string) => {
-  const lsKey = `acandido_top10_config_${almoxarifado}_${mesName}_${anoStr}`;
-  localStorage.setItem(lsKey, JSON.stringify({ itens }));
-
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  await supabase.from('top10_configuracao').upsert({
-    almoxarifado,
-    mes,
-    ano,
-    itens,
-    configurado_por: user,
-    configurado_em: new Date().toISOString()
-  }, { onConflict: 'almoxarifado,mes,ano' });
+  if (!isSupabaseReady()) return;
+  await dbSalvarTop10Config(almoxarifado, mesName, anoStr, itens, user);
 };
 
-// ======================= TOP 10 ENVIOS (top10_envios) =======================
-export const dbFetchTop10Envios = async (almoxarifado: string, mesName: string, anoStr: string) => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
+// ======================= TOP 10 ENVIOS =======================
+export async function dbSalvarTop10Envio(almoxarifado_id: string, mes: string, ano: string, quantidades: any[], fotos: any[], enviado_por: string) {
+  const { error } = await supabase
+    .from('top10_envios')
+    .upsert({ almoxarifado_id, mes, ano, quantidades, fotos, enviado_por, enviado_em: new Date().toISOString() },
+      { onConflict: 'almoxarifado_id,mes,ano' });
+  if (error) throw error;
+}
 
-  if (!isSupabaseReady()) {
-    return null;
-  }
-
-  const { data, error } = await supabase
+export async function dbBuscarTop10Envio(almoxarifado_id: string, mes: string, ano: string) {
+  const { data } = await supabase
     .from('top10_envios')
     .select('*')
-    .eq('almoxarifado', almoxarifado)
+    .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('ano', ano)
+    .single();
+  return data;
+}
 
-  if (error || !data || data.length === 0) {
-    return null;
-  }
-
-  return data[0];
+export const dbFetchTop10Envios = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  if (!isSupabaseReady()) return null;
+  const data = await dbBuscarTop10Envio(almoxarifado, mesName, anoStr);
+  return data || null;
 };
 
 export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, anoStr: string, fotos: any[], user: string) => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  await supabase.from('top10_envios').upsert({
-    almoxarifado,
-    mes,
-    ano,
-    enviado_por: user,
-    fotos
-  }, { onConflict: 'almoxarifado,mes,ano' });
+  if (!isSupabaseReady()) return;
+  await dbSalvarTop10Envio(almoxarifado, mesName, anoStr, [], fotos, user);
 };
 
-// ======================= LAYOUT CONFIG (layout_configuracao) =======================
-export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string) => {
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-  const lsKey = `acandido_layout_config_${almoxarifado}_${mesName}_${anoStr}`;
+// ======================= LAYOUT CONFIG =======================
+export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string, ano: string, localizacao: string, instrucoes: string) {
+  const { error } = await supabase
+    .from('layout_config')
+    .upsert({ almoxarifado_id, mes, ano, localizacao, instrucoes, updated_at: new Date().toISOString() },
+      { onConflict: 'almoxarifado_id,mes,ano' });
+  if (error) throw error;
+}
 
-  if (!isSupabaseReady()) {
-    const saved = localStorage.getItem(lsKey);
-    return saved ? JSON.parse(saved) : null;
-  }
-
-  const { data, error } = await supabase
-    .from('layout_configuracao')
+export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string, ano: string) {
+  const { data } = await supabase
+    .from('layout_config')
     .select('*')
-    .eq('almoxarifado', almoxarifado)
+    .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mes)
-    .eq('ano', ano);
+    .eq('ano', ano)
+    .single();
+  return data;
+}
 
-  if (error || !data || data.length === 0) {
-    const saved = localStorage.getItem(lsKey);
-    return saved ? JSON.parse(saved) : null;
-  }
-
+export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string) => {
+  if (!isSupabaseReady()) return null;
+  const data = await dbBuscarLayoutConfig(almoxarifado, mesName, anoStr);
+  if (!data) return null;
   return {
-    localizacao: data[0].localizacao,
-    configurado_por: data[0].configurado_por,
-    configurado_em: data[0].configurado_em
+    localizacao: data.localizacao,
+    instrucoes: data.instrucoes,
+    configurado_por: data.configurado_por || "Almoxarife",
+    configurado_em: data.updated_at
   };
 };
 
 export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string) => {
-  const lsKey = `acandido_layout_config_${almoxarifado}_${mesName}_${anoStr}`;
-  localStorage.setItem(lsKey, JSON.stringify({ localizacao }));
-
-  const mes = monthNameToNum(mesName);
-  const ano = Number(anoStr);
-
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  await supabase.from('layout_configuracao').upsert({
-    almoxarifado,
-    mes,
-    ano,
-    localizacao,
-    configurado_por: user,
-    configurado_em: new Date().toISOString()
-  }, { onConflict: 'almoxarifado,mes,ano' });
+  if (!isSupabaseReady()) return;
+  await dbSalvarLayoutConfig(almoxarifado, mesName, anoStr, localizacao, "");
 };
 
-// ======================= UNIMOBIN EMPLOYEES (colaboradores_unimobin) =======================
+// ======================= UNIMOBIN CERTIFICADOS =======================
+export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, ano: string, colaborador_nome: string, dados: any) {
+  const { error } = await supabase
+    .from('unimobin_certificados')
+    .upsert({
+      almoxarifado_id, mes, ano, colaborador_nome,
+      status: dados.status || 'Aguardando envio',
+      file_name: dados.fileName || dados.file_name || null,
+      file_type: dados.fileType || dados.file_type || null,
+      file_data: dados.fileData || dados.file_data || null,
+      uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
+    },
+      { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
+  if (error) throw error;
+}
+
+export async function dbBuscarCertificados(almoxarifado_id: string, mes: string, ano: string) {
+  const { data, error } = await supabase
+    .from('unimobin_certificados')
+    .select('*')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('mes', mes)
+    .eq('ano', ano);
+  if (error) throw error;
+  return data || [];
+}
+
 export const dbFetchColaboradoresUnimobin = async () => {
   if (!isSupabaseReady()) {
     const saved = localStorage.getItem("acandido_all_collab_profiles");
     return saved ? JSON.parse(saved) : [];
   }
 
-  const { data, error } = await supabase.from('colaboradores_unimobin').select('*').eq('ativo', true);
-  if (error || !data) {
-    const saved = localStorage.getItem("acandido_all_collab_profiles");
-    return saved ? JSON.parse(saved) : [];
-  }
-
-  return data.map(row => ({
-    id: row.id,
-    name: row.nome,
-    status: "Aguardando envio" as const, // default status mapping
-    cargo: row.cargo || "Motorista/Colaborador"
+  // Fallback map colaboradores_unimobin from unimobin_certificados or returning base profiles
+  const { data, error } = await supabase.from('unimobin_certificados').select('*');
+  if (error || !data) return [];
+  return data.map(item => ({
+    id: item.id,
+    name: item.colaborador_nome,
+    status: item.status as any,
+    cargo: "Motorista/Colaborador"
   }));
 };
 
 export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => {
-  if (!isSupabaseReady()) {
-    return;
-  }
-
-  await supabase.from('colaboradores_unimobin').insert({
-    nome: name,
-    cargo: cargo,
-    ativo: true
+  if (!isSupabaseReady()) return;
+  // Just save a blank mock certificate
+  await dbSalvarCertificado("default", "Janeiro", "2026", name, {
+    status: "Aguardando envio"
   });
 };
 
-export const dbDeleteUser = async (email: string, id?: any) => {
-  // Always remove from local storage first to guarantee immediate success
-  const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-  if (saved) {
-    try {
-      const users: AppUser[] = JSON.parse(saved);
-      const filtered = users.filter(u => u.email.toLowerCase().trim() !== email.toLowerCase().trim());
-      localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(filtered));
-    } catch (e) {
-      console.error("Error updating local storage during deletion:", e);
-    }
+// ======================= HISTORICO AVALIACOES =======================
+export async function dbSalvarHistorico(entry: any) {
+  if (!isSupabaseReady()) return;
+  
+  // Create object mapping both camelCase and snake_case properties
+  const dbEntry = {
+    id: entry.id,
+    branch_id: entry.branchId || entry.branch_id || "",
+    branch_name: entry.branchName || entry.branch_name || "",
+    month_year: entry.monthYear || entry.month_year || "",
+    score: entry.score !== undefined ? entry.score : 0,
+    score_category: entry.scoreCategory || entry.score_category || "",
+    status: entry.status || "PENDENTE",
+    date_evaluated: entry.dateEvaluated || entry.date_evaluated || "",
+    auditor_name: entry.auditorName || entry.auditor_name || "",
+    nok_items: entry.nokItems || entry.nok_items || [],
+    criteria_state: entry.criteriaState || entry.criteria_state || []
+  };
+  
+  const { error } = await supabase
+    .from('historico_avaliacoes')
+    .upsert(dbEntry, { onConflict: 'id' });
+    
+  if (error) {
+    console.error("Error saving to database in dbSalvarHistorico:", error);
+    throw error;
   }
+}
 
-  // Record that we deleted this user to prevent them from being restored during database merges
+export async function dbSaveHistory(historyList: any[]) {
+  if (!isSupabaseReady()) return;
   try {
-    const deletedListSaved = localStorage.getItem(`${STORAGE_PREFIX}deleted_user_emails`);
-    const deletedList: string[] = deletedListSaved ? JSON.parse(deletedListSaved) : [];
-    const normalizedEmail = email.toLowerCase().trim();
-    if (!deletedList.includes(normalizedEmail)) {
-      deletedList.push(normalizedEmail);
-      localStorage.setItem(`${STORAGE_PREFIX}deleted_user_emails`, JSON.stringify(deletedList));
+    realtimeFlags.isLocalUpdate = true;
+    for (const entry of historyList) {
+      await dbSalvarHistorico(entry);
     }
-  } catch (err) {
-    console.warn("Could not save to deleted list:", err);
+  } finally {
+    realtimeFlags.isLocalUpdate = false;
   }
+}
 
-  // Attempt to delete from Supabase if ready
-  if (isSupabaseReady()) {
-    try {
-      realtimeFlags.isLocalUpdate = true;
-      let query = supabase.from('usuarios').delete();
-      if (id) {
-        query = query.eq('id', id);
-      } else {
-        query = query.eq('email', email.toLowerCase().trim());
-      }
-      const { error } = await query;
-      if (error) {
-        console.warn("Supabase user deletion failed (already deleted from Local Storage):", error);
-      }
-    } catch (err) {
-      console.warn("Critical error deleting user from Supabase:", err);
-    } finally {
-      realtimeFlags.isLocalUpdate = false;
-    }
+export async function dbFetchHistory(): Promise<any[]> {
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase
+    .from('historico_avaliacoes')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    console.error("Error standardizing history in dbFetchHistory:", error);
+    return [];
   }
-};
+  
+  return (data || []).map(entry => ({
+    id: entry.id,
+    branchId: entry.branch_id || entry.branchId,
+    branchName: entry.branch_name || entry.branchName,
+    monthYear: entry.month_year || entry.monthYear,
+    score: entry.score,
+    scoreCategory: entry.score_category || entry.scoreCategory,
+    status: entry.status,
+    dateEvaluated: entry.date_evaluated || entry.dateEvaluated,
+    auditorName: entry.auditor_name || entry.auditorName,
+    nokItems: entry.nok_items || entry.nokItems || [],
+    criteriaState: entry.criteria_state || entry.criteriaState || []
+  }));
+}
+

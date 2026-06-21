@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AppUser, Branch, CriterionState } from "../types";
+import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
 
 interface AdminRankingProps {
   user: AppUser;
@@ -38,6 +39,39 @@ export default function AdminRanking({
   const [selectedEntry, setSelectedEntry] = useState<UnifiedEntry | null>(null);
   const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);
   const [rankingMode, setRankingMode] = useState<"MES" | "ACUMULADO">("MES");
+  const [historyList, setHistoryList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadRankingHist = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbHistory = await dbFetchHistory();
+          if (dbHistory) {
+            setHistoryList(dbHistory);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to load history list in AdminRanking:", e);
+        }
+      }
+      // Fallback
+      try {
+        const saved = localStorage.getItem("acandido_history");
+        if (saved) {
+          setHistoryList(JSON.parse(saved));
+        }
+      } catch (e) {
+        setHistoryList([]);
+      }
+    };
+    loadRankingHist();
+    window.addEventListener("realtime-historico-update", loadRankingHist);
+    window.addEventListener("storage", loadRankingHist);
+    return () => {
+      window.removeEventListener("realtime-historico-update", loadRankingHist);
+      window.removeEventListener("storage", loadRankingHist);
+    };
+  }, []);
 
   // Independent local state for filters in the Ranking screen
   const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth);
@@ -176,11 +210,7 @@ export default function AdminRanking({
     const branchIds = entry.branches.map(b => b.id);
 
     // 1. Check history
-    let histEntries: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) histEntries = JSON.parse(saved);
-    } catch (e) {}
+    const histEntries = historyList;
 
     const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
       (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
@@ -258,11 +288,7 @@ export default function AdminRanking({
     const pointsMax = refCriterion ? refCriterion.pointsPossible : 0;
 
     // Check history
-    let histEntries: any[] = [];
-    try {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) histEntries = JSON.parse(saved);
-    } catch (e) {}
+    const histEntries = historyList;
 
     const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
       (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
@@ -387,15 +413,9 @@ export default function AdminRanking({
 
   const hasRealHistory = (() => {
     // 1. Check if we have archived records in acandido_history
-    try {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.filter((h: any) => h.monthYear).length > 0) {
-          return true;
-        }
-      }
-    } catch (e) {}
+    if (historyList && historyList.filter((h: any) => h.monthYear).length > 0) {
+      return true;
+    }
 
     // 2. Check if there are active / closed / blocked cycle structures initialized
     try {
@@ -564,22 +584,7 @@ export default function AdminRanking({
 
     // Get total closed cycles in current semester to filter actual alerts/highlights
     const totalClosedCyclesInSemester = (() => {
-      let histList: any[] = [];
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("acandido_history");
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-              histList = parsed.filter((h: any) => h.monthYear);
-            } else {
-              histList = [];
-            }
-          } catch {
-            histList = [];
-          }
-        }
-      }
+      const histList = historyList.filter((h: any) => h.monthYear);
       const semMonthsList = currentSemester === 1
         ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
         : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];

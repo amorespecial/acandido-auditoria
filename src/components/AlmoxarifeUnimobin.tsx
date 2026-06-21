@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
+import { dbBuscarCertificados, dbSalvarCertificado, isSupabaseReady } from "../supabaseService";
 
 interface AlmoxarifeUnimobinProps {
   onBack: () => void;
@@ -41,65 +42,102 @@ export default function AlmoxarifeUnimobin({
 
   const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
     const baseCerts = getCollaboratorsForBranch(branchId, branchName);
-    const storageKey = branchId 
-      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
-      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
-    const saved = localStorage.getItem(storageKey);
-    let parsedSaved: CollaboratorCertificate[] = [];
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          parsedSaved = parsed;
-        }
-      } catch (e) {
-        // Safe catch
-      }
-    }
-    
     const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
-    
-    return baseCerts.map((baseC) => {
-      const savedMatch = parsedSaved.find(
-        (sc) => sc && sc.name && sc.name.trim().toLowerCase() === baseC.name.trim().toLowerCase()
-      );
-      if (savedMatch) {
-        return {
-          ...baseC,
-          status: isSentGlobal ? ("Certificado enviado" as const) : savedMatch.status,
-          uploadedAt: savedMatch.uploadedAt,
-          fileName: savedMatch.fileName,
-          fileSize: savedMatch.fileSize,
-          fileType: savedMatch.fileType,
-          fileData: savedMatch.fileData
-        };
-      }
-      return {
-        ...baseC,
-        status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
-      };
-    });
+    return baseCerts.map((baseC) => ({
+      ...baseC,
+      status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
+    }));
   });
 
   React.useEffect(() => {
-    const storageKey = branchId 
-      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
-      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(certs));
-    } catch (e) {
-      console.warn("Storage quota exceeded. Saving certificates without heavy fileData base64 strings.");
-      const lightweight = certs.map(c => ({
-        ...c,
-        fileData: c.fileData ? "placeholder-heavy-data" : undefined
-      }));
+    let active = true;
+    const loadCerts = async () => {
+      if (!branchId || !isSupabaseReady()) return;
       try {
-        localStorage.setItem(storageKey, JSON.stringify(lightweight));
-      } catch (innerError) {
-        // Safe catch
+        const dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
+        if (dbCerts && dbCerts.length > 0 && active) {
+          const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
+          setCerts((prev) =>
+            prev.map((c) => {
+              const match = dbCerts.find(
+                (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
+              );
+              if (match) {
+                return {
+                  ...c,
+                  status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
+                  fileName: match.file_name,
+                  fileType: match.file_type,
+                  fileData: match.file_data,
+                  uploadedAt: match.uploaded_at
+                };
+              }
+              return c;
+            })
+          );
+        }
+      } catch (err) {
+        console.error("Error loading certificates from Supabase:", err);
       }
+    };
+    loadCerts();
+    return () => {
+      active = false;
+    };
+  }, [branchId, currentMonth, currentYear, criterionState]);
+
+  React.useEffect(() => {
+    if (!branchId || !isSupabaseReady()) return;
+    try {
+      certs.forEach((c) => {
+        dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
+          status: c.status,
+          fileName: c.fileName || null,
+          fileType: c.fileType || null,
+          fileData: c.fileData || null,
+          uploadedAt: c.uploadedAt || new Date().toISOString()
+        }).catch((err) => console.error("Error background saving certificate:", err));
+      });
+    } catch (e) {
+      console.error("Error saving certs to Supabase on change:", e);
     }
   }, [certs, branchId, currentMonth, currentYear]);
+
+  React.useEffect(() => {
+    const handleRealtime = async () => {
+      if (!branchId || !isSupabaseReady()) return;
+      try {
+        const dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
+        if (dbCerts && dbCerts.length > 0) {
+          const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
+          setCerts((prev) =>
+            prev.map((c) => {
+              const match = dbCerts.find(
+                (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
+              );
+              if (match) {
+                return {
+                  ...c,
+                  status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
+                  fileName: match.file_name,
+                  fileType: match.file_type,
+                  fileData: match.file_data,
+                  uploadedAt: match.uploaded_at
+                };
+              }
+              return c;
+            })
+          );
+        }
+      } catch (err) {
+        console.error("Error loading certificates on realtime event:", err);
+      }
+    };
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    };
+  }, [branchId, currentMonth, currentYear, criterionState]);
 
   const [isSending, setIsSending] = useState(false);
 

@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties } from "../supabaseService";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -26,6 +26,26 @@ export default function AdminEvaluationDetail({
   activeYear,
   calendarData,
 }: AdminEvaluationDetailProps) {
+  const cycleStateParsed = (() => {
+    let m = activeMonth || "Janeiro";
+    let y = activeYear || "2026";
+    let s: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
+
+    try {
+      const saved = localStorage.getItem("acandido_cycle_state_manual");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        s = parsed.status || "ABERTO";
+        if (!activeMonth && parsed.activeMonth) m = parsed.activeMonth;
+        if (!activeYear && parsed.activeYear) y = parsed.activeYear;
+      }
+    } catch (e) {}
+    return { activeMonth: m, activeYear: y, status: s };
+  })();
+
+  const [selectedCriterion, setSelectedCriterion] = useState<CriterionState | null>(null);
+  const [auditorCerts, setAuditorCerts] = useState<any[]>([]);
+
   const isCycleClosed = (() => {
     try {
       const m = activeMonth || "Janeiro";
@@ -55,30 +75,86 @@ export default function AdminEvaluationDetail({
   const [layoutLocationInput, setLayoutLocationInput] = useState("");
   const [layoutInstructionsInput, setLayoutInstructionsInput] = useState("");
   const [layoutConfigUpdatedCount, setLayoutConfigUpdatedCount] = useState(0);
+  const [layoutConfig, setLayoutConfig] = useState<any>(null);
 
   // TOP 10 monthly configuration states and helper
   const [showTop10ConfigModal, setShowTop10ConfigModal] = useState(false);
   const [top10ItemsInput, setTop10ItemsInput] = useState<{ code: string; description: string; qty: number }[]>([]);
   const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
+  const [top10Config, setTop10Config] = useState<any>(null);
+
+  React.useEffect(() => {
+    const loadLayout = async () => {
+      if (branch.id && isSupabaseReady()) {
+        try {
+          const config = await dbFetchLayoutConfig(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
+          setLayoutConfig(config);
+        } catch (e) {
+          console.error("Error loading layout config:", e);
+        }
+      }
+    };
+    loadLayout();
+  }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, layoutConfigUpdatedCount]);
+
+  React.useEffect(() => {
+    const loadTop10 = async () => {
+      if (branch.id && isSupabaseReady()) {
+        try {
+          const config = await dbFetchTop10Config(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
+          setTop10Config(config);
+        } catch (e) {
+          console.error("Error loading top 10 config:", e);
+        }
+      }
+    };
+    loadTop10();
+  }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, top10ConfigUpdatedCount]);
+
+  React.useEffect(() => {
+    const loadNonMoving = async () => {
+      if (branch.id && isSupabaseReady()) {
+        try {
+          const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
+          const MONTH_MAP: Record<string, number> = {
+            "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+          };
+          const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+          const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+          const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+          const dbData = await dbFetchNonMovingMaterials(branch.id, activeYearNum, activeSemestre);
+          if (dbData && dbData.materials) {
+            setBranchMaterials(dbData.materials.map((m: any) => ({
+              code: m.code,
+              name: m.description,
+              status: m.status
+            })));
+            localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(dbData.materials.map((m: any) => ({
+              code: m.code,
+              name: m.description,
+              status: m.status
+            }))));
+          }
+        } catch (e) {
+          console.error("Error loading non moving materials in AdminEvaluationDetail:", e);
+        }
+      }
+    };
+    loadNonMoving();
+
+    const handleRealtimeUpdate = () => {
+      loadNonMoving();
+    };
+    window.addEventListener("realtime-material-sem-mov-update", handleRealtimeUpdate);
+    return () => {
+      window.removeEventListener("realtime-material-sem-mov-update", handleRealtimeUpdate);
+    };
+  }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
+
   const [activeLightboxImg, setActiveLightboxImg] = useState<string | null>(null);
   const [subTab, setSubTab] = useState<"AUDITORIA" | "GARANTIAS" | "SERVICOS">("AUDITORIA");
-
-  const cycleStateParsed = (() => {
-    let m = activeMonth || "Janeiro";
-    let y = activeYear || "2026";
-    let s: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
-
-    try {
-      const saved = localStorage.getItem("acandido_cycle_state_manual");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        s = parsed.status || "ABERTO";
-        if (!activeMonth && parsed.activeMonth) m = parsed.activeMonth;
-        if (!activeYear && parsed.activeYear) y = parsed.activeYear;
-      }
-    } catch (e) {}
-    return { activeMonth: m, activeYear: y, status: s };
-  })();
 
   // Synchronically load remote configuration on branch/cycle change
   useEffect(() => {
@@ -118,30 +194,67 @@ export default function AdminEvaluationDetail({
     }
   }, [branch.criteria]);
 
-  const layoutConfig = (() => {
-    const _dummy = layoutConfigUpdatedCount;
-    const key = `acandido_layout_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
+  // Synchronize auditorCerts to Supabase in real-time!
+  React.useEffect(() => {
+    if (!auditorCerts || auditorCerts.length === 0 || !branch?.id || !isSupabaseReady()) return;
+    try {
+      auditorCerts.forEach((c) => {
+        dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+          status: c.status,
+          fileName: c.fileName || null,
+          fileType: c.fileType || null,
+          fileData: c.fileData || null,
+          uploadedAt: c.uploadedAt || new Date().toISOString()
+        }).catch((err) => console.error("Error saving auditor certificate from effect:", err));
+      });
+    } catch (e) {
+      console.error("Error in auditorCerts sync effect:", e);
     }
-    return null;
-  })();
+  }, [auditorCerts, branch?.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
+
+  React.useEffect(() => {
+    const handleRealtime = async () => {
+      if (selectedCriterion?.id === "6" && branch?.id && isSupabaseReady()) {
+        try {
+          const dbCerts = await dbBuscarCertificados(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
+          const baseCerts = getCollaboratorsForBranch(branch.id, branch.name);
+          const isSentGlobal = selectedCriterion?.status === "OK" || selectedCriterion?.status === "ENVIADO";
+          const loaded = baseCerts.map((baseC) => {
+            const savedMatch = dbCerts.find(
+              (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === baseC.name.trim().toLowerCase()
+            );
+            if (savedMatch) {
+              return {
+                ...baseC,
+                status: isSentGlobal ? ("Certificado enviado" as const) : (savedMatch.status as any),
+                uploadedAt: savedMatch.uploaded_at,
+                fileName: savedMatch.file_name,
+                fileSize: 0,
+                fileType: savedMatch.file_type,
+                fileData: savedMatch.file_data
+              };
+            }
+            return {
+              ...baseC,
+              status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
+            };
+          });
+          setAuditorCerts(loaded);
+        } catch (err) {
+          console.error("Error loading auditor certificates on realtime update:", err);
+        }
+      }
+    };
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    };
+  }, [selectedCriterion?.id, selectedCriterion?.status, branch?.id, branch?.name, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
 
   const handleOpenLayoutConfig = () => {
-    const key = `acandido_layout_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setLayoutLocationInput(parsed.location || "");
-        setLayoutInstructionsInput(parsed.instructions || "");
-      } catch (e) {
-        setLayoutLocationInput("");
-        setLayoutInstructionsInput("");
-      }
+    if (layoutConfig) {
+      setLayoutLocationInput(layoutConfig.location || "");
+      setLayoutInstructionsInput(layoutConfig.instructions || "");
     } else {
       setLayoutLocationInput("");
       setLayoutInstructionsInput("");
@@ -149,47 +262,44 @@ export default function AdminEvaluationDetail({
     setShowLayoutConfigModal(true);
   };
 
-  const handleSaveLayoutConfig = () => {
+  const handleSaveLayoutConfig = async () => {
     if (!layoutLocationInput.trim()) {
       alert("Por favor, insira a localização a ser auditada.");
       return;
     }
-    const key = `acandido_layout_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    localStorage.setItem(key, JSON.stringify({
-      location: layoutLocationInput.trim(),
-      instructions: layoutInstructionsInput.trim()
-    }));
+    let userName = "Auditor";
+    try {
+      const su = localStorage.getItem("acandido_app_user");
+      if (su) {
+        userName = JSON.parse(su).name || "Auditor";
+      }
+    } catch (e) {}
+
+    try {
+      if (isSupabaseReady()) {
+        await dbSaveLayoutConfig(
+          branch.id,
+          cycleStateParsed.activeMonth,
+          cycleStateParsed.activeYear,
+          layoutLocationInput.trim(),
+          userName
+        );
+      }
+    } catch (error) {
+      console.error("Failed to save layout config to database:", error);
+    }
+
     setLayoutConfigUpdatedCount(prev => prev + 1);
     setShowLayoutConfigModal(false);
     alert("Configuração do LayOut para este almoxarifado salva com sucesso!");
   };
 
-  const top10Config = (() => {
-    const _dummy = top10ConfigUpdatedCount;
-    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return null;
-  })();
-
   const handleOpenTop10Config = () => {
-    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed?.itens && Array.isArray(parsed.itens)) {
-          setTop10ItemsInput(parsed.itens);
-          setShowTop10ConfigModal(true);
-          return;
-        }
-      } catch (e) {}
+    if (top10Config && top10Config.itens && Array.isArray(top10Config.itens)) {
+      setTop10ItemsInput(top10Config.itens);
+    } else {
+      setTop10ItemsInput([{ code: "", description: "", qty: 1 }]);
     }
-    setTop10ItemsInput([{ code: "", description: "", qty: 1 }]);
     setShowTop10ConfigModal(true);
   };
 
@@ -209,15 +319,10 @@ export default function AdminEvaluationDetail({
         return;
       }
     }
-    const key = `acandido_top10_config_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
     const mappedItems = top10ItemsInput.map(it => ({
       code: it.code.trim(),
       description: it.description.trim(),
       qty: 1
-    }));
-
-    localStorage.setItem(key, JSON.stringify({
-      itens: mappedItems
     }));
 
     let userName = "Auditor";
@@ -277,10 +382,9 @@ export default function AdminEvaluationDetail({
   };
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCriterion, setSelectedCriterion] = useState<CriterionState | null>(null);
   const [top10AuditorQuantitiesInput, setTop10AuditorQuantitiesInput] = useState<Record<string, string>>({});
 
-  const [warranties] = useState<any[]>(() => {
+  const [warranties, setWarranties] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem("acandido_warranties");
       return saved ? JSON.parse(saved) : [];
@@ -288,6 +392,28 @@ export default function AdminEvaluationDetail({
       return [];
     }
   });
+
+  useEffect(() => {
+    const loadWarrantiesData = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbData = await dbFetchWarranties();
+          if (dbData && dbData.length > 0) {
+            setWarranties(dbData);
+            localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
+          }
+        } catch (e) {
+          console.error("Error fetching warranties from Supabase in AdminEvaluationDetail:", e);
+        }
+      }
+    };
+    loadWarrantiesData();
+
+    window.addEventListener("realtime-garantias-update", loadWarrantiesData);
+    return () => {
+      window.removeEventListener("realtime-garantias-update", loadWarrantiesData);
+    };
+  }, []);
   const [auditorMonthFilter, setAuditorMonthFilter] = useState("Junho 2026");
 
   // Bottom Sheet/Modal working states
@@ -301,7 +427,6 @@ export default function AdminEvaluationDetail({
   const [nokLink2Input, setNokLink2Input] = useState("");
   const [nokLink3Input, setNokLink3Input] = useState("");
   const [nokEvidenceDescriptionInput, setNokEvidenceDescriptionInput] = useState("");
-  const [auditorCerts, setAuditorCerts] = useState<any[]>([]);
   const [branchCalendar, setBranchCalendar] = useState<any[]>([]);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [nokEvidenceFileName, setNokEvidenceFileName] = useState("");
@@ -388,6 +513,30 @@ export default function AdminEvaluationDetail({
     setBranchMaterials(updated);
     localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
     
+    if (isSupabaseReady()) {
+      try {
+        const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
+        const MONTH_MAP: Record<string, number> = {
+          "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+        };
+        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+        const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+        dbSaveNonMovingMaterials(branch.id, activeYearNum, activeSemestre, {
+          materials: updated.map(m => ({
+            code: m.code,
+            description: m.name,
+            lastMovement: m.lastMovement || m.ultimo_movimento || "",
+            status: m.status
+          }))
+        }).catch(err => console.error("Error saving materials to Supabase:", err));
+      } catch (e) {
+        console.error("Error preparing dbSaveNonMovingMaterials:", e);
+      }
+    }
+    
     const anyNok = updated.some(m => m.status === "NOK");
     if (anyNok) {
       handleStatusChange("NOK");
@@ -414,6 +563,30 @@ export default function AdminEvaluationDetail({
     localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
     setNewMaterialCode("");
     setNewMaterialName("");
+
+    if (isSupabaseReady()) {
+      try {
+        const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
+        const MONTH_MAP: Record<string, number> = {
+          "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+        };
+        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+        const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+        dbSaveNonMovingMaterials(branch.id, activeYearNum, activeSemestre, {
+          materials: updated.map(m => ({
+            code: m.code,
+            description: m.name,
+            lastMovement: m.lastMovement || m.ultimo_movimento || "",
+            status: m.status
+          }))
+        }).catch(err => console.error("Error saving added material to Supabase:", err));
+      } catch (e) {
+        console.error("Error prepping dbSave for added material:", e);
+      }
+    }
     
     const anyNok = updated.some(m => m.status === "NOK");
     if (anyNok) {
@@ -430,6 +603,30 @@ export default function AdminEvaluationDetail({
     const updated = branchMaterials.filter((m) => m.code !== code);
     setBranchMaterials(updated);
     localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
+
+    if (isSupabaseReady()) {
+      try {
+        const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
+        const MONTH_MAP: Record<string, number> = {
+          "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+        };
+        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+        const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+        dbSaveNonMovingMaterials(branch.id, activeYearNum, activeSemestre, {
+          materials: updated.map(m => ({
+            code: m.code,
+            description: m.name,
+            lastMovement: m.lastMovement || m.ultimo_movimento || "",
+            status: m.status
+          }))
+        }).catch(err => console.error("Error saving removed material to Supabase:", err));
+      } catch (e) {
+        console.error("Error prepping dbSave for removed material:", e);
+      }
+    }
 
     const anyNok = updated.some((m) => m.status === "NOK");
     if (anyNok) {
@@ -465,14 +662,41 @@ export default function AdminEvaluationDetail({
     setShowNokConfirm(false);
 
     if (crit.id === "10") {
-      const storageKey = `acandido_materials_parados_${branch.id}`;
-      const saved = localStorage.getItem(storageKey);
       let mats = [];
-      if (saved) {
+      if (isSupabaseReady()) {
         try {
-          mats = JSON.parse(saved);
-        } catch {}
+          const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
+          const MONTH_MAP: Record<string, number> = {
+            "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
+          };
+          const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+          const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+          const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+          const dbData = await dbFetchNonMovingMaterials(branch.id, activeYearNum, activeSemestre);
+          if (dbData && dbData.materials) {
+            mats = dbData.materials.map((m: any) => ({
+              code: m.code,
+              name: m.description,
+              status: m.status
+            }));
+          }
+        } catch (e) {
+          console.error("Error fetching non moving materials in handleOpenEvaluate:", e);
+        }
       }
+      
+      if (!mats || mats.length === 0) {
+        const storageKey = `acandido_materials_parados_${branch.id}`;
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            mats = JSON.parse(saved);
+          } catch {}
+        }
+      }
+
       if (!mats || !Array.isArray(mats) || mats.length === 0) {
         mats = defaultMaterialsPerBranch[branch.id] || [
           { code: "M999", name: "Material Geral Sem Giro", status: "OK" }
@@ -487,41 +711,46 @@ export default function AdminEvaluationDetail({
     }
 
     if (crit.id === "6") {
-      const storageKey = `acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`;
-      const saved = localStorage.getItem(storageKey);
-      let parsedSaved: any[] = [];
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            parsedSaved = parsed;
-          }
-        } catch {}
-      }
       const isSentGlobal = crit.status === "OK" || crit.status === "ENVIADO";
       const baseCerts = getCollaboratorsForBranch(branch.id, branch.name);
       
-      const loaded = baseCerts.map((baseC) => {
-        const savedMatch = parsedSaved.find(
-          (sc) => sc && sc.name && sc.name.trim().toLowerCase() === baseC.name.trim().toLowerCase()
-        );
-        if (savedMatch) {
-          return {
+      const loadSupabaseCerts = async () => {
+        if (isSupabaseReady()) {
+          try {
+            const dbCerts = await dbBuscarCertificados(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
+            const loaded = baseCerts.map((baseC) => {
+              const savedMatch = dbCerts.find(
+                (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === baseC.name.trim().toLowerCase()
+              );
+              if (savedMatch) {
+                return {
+                  ...baseC,
+                  status: isSentGlobal ? ("Certificado enviado" as const) : (savedMatch.status as any),
+                  uploadedAt: savedMatch.uploaded_at,
+                  fileName: savedMatch.file_name,
+                  fileSize: 0,
+                  fileType: savedMatch.file_type,
+                  fileData: savedMatch.file_data
+                };
+              }
+              return {
+                ...baseC,
+                status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
+              };
+            });
+            setAuditorCerts(loaded);
+          } catch (err) {
+            console.error("Error loading auditor unimobin certificates from Supabase:", err);
+          }
+        } else {
+          const loaded = baseCerts.map((baseC) => ({
             ...baseC,
-            status: isSentGlobal ? ("Certificado enviado" as const) : savedMatch.status,
-            uploadedAt: savedMatch.uploadedAt,
-            fileName: savedMatch.fileName,
-            fileSize: savedMatch.fileSize,
-            fileType: savedMatch.fileType,
-            fileData: savedMatch.fileData
-          };
+            status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
+          }));
+          setAuditorCerts(loaded);
         }
-        return {
-          ...baseC,
-          status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
-        };
-      });
-      setAuditorCerts(loaded);
+      };
+      loadSupabaseCerts();
     }
 
     if (crit.id === "1") {
@@ -652,6 +881,7 @@ export default function AdminEvaluationDetail({
           }
         }
 
+        // Prepare quantities to persist on CriterionState
         const finalQuantitiesList = top10Config.itens.map((item: any) => {
           return Number(top10AuditorQuantitiesInput[item.code]) || 0;
         });
@@ -683,18 +913,20 @@ export default function AdminEvaluationDetail({
 
       // Custom Save for Inventário (ID "1")
       if (selectedCriterion.id === "1") {
+        // Validate that every Inventário item with NOK has a Link da Evidência
         const missingLinkItem = branchCalendar.find(b => b.status === "NOK" && !b.nokEvidenceLink?.trim());
         if (missingLinkItem) {
           alert("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
           return;
         }
 
+        // Update global calendar state using Supabase
         const fullCalendar = calendarData || [];
         const globalCalendar = fullCalendar.map(g => {
           const match = branchCalendar.find(b => b.id === g.id);
           if (match) {
-            return {
-              ...g,
+            return { 
+              ...g, 
               status: match.status,
               nokEvidenceLink: match.status === "NOK" ? (match.nokEvidenceLink || "").trim() : ""
             };
@@ -702,15 +934,12 @@ export default function AdminEvaluationDetail({
           return g;
         });
 
-        await dbSaveSchedules(globalCalendar);
-
         const okCount = branchCalendar.filter(b => b.status === "OK").length;
         const totalCount = branchCalendar.length;
-        const pointsObtained = totalCount > 0 ? Math.round(((okCount / totalCount) * 20) / 5) * 5 : 0;
-        
+        const pointsObtained = Math.round(((okCount / totalCount) * 20) / 5) * 5;
         let finalStatus = "PENDENTE";
-        if (totalCount > 0 && okCount === totalCount) finalStatus = "OK";
-        else if (totalCount > 0 && okCount === 0 && branchCalendar.some(b => b.status === "NOK")) finalStatus = "NOK";
+        if (okCount === totalCount) finalStatus = "OK";
+        else if (okCount === 0) finalStatus = "NOK";
 
         const parentNokEvidenceLinks = branchCalendar
           .filter(b => b.status === "NOK" && b.nokEvidenceLink?.trim())
@@ -736,13 +965,28 @@ export default function AdminEvaluationDetail({
           return c;
         });
 
+        // 1. Executar onUpdateCriteria primeiro — salva localmente, garantido
         onUpdateCriteria(branch.id, updated);
+
+        // 2. Executar setSelectedCriterion(null) — fecha o modal imediatamente
         setSelectedCriterion(null);
+
+        // 3. Mostrar alert de confirmação com status e pontuação
+        alert(`Avaliação de Inventário agendado salva localmente com sucesso!\nStatus Geral do Critério: ${finalStatus}\nPontos Obtidos: ${pointsObtained} de 20 pts.`);
+
+        // 4. Tentar dbSaveSchedules depois, em segundo plano com .catch() sem bloquear — se o Supabase falhar, os dados já foram salvos localmente e o usuário já recebeu feedback
+        dbSaveSchedules(globalCalendar)
+          .then(() => {
+            console.log("[Supabase] Calendário de Inventário salvo com sucesso na nuvem.");
+          })
+          .catch((err) => {
+            console.error("[Supabase Erro Não-Bloqueante] Falha ao sincronizar calendário com o banco:", err);
+          });
+
         return;
       }
 
-      // Critério 6 — Curso Unimobin
-      // Se algum colaborador ainda estiver "Aguardando envio", força NOK
+      // Automatic Unimobin NOK Rule: if any collaborator has pending status ("Aguardando envio"), entire criterion is forced to NOK
       const hasAnyNokCollab = selectedCriterion.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
       const enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
 
@@ -762,7 +1006,7 @@ export default function AdminEvaluationDetail({
             pointsObtained: enforcedStatus === "OK" ? selectedCriterion.pointsPossible : 0,
             notes: notesInput,
             evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
-            submittedPhotos: selectedCriterion.auditMode === "Presencial"
+            submittedPhotos: selectedCriterion.auditMode === "Presencial" 
               ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
               : c.submittedPhotos,
             submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
@@ -779,7 +1023,6 @@ export default function AdminEvaluationDetail({
 
       onUpdateCriteria(branch.id, updated);
 
-      // Critério 10 — Material sem movimentação: propaga para almoxarifado twin
       const isShared = selectedCriterion.id === "10";
       if (isShared && twinBranch) {
         const twinUpdated = twinBranch.criteria.map((c) => {
@@ -788,11 +1031,9 @@ export default function AdminEvaluationDetail({
               ...c,
               status: enforcedStatus,
               pointsObtained: enforcedStatus === "OK" ? c.pointsPossible : 0,
-              notes: notesInput
-                ? (notesInput + ` (Avaliado na unidade par ${branch.name.replace("ALMOXARIFADO ", "")})`)
-                : `Avaliado no almoxarifado par ${branch.name.replace("ALMOXARIFADO ", "")}.`,
+              notes: notesInput ? (notesInput + ` (Avaliado na unidade par ${branch.name.replace("ALMOXARIFADO ", "")})`) : `Avaliado no almoxarifado par ${branch.name.replace("ALMOXARIFADO ", "")}.`,
               evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
-              submittedPhotos: selectedCriterion.auditMode === "Presencial"
+              submittedPhotos: selectedCriterion.auditMode === "Presencial" 
                 ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
                 : c.submittedPhotos,
               submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
@@ -810,7 +1051,6 @@ export default function AdminEvaluationDetail({
       }
 
       setSelectedCriterion(null);
-
     } catch (error: any) {
       console.error("[Erro ao Salvar Avaliação]", error);
       alert("Erro ao salvar avaliação: " + (error.message || error));

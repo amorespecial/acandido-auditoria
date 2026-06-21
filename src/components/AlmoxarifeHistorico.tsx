@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AppUser, Branch, AuditHistoryEntry } from "../types";
 import { initialHistory } from "../mockData";
+import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
 
 interface AlmoxarifeHistoricoProps {
   user: AppUser;
@@ -253,6 +254,40 @@ export default function AlmoxarifeHistorico({
   const [isExporting, setIsExporting] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  const [historyList, setHistoryList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadAlmoxarifeHist = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbHistory = await dbFetchHistory();
+          if (dbHistory) {
+            setHistoryList(dbHistory);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to load history list in AlmoxarifeHistorico:", e);
+        }
+      }
+      // Fallback
+      try {
+        const saved = localStorage.getItem("acandido_history");
+        if (saved) {
+          setHistoryList(JSON.parse(saved));
+        }
+      } catch (e) {
+        setHistoryList([]);
+      }
+    };
+    loadAlmoxarifeHist();
+    window.addEventListener("realtime-historico-update", loadAlmoxarifeHist);
+    window.addEventListener("storage", loadAlmoxarifeHist);
+    return () => {
+      window.removeEventListener("realtime-historico-update", loadAlmoxarifeHist);
+      window.removeEventListener("storage", loadAlmoxarifeHist);
+    };
+  }, []);
+
   const activeBranch = managedBranches.find((b) => b.id === selectedBranchId) || managedBranches[0];
 
   if (!activeBranch) {
@@ -265,24 +300,9 @@ export default function AlmoxarifeHistorico({
     );
   }
 
-  // Generate dynamic performance history and merge with saved state in localStorage
+  // Generate dynamic performance history and merge with saved state in localStorage/Supabase
   const getHistoryEntries = (): HistoricalReportDetails[] => {
-    let savedEntries: any[] = [];
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) {
-        try {
-          savedEntries = JSON.parse(saved);
-          if (!Array.isArray(savedEntries)) {
-            savedEntries = [];
-          } else {
-            savedEntries = savedEntries.filter((h: any) => h.monthYear);
-          }
-        } catch (e) {
-          savedEntries = [];
-        }
-      }
-    }
+    const savedEntries = Array.isArray(historyList) ? historyList.filter((h: any) => h.monthYear) : [];
 
     // Filter real closed entries that belong to this branch
     const realBranchEntries = savedEntries.filter((e) => e.branchId === activeBranch.id);

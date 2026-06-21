@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
+import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence } from "../supabaseService";
 
 interface AlmoxarifeNivelServicoProps {
   onBack: () => void;
@@ -111,6 +112,30 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
     };
   }, [branchId]);
 
+  // Handle Supabase Realtime and Initial Load
+  useEffect(() => {
+    const loadFromDb = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const dbOccs = await dbFetchOccurrences();
+          if (dbOccs && dbOccs.length > 0) {
+            setOccurrences(dbOccs);
+            localStorage.setItem("acandido_occurrences", JSON.stringify(dbOccs));
+            window.dispatchEvent(new Event("storage"));
+          }
+        } catch (e) {
+          console.error("Failed to fetch occurrences from Supabase:", e);
+        }
+      }
+    };
+    loadFromDb();
+    
+    window.addEventListener("realtime-nivel-servico-update", loadFromDb);
+    return () => {
+      window.removeEventListener("realtime-nivel-servico-update", loadFromDb);
+    };
+  }, []);
+
   // Tab state: "ATIVOS" or "RESOLVIDOS"
   const [activeTab, setActiveTab] = useState<"ATIVOS" | "RESOLVIDOS">("ATIVOS");
 
@@ -122,9 +147,16 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
   const [treatmentStatus, setTreatmentStatus] = useState<"RESOLVIDO" | "MATERIAL NO ALMOXARIFADO" | "COMPRADO, ESPERANDO CHEGAR" | "CIENTE">("RESOLVIDO");
   const [treatmentObs, setTreatmentObs] = useState("");
 
-  const persistChange = (updated: MaterialOccurrence[]) => {
+  const persistChange = async (updated: MaterialOccurrence[]) => {
     setOccurrences(updated);
     localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveOccurrences(updated);
+      } catch (err) {
+        console.error("Failed to save occurrences in Supabase:", err);
+      }
+    }
     // Trigger storage event for other components listening (like Supervisor panel)
     window.dispatchEvent(new Event("storage"));
   };
@@ -219,9 +251,20 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
       isOpen: true,
       title: "Remover Ocorrência",
       message: "Deseja realmente remover esta ocorrência?",
-      onConfirm: () => {
+      onConfirm: async () => {
         const updated = occurrences.filter((o) => o.id !== id);
-        persistChange(updated);
+        setOccurrences(updated);
+        localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
+
+        if (isSupabaseReady()) {
+          try {
+            await dbDeleteOccurrence(id);
+          } catch (e) {
+            console.error("Failed to delete occurrence in Supabase:", e);
+          }
+        }
+
+        window.dispatchEvent(new Event("storage"));
         setCustomConfirm(null);
       }
     });
