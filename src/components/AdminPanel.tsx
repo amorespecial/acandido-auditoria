@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Branch } from "../types";
+import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminPanelProps {
   branches: Branch[];
@@ -35,6 +36,7 @@ export default function AdminPanel({
   user,
   allCycles,
 }: AdminPanelProps) {
+  useRealtimeSync();
   const [selectedGroup, setSelectedGroup] = useState<"TODOS" | "A" | "B">("TODOS");
   const [filterType, setFilterType] = useState<"TODOS" | "OK" | "PENDENTE" | "NOK">("TODOS");
 

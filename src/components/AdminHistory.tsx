@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { initialHistory } from "../mockData";
 import { AuditHistoryEntry, AppUser, Branch, CriterionState } from "../types";
 import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
+import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminHistoryProps {
   user: AppUser;
@@ -339,6 +340,7 @@ const getHistoryForBranch = (bId: string, historyList: any[]): AuditHistoryEntry
 };
 
 export default function AdminHistory({ user, branches, calendarData }: AdminHistoryProps) {
+  useRealtimeSync();
   // If user is Admin, they can select any of the 13 warehouses. If Almoxarife, it is locked to their active branch.
   const userBranches = branches.filter((b) => b.ownerName === user.ownerName);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {

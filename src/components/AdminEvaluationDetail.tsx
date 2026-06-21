@@ -4,6 +4,7 @@ import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
 import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties } from "../supabaseService";
+import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -26,6 +27,7 @@ export default function AdminEvaluationDetail({
   activeYear,
   calendarData,
 }: AdminEvaluationDetailProps) {
+  useRealtimeSync();
   const cycleStateParsed = (() => {
     let m = activeMonth || "Janeiro";
     let y = activeYear || "2026";

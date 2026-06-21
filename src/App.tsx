@@ -3,6 +3,7 @@ import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
 import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
+import { useRealtimeSync } from "./useRealtimeSync";
 
 // View components
 import Login from "./components/Login";
@@ -424,229 +425,61 @@ export default function App() {
     checkConnectionAndLoadCycle();
   }, []);
 
-  // 2. Realtime Subscriptions for live updates with reconnection handling, anti-looping protection, and notifications
-  useEffect(() => {
-    if (!isSupabaseReady()) return;
+  // 2. Centralized Realtime Sync hook for live state updates with anti-looping and instant feedback
+  useRealtimeSync(async (payload) => {
+    if (realtimeFlags.isLocalUpdate) return;
 
-    let toastTimer: NodeJS.Timeout;
-    const triggerLiveToast = () => {
-      if (realtimeFlags.isLocalUpdate) return;
-      setShowLiveUpdateToast(true);
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        setShowLiveUpdateToast(false);
-      }, 2000);
-    };
+    // Show live update notification toast
+    setShowLiveUpdateToast(true);
+    const toastTimer = setTimeout(() => {
+      setShowLiveUpdateToast(false);
+    }, 2000);
 
-    const cyclesChannel = supabase
-      .channel("realtime-ciclos")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ciclos" },
-        async (payload) => {
-          console.log("Realtime ciclos update received:", payload);
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          try {
-            const dbCycles = await dbFetchAllCycles();
-            if (dbCycles) {
-              const map: Record<string, any> = {};
-              dbCycles.forEach((c) => {
-                map[`${c.activeMonth}_${c.activeYear}`] = c;
-              });
-              setAllCycles(map);
-            }
-            const dbCycle = await dbFetchCycleState();
-            if (dbCycle) {
-              const key = `${dbCycle.activeMonth}_${dbCycle.activeYear}`;
-              setAllCycles((prev) => ({ ...prev, [key]: dbCycle }));
-            }
-            window.dispatchEvent(new Event("realtime-ciclos-update"));
-          } catch (err) {
-            console.error("Error reloading cycle state on realtime payload:", err);
-          }
+    const { table } = payload;
+    console.log(`[Realtime Global Sync App.tsx] Table changed: ${table}`);
+
+    if (table === "ciclos") {
+      try {
+        const dbCycles = await dbFetchAllCycles();
+        if (dbCycles) {
+          const map: Record<string, any> = {};
+          dbCycles.forEach((c) => {
+            map[`${c.activeMonth}_${c.activeYear}`] = c;
+          });
+          setAllCycles(map);
         }
-      )
-      .subscribe();
-
-    const evaluationsChannel = supabase
-      .channel("realtime-avaliacoes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "avaliacoes" },
-        () => {
-          console.log("Realtime update on avaliacoes!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          setRefetchTrigger((prev) => prev + 1);
-          window.dispatchEvent(new Event("realtime-avaliacoes-update"));
+        const dbCycle = await dbFetchCycleState();
+        if (dbCycle && dbCycle.status) {
+          setCycleState(dbCycle);
+          if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
+          if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
         }
-      )
-      .on('system', { event: 'reconnected' }, () => {
-        console.log("Supabase Realtime reconnected! Synchronizing data.");
-        setRefetchTrigger((prev) => prev + 1);
-        window.dispatchEvent(new Event("realtime-avaliacoes-update"));
-        window.dispatchEvent(new Event("realtime-ciclos-update"));
-        window.dispatchEvent(new Event("realtime-submissions-update"));
-        window.dispatchEvent(new Event("realtime-garantias-update"));
-        window.dispatchEvent(new Event("realtime-nivel-servico-update"));
-        window.dispatchEvent(new Event("realtime-material-sem-mov-update"));
-        window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
-      })
-      .subscribe();
-
-    const submissionsChannel = supabase
-      .channel("realtime-submissions")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "envios_almoxarife" },
-        () => {
-          console.log("Realtime update on envios_almoxarife!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          setRefetchTrigger((prev) => prev + 1);
-          window.dispatchEvent(new Event("realtime-submissions-update"));
-          window.dispatchEvent(new Event("realtime-envios-update"));
+      } catch (err) {
+        console.error("Error reloading cycle state on realtime payload:", err);
+      }
+    } else if (
+      table === "avaliacoes" ||
+      table === "pontuacoes" ||
+      table === "calendario_inventarios" ||
+      table === "envios_almoxarife" ||
+      table === "top10_config" ||
+      table === "top10_envios" ||
+      table === "nivel_servico" ||
+      table === "garantias"
+    ) {
+      setRefetchTrigger((prev) => prev + 1);
+    } else if (table === "usuarios") {
+      try {
+        const dbUsers = await dbFetchUsers();
+        if (dbUsers) {
+          localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
+          window.dispatchEvent(new Event("storage"));
         }
-      )
-      .subscribe();
-
-    const usersChannel = supabase
-      .channel("realtime-usuarios")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "usuarios" },
-        async (payload) => {
-          console.log("Realtime update on usuarios table received:", payload);
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          try {
-            const dbUsers = await dbFetchUsers();
-            if (dbUsers) {
-              localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
-              window.dispatchEvent(new Event("storage"));
-            }
-          } catch (err) {
-            console.error("Error reloading users on database change:", err);
-          }
-        }
-      )
-      .subscribe();
-
-    const historicoChannel = supabase
-      .channel("realtime-historico")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "historico_avaliacoes" },
-        () => {
-          console.log("Realtime update on historico_avaliacoes!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          window.dispatchEvent(new Event("realtime-historico-update"));
-        }
-      )
-      .subscribe();
-
-    const garantiasChannel = supabase
-      .channel("realtime-garantias")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "garantias" },
-        () => {
-          console.log("Realtime update on garantias!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          window.dispatchEvent(new Event("realtime-garantias-update"));
-        }
-      )
-      .subscribe();
-
-    const nivelServicoChannel = supabase
-      .channel("realtime-nivel-servico")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "nivel_servico" },
-        () => {
-          console.log("Realtime update on nivel_servico!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          window.dispatchEvent(new Event("realtime-nivel-servico-update"));
-        }
-      )
-      .subscribe();
-
-    const materialsNoMovChannel = supabase
-      .channel("realtime-materials-sem-mov")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "materiais_parados" },
-        () => {
-          console.log("Realtime update on materiais_parados!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          window.dispatchEvent(new Event("realtime-material-sem-mov-update"));
-        }
-      )
-      .subscribe();
-
-    const unimobinCertsChannel = supabase
-      .channel("realtime-unimobin-certs")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "colaboradores_unimobin" },
-        () => {
-          console.log("Realtime update on colaboradores_unimobin certificates!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
-        }
-      )
-      .subscribe();
-
-    const pontuacoesChannel = supabase
-      .channel("realtime-pontuacoes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pontuacoes" },
-        () => {
-          console.log("Realtime update on pontuacoes!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          setRefetchTrigger((prev) => prev + 1);
-        }
-      )
-      .subscribe();
-
-    const calendarChannel = supabase
-      .channel("realtime-calendario")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "calendario_inventarios" },
-        async () => {
-          console.log("Realtime update on calendario_inventarios!");
-          if (realtimeFlags.isLocalUpdate) return;
-          triggerLiveToast();
-          setRefetchTrigger((prev) => prev + 1);
-          window.dispatchEvent(new Event("realtime-calendario-update"));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      clearTimeout(toastTimer);
-      supabase.removeChannel(cyclesChannel);
-      supabase.removeChannel(evaluationsChannel);
-      supabase.removeChannel(submissionsChannel);
-      supabase.removeChannel(usersChannel);
-      supabase.removeChannel(historicoChannel);
-      supabase.removeChannel(garantiasChannel);
-      supabase.removeChannel(nivelServicoChannel);
-      supabase.removeChannel(materialsNoMovChannel);
-      supabase.removeChannel(unimobinCertsChannel);
-      supabase.removeChannel(pontuacoesChannel);
-      supabase.removeChannel(calendarChannel);
-    };
-  }, []);
+      } catch (err) {
+        console.error("Error reloading users on database change:", err);
+      }
+    }
+  }, [activeMonth, activeYear]);
 
   useEffect(() => {
     const fetchSchedules = async () => {

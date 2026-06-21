@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, CriterionState } from "../types";
 import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
+import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminRankingProps {
   user: AppUser;
@@ -35,6 +36,7 @@ export default function AdminRanking({
   setSelectedSemesterFilter,
   cycleState
 }: AdminRankingProps) {
+  useRealtimeSync();
   const [activeGroupTab, setActiveGroupTab] = useState<"A" | "B">("A");
   const [selectedEntry, setSelectedEntry] = useState<UnifiedEntry | null>(null);
   const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);

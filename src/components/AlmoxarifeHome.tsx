@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
 import { dbFetchBranchSchedules } from "../supabaseService";
+import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AlmoxarifeHomeProps {
   branch: Branch;
@@ -21,6 +22,7 @@ export default function AlmoxarifeHome({
   activeYear,
   calendarData,
 }: AlmoxarifeHomeProps) {
+  useRealtimeSync();
   // Score parameters
   const score = branch.currentScore;
   const isApproved = score >= branch.meta;
