@@ -106,7 +106,13 @@ export const seedDatabaseIfEmpty = async () => {
         nome: u.name,
         email: u.email.toLowerCase().trim(),
         perfil: u.role === "ADMIN" ? "auditor" : u.role === "SUPERVISOR" ? "supervisor" : "almoxarife",
-        almoxarifados: (u as any).almoxarifados || [],
+        almoxarifado: JSON.stringify({
+          password: u.password,
+          cargo: (u as any).cargo || "",
+          group: u.group || "A",
+          ownerName: u.ownerName || u.name.split(" ")[0],
+          almoxarifados: (u as any).almoxarifados || []
+        }),
         ativo: true
       }));
       await supabase.from('usuarios').upsert(usersToInsert, { onConflict: 'email' });
@@ -165,16 +171,37 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
     return saved ? JSON.parse(saved) : [];
   }
 
-  return data.map(u => ({
-    id: u.id,
-    name: u.nome,
-    email: u.email,
-    role: u.perfil === "auditor" ? "ADMIN" : u.perfil === "supervisor" ? "SUPERVISOR" : "ALMOXARIFE",
-    ownerName: u.nome,
-    group: "A",
-    status: u.ativo ? "ATIVO" : "DESATIVADO",
-    almoxarifados: u.almoxarifados || []
-  }));
+  return data.map(u => {
+    let extra: any = {};
+    if (u.almoxarifado && typeof u.almoxarifado === "string" && u.almoxarifado.trim().startsWith("{")) {
+      try {
+        extra = JSON.parse(u.almoxarifado);
+      } catch (e) {
+        console.warn("Could not parse extra payload from user almoxarifado column:", e);
+      }
+    }
+
+    // Match with OFFICIAL_CREDENTIALS for robust fallback definitions
+    const official = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === u.email.toLowerCase().trim());
+    const password = extra.password || (official ? official.password : "123456");
+    const cargo = extra.cargo || (official ? (official as any).cargo : "");
+    const almoxarifados = extra.almoxarifados || (official ? (official as any).almoxarifados : []);
+    const group = extra.group || (official ? official.group : "A");
+    const ownerName = extra.ownerName || (official ? official.ownerName : u.nome.split(" ")[0]);
+
+    return {
+      id: u.id,
+      name: u.nome,
+      email: u.email,
+      role: u.perfil === "auditor" ? "ADMIN" : u.perfil === "supervisor" ? "SUPERVISOR" : "ALMOXARIFE",
+      ownerName: ownerName,
+      group: group,
+      status: u.ativo ? "ATIVO" : "DESATIVADO",
+      almoxarifados: almoxarifados || [],
+      password: password,
+      cargo: cargo
+    };
+  });
 };
 
 export const dbSaveUser = async (user: AppUser) => {
@@ -183,12 +210,22 @@ export const dbSaveUser = async (user: AppUser) => {
   }
 
   const perf = user.role === "ADMIN" ? "auditor" : user.role === "SUPERVISOR" ? "supervisor" : "almoxarife";
+  
+  // Package extra properties like password and warehouses securely to avoid db structure constraints
+  const extraPayload = {
+    password: user.password,
+    cargo: (user as any).cargo || "",
+    group: user.group || "A",
+    ownerName: user.ownerName || user.name.split(" ")[0],
+    almoxarifados: user.almoxarifados || []
+  };
+
   await supabase.from('usuarios').upsert({
     id: user.id && user.id.length > 5 ? user.id : undefined,
     nome: user.name,
     email: user.email.toLowerCase().trim(),
     perfil: perf,
-    almoxarifados: user.almoxarifados || [],
+    almoxarifado: JSON.stringify(extraPayload),
     ativo: user.status !== "DESATIVADO"
   }, { onConflict: 'email' });
 };
