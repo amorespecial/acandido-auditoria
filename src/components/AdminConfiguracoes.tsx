@@ -170,7 +170,7 @@ export default function AdminConfiguracoes({
     location: "",
     group: "A" as "A" | "B",
     ownerName: "",
-    meta: 80
+    meta: 100
   });
 
   // ================= STATE: REFRESH/MANAGE CYCLE & FORM FIELDS =================
@@ -1024,7 +1024,7 @@ export default function AdminConfiguracoes({
       name: newBranchForm.name.toUpperCase().trim(),
       location: newBranchForm.location.trim() || "Campina Grande, PB",
       currentScore: 0,
-      meta: Number(newBranchForm.meta) || 80,
+      meta: Number(newBranchForm.meta) || 100,
       status: "PENDENTE",
       scoreCategory: "Abaixo da Meta",
       ownerName: newBranchForm.ownerName.trim() || "Paulo",
@@ -1066,7 +1066,7 @@ export default function AdminConfiguracoes({
       location: "",
       group: "A",
       ownerName: "",
-      meta: 80
+      meta: 100
     });
   };
 
@@ -2749,7 +2749,7 @@ export default function AdminConfiguracoes({
                     min="1"
                     max="100"
                     value={newBranchForm.meta}
-                    onChange={(e) => setNewBranchForm(prev => ({ ...prev, meta: Number(e.target.value) || 80 }))}
+                    onChange={(e) => setNewBranchForm(prev => ({ ...prev, meta: Number(e.target.value) || 100 }))}
                     className="w-full border border-slate-200 p-2.5 text-xs font-bold rounded-lg focus:outline-[#1B2A4A]"
                   />
                 </div>

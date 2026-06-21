@@ -239,7 +239,7 @@ export default function AdminPanel({
           <p className="text-2xl font-black text-emerald-600 mt-1">
             {filteredBranches.filter((b) => {
               const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
-              return hasRegistered && b.currentScore >= b.meta;
+              return hasRegistered && b.currentScore >= 100;
             }).length}
           </p>
         </div>
@@ -248,7 +248,7 @@ export default function AdminPanel({
           <p className="text-2xl font-black text-red-500 mt-1">
             {filteredBranches.filter((b) => {
               const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
-              return hasRegistered && b.currentScore < b.meta;
+              return hasRegistered && b.currentScore < 100;
             }).length}
           </p>
         </div>
@@ -396,7 +396,7 @@ export default function AdminPanel({
           }
 
           const scoreToDisplay = isNotStarted ? 0 : (branch.pointsObtainedSum ?? branch.currentScore);
-          const maxPoints = branch.maxAuditablePoints ?? 75;
+          const maxPoints = 100;
           const progressWidth = Math.min((scoreToDisplay / maxPoints) * 100, 100);
 
           const categoryToDisplay = isNotStarted ? "Sem avaliação" : branch.scoreCategory;

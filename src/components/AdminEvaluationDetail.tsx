@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
@@ -650,6 +650,72 @@ export default function AdminEvaluationDetail({
   const twinId = pair ? (pair[0] === branch.id ? pair[1] : pair[0]) : null;
   const twinBranch = twinId ? allBranches.find((b) => b.id === twinId) : null;
 
+  // Let's compute the consolidated score and max potential points of this branch
+  const { scoreDoAlmoxarifadoAtual, maxAuditablePointsDoAlmoxarifadoAtual, scoreCategoryDoAlmoxarifadoAtual } = useMemo(() => {
+    let totalScore = 0;
+    let maxAuditable = 0;
+    let hasPendingMonthly = false;
+
+    branch.criteria.forEach((crit) => {
+      const twinCrit = twinBranch?.criteria.find((tc) => tc.id === crit.id);
+      let pointsToDisplay = crit.status === "OK" ? crit.pointsPossible : 0;
+      let finalStatus = crit.status;
+
+      if (twinBranch && twinCrit) {
+        const isThisOursNok = crit.status === "NOK";
+        const isTwinNok = (twinCrit.rawStatus || twinCrit.status) === "NOK";
+
+        if (isThisOursNok || isTwinNok) {
+          pointsToDisplay = 0;
+          finalStatus = "NOK";
+        } else {
+          const isOursOk = crit.status === "OK";
+          const isTwinOk = (twinCrit.rawStatus || twinCrit.status) === "OK";
+          if (isOursOk && isTwinOk) {
+            pointsToDisplay = crit.pointsPossible;
+            finalStatus = "OK";
+          } else {
+            pointsToDisplay = 0;
+            finalStatus = crit.status === "ENVIADO" ? "ENVIADO" : "PENDENTE";
+          }
+        }
+      }
+
+      totalScore += pointsToDisplay;
+      maxAuditable += crit.pointsPossible || 0;
+
+      // Check for pending monthly (excluding Inventario ID 1 and material ID 10)
+      if (crit.id !== "1" && crit.id !== "10") {
+        if (finalStatus !== "OK" && finalStatus !== "NOK") {
+          hasPendingMonthly = true;
+        }
+      }
+    });
+
+    const ratio = maxAuditable > 0 ? (totalScore / maxAuditable) * 100 : 100;
+    let scoreCategory: Branch["scoreCategory"] = "Excelente";
+
+    if (hasPendingMonthly) {
+      scoreCategory = "Parcial";
+    } else {
+      if (ratio >= 85) {
+        scoreCategory = "Excelente";
+      } else if (ratio >= 70) {
+        scoreCategory = "Bom";
+      } else if (ratio >= 60) {
+        scoreCategory = "Regular";
+      } else {
+        scoreCategory = "Abaixo da Meta";
+      }
+    }
+
+    return {
+      scoreDoAlmoxarifadoAtual: totalScore,
+      maxAuditablePointsDoAlmoxarifadoAtual: maxAuditable > 0 ? maxAuditable : 100,
+      scoreCategoryDoAlmoxarifadoAtual: scoreCategory
+    };
+  }, [branch, twinBranch]);
+
   const handleOpenEvaluate = async (crit: CriterionState) => {
     if (isCycleClosed) {
       alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas avaliações.");
@@ -1266,27 +1332,27 @@ export default function AdminEvaluationDetail({
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Score Calculado</p>
             <p className="text-3xl font-extrabold text-[#1B2A4A] mt-1 font-mono">
-              {branch.pointsObtainedSum ?? branch.currentScore}
-              <span className="text-sm text-slate-400 font-medium font-sans">/{branch.maxAuditablePoints ?? 75} pts</span>
+              {scoreDoAlmoxarifadoAtual}
+              <span className="text-sm text-slate-400 font-medium font-sans">/100 pts</span>
             </p>
           </div>
           <div className="text-right">
             <span
               className={`text-xs font-black uppercase px-2.5 py-1 rounded-full ${
-                branch.scoreCategory === "Excelente"
+                scoreCategoryDoAlmoxarifadoAtual === "Excelente"
                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : branch.scoreCategory === "Bom"
+                  : scoreCategoryDoAlmoxarifadoAtual === "Bom"
                   ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                  : branch.scoreCategory === "Regular" || branch.scoreCategory === "Médio"
+                  : scoreCategoryDoAlmoxarifadoAtual === "Regular" || scoreCategoryDoAlmoxarifadoAtual === "Médio"
                   ? "bg-amber-50 text-amber-700 border border-amber-200"
-                  : branch.scoreCategory === "Parcial"
+                  : scoreCategoryDoAlmoxarifadoAtual === "Parcial"
                   ? "bg-slate-100 text-slate-600 border border-slate-300 font-bold"
                   : "bg-rose-50 text-rose-700 border border-rose-200"
               }`}
             >
-              {branch.scoreCategory}
+              {scoreCategoryDoAlmoxarifadoAtual}
             </span>
-            <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Meta: {branch.meta} pts</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Meta: 100 pts</p>
           </div>
         </div>
       </header>
