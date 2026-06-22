@@ -24,9 +24,14 @@ import AlmoxarifeGarantia from "./components/AlmoxarifeGarantia";
 import AlmoxarifeHistorico from "./components/AlmoxarifeHistorico";
 import SupervisorPanel from "./components/SupervisorPanel";
 
+const safeStr = (val: any): string => {
+  if (val === null || val === undefined) return "";
+  return String(val);
+};
+
 const getInitialAuditMode = (branchId: string, ownerName: string, criterionId: string): "Presencial" | "A_Distancia" => {
-  const bId = branchId.toLowerCase();
-  const owner = ownerName.toLowerCase();
+  const bId = safeStr(branchId).toLowerCase();
+  const owner = safeStr(ownerName).toLowerCase();
   const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
   if (isRobsonOrLucas && (criterionId === "2" || criterionId === "4")) {
     return "Presencial";
@@ -219,7 +224,7 @@ export default function App() {
             "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
             "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
           };
-          const activeMonthNum = MONTH_MAP[parsed.activeMonth.toLowerCase()] || 6;
+          const activeMonthNum = MONTH_MAP[safeStr(parsed.activeMonth).toLowerCase()] || 6;
           return activeMonthNum <= 6 ? "1" : "2";
         }
       }
@@ -626,19 +631,12 @@ export default function App() {
         };
       });
 
-      setBranches((currentBranches) => {
-        const currentBrief = JSON.stringify((currentBranches || []).map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        const updatedBrief = JSON.stringify((updatedBranches || []).map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-        if (currentBrief !== updatedBrief) {
-          return updatedBranches;
-        }
-        return currentBranches;
-      });
+      setBranches(updatedBranches);
       setLoadedPeriod({ month: activeMonth, year: activeYear });
     };
 
     fetchEvaluationsFromSupabase();
-  }, [activeMonth, activeYear, refetchTrigger]);
+  }, [activeMonth, activeYear, refetchTrigger, user]);
 
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
@@ -726,7 +724,7 @@ export default function App() {
             if (user.email === "robson.almoxarife@acandidogrupo.com.br") {
               return b.id.includes("jaboatao") || b.ownerName === "Sérgio";
             }
-            return b.ownerName.toLowerCase() === user.ownerName.toLowerCase();
+            return safeStr(b.ownerName).toLowerCase() === safeStr(user.ownerName).toLowerCase();
           }
         );
         if (uBranches.length > 0) {
@@ -1823,7 +1821,7 @@ export default function App() {
         if (user.email === "robson.almoxarife@acandidogrupo.com.br") {
           return b.id.includes("jaboatao") || b.ownerName === "Sérgio";
         }
-        return b.ownerName.toLowerCase() === user.ownerName.toLowerCase();
+        return safeStr(b.ownerName).toLowerCase() === safeStr(user.ownerName).toLowerCase();
       })
     : [];
 
