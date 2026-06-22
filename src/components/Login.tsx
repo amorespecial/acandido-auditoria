@@ -213,9 +213,9 @@ export default function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      // Clean up any stale data, cache or sessions from previous users on login
+      // Clean up only previous user session data on login, preserving global configurations, cache and reset keys
       try {
-        localStorage.clear();
+        localStorage.removeItem("acandido_app_user");
         sessionStorage.clear();
       } catch (errClear) {
         console.error("Failed to clear local/session storage on login:", errClear);

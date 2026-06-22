@@ -286,17 +286,33 @@ export async function dbFecharCiclo(mes: string, ano: string) {
 
 export const dbFetchCycleState = async (): Promise<CycleState> => {
   const defaultState: CycleState = { activeMonth: "Janeiro", activeYear: "2026", status: "ABERTO", openedAt: "01/01/2026", openedBy: "Fernando Silva" };
+  
+  // Rule 4: If Supabase is not ready, load from localStorage fallback to ensure the last state is persisted.
   if (!isSupabaseReady()) {
+    const saved = localStorage.getItem("acandido_cycle_state_manual");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.status) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error("Failed to parse cached cycleState on offline fallback:", e);
+      }
+    }
     return defaultState;
   }
 
+  // Fetch the active cycle (ABERTO) from the database
   let { data, error } = await supabase.from('ciclos').select('*').eq('status', 'ABERTO').limit(1);
 
   if (error || !data || data.length === 0) {
+    // Fetch critical locked cycle (AGUARDANDO_FECHAMENTO)
     const resBloq = await supabase.from('ciclos').select('*').eq('status', 'AGUARDANDO_FECHAMENTO').limit(1);
     if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
       data = resBloq.data;
     } else {
+      // Fetch the latest cycle of all (e.g. FECHADO)
       const resLatest = await supabase.from('ciclos').select('*').order('aberto_em', { ascending: false }).limit(1);
       if (!resLatest.error && resLatest.data && resLatest.data.length > 0) {
         data = resLatest.data;
@@ -305,9 +321,19 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   }
 
   if (!data || data.length === 0) {
+    const saved = localStorage.getItem("acandido_cycle_state_manual");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.status) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
     return defaultState;
   }
 
+  // Rule 3: Return exact DB status ("ABERTO", "AGUARDANDO_FECHAMENTO", "FECHADO") without any default overrides
   const current = data[0];
   return {
     activeMonth: current.mes,

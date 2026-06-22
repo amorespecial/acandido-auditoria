@@ -34,14 +34,29 @@ export default function AdminEvaluationDetail({
     let s: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" = "ABERTO";
 
     try {
-      const saved = localStorage.getItem("acandido_cycle_state_manual");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        s = parsed.status || "ABERTO";
-        if (!activeMonth && parsed.activeMonth) m = parsed.activeMonth;
-        if (!activeYear && parsed.activeYear) y = parsed.activeYear;
+      const savedList = localStorage.getItem("acandido_all_cycles_list");
+      if (savedList) {
+        const parsedList = JSON.parse(savedList);
+        if (Array.isArray(parsedList)) {
+          const matched = parsedList.find(c => c.activeMonth === m && c.activeYear === y);
+          if (matched && matched.status) {
+            s = matched.status;
+          }
+        }
       }
     } catch (e) {}
+
+    if (s === "ABERTO") {
+      try {
+        const saved = localStorage.getItem("acandido_cycle_state_manual");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.activeMonth === m && parsed.activeYear === y) {
+            s = parsed.status || "ABERTO";
+          }
+        }
+      } catch (e) {}
+    }
     return { activeMonth: m, activeYear: y, status: s };
   })();
 

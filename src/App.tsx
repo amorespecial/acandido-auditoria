@@ -768,10 +768,11 @@ export default function App() {
     return { score: ratio, status, scoreCategory };
   };
 
-  // Automatic Reopen and Restore of Janeiro 2026 if closed/archived
+  // Automatic Reopen and Restore of Janeiro 2026 if closed/archived (Disabled to allow persistent closed cycle states)
   useEffect(() => {
     const revertKey = "acandido_revert_janeiro_2026_v4";
-    if (localStorage.getItem(revertKey) !== "true") {
+    // Disabled to prevent overwriting closed/archived cycles when re-entering or logging in
+    if (false && localStorage.getItem(revertKey) !== "true") {
       const restoreJaneiroFlow = async () => {
         let historyList: any[] = [];
         if (isSupabaseReady()) {
