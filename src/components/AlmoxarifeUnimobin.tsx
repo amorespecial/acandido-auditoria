@@ -41,6 +41,18 @@ export default function AlmoxarifeUnimobin({
   const currentYear = cycleStateParsed.activeYear;
 
   const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
+    const storageKey = branchId 
+      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
+      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
     const baseCerts = getCollaboratorsForBranch(branchId, branchName);
     const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
     return baseCerts.map((baseC) => ({
@@ -52,32 +64,50 @@ export default function AlmoxarifeUnimobin({
   React.useEffect(() => {
     let active = true;
     const loadCerts = async () => {
-      if (!branchId || !isSupabaseReady()) return;
-      try {
-        const dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
-        if (dbCerts && dbCerts.length > 0 && active) {
-          const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
-          setCerts((prev) =>
-            prev.map((c) => {
-              const match = dbCerts.find(
-                (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
-              );
-              if (match) {
-                return {
-                  ...c,
-                  status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
-                  fileName: match.file_name,
-                  fileType: match.file_type,
-                  fileData: match.file_data,
-                  uploadedAt: match.uploaded_at
-                };
-              }
-              return c;
-            })
-          );
+      if (!branchId) return;
+      const storageKey = `acandido_certificates_${branchId}_${currentMonth}_${currentYear}`;
+      
+      let dbCerts: any[] = [];
+      if (isSupabaseReady()) {
+        try {
+          dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
+        } catch (err) {
+          console.error("Error loading certificates from Supabase:", err);
         }
-      } catch (err) {
-        console.error("Error loading certificates from Supabase:", err);
+      }
+      
+      if (dbCerts && dbCerts.length > 0 && active) {
+        const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
+        setCerts((prev) => {
+          const updated = prev.map((c) => {
+            const match = dbCerts.find(
+              (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
+            );
+            if (match) {
+              return {
+                ...c,
+                status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
+                fileName: match.file_name,
+                fileType: match.file_type,
+                fileData: match.file_data,
+                uploadedAt: match.uploaded_at
+              };
+            }
+            return c;
+          });
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        const saved = localStorage.getItem(storageKey);
+        if (saved && active) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCerts(parsed);
+            }
+          } catch (e) {}
+        }
       }
     };
     loadCerts();
@@ -87,7 +117,13 @@ export default function AlmoxarifeUnimobin({
   }, [branchId, currentMonth, currentYear, criterionState]);
 
   React.useEffect(() => {
-    if (!branchId || !isSupabaseReady()) return;
+    if (!branchId) return;
+    const storageKey = `acandido_certificates_${branchId}_${currentMonth}_${currentYear}`;
+    
+    // Save to local storage cache immediately (Bug 4)
+    localStorage.setItem(storageKey, JSON.stringify(certs));
+    
+    if (!isSupabaseReady()) return;
     try {
       certs.forEach((c) => {
         dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {

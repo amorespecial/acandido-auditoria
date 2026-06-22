@@ -605,7 +605,8 @@ export default function App() {
               nokEvidenceFileName: matchedDb.nokEvidenceFileName || crt.nokEvidenceFileName,
               nokEvidenceFileType: matchedDb.nokEvidenceFileType || crt.nokEvidenceFileType,
               nokEvidenceFileData: matchedDb.nokEvidenceFileData || crt.nokEvidenceFileData,
-              isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao
+              isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao,
+              auditMode: matchedDb.auditMode !== undefined ? matchedDb.auditMode : crt.auditMode
             };
           }
           return crt;

@@ -464,7 +464,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
       notes: row.descricao_evidencia || "",
       evidenceNotes: row.descricao_evidencia || "",
       nokEvidenceLinks: links,
-      auditMode: "A_Distancia"
+      auditMode: (row.audit_mode || row.modo_auditoria || "A_Distancia") as "Presencial" | "A_Distancia"
     };
   });
   return mapped;
@@ -513,7 +513,9 @@ export const dbSaveEvaluation = async (
       descricao_evidencia: evaluation.evidenceNotes || evaluation.notes || "",
       links_evidencia: finalLinks,
       avaliado_por: evaluatedBy,
-      avaliado_em: new Date().toISOString()
+      avaliado_em: new Date().toISOString(),
+      audit_mode: evaluation.auditMode || "A_Distancia",
+      modo_auditoria: evaluation.auditMode || "A_Distancia"
     }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
   } finally {
     realtimeFlags.isLocalUpdate = false;
@@ -1099,7 +1101,10 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       file_name: dados.fileName || dados.file_name || null,
       file_type: dados.fileType || dados.file_type || null,
       file_data: dados.fileData || dados.file_data || null,
-      uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
+      arquivo_url: dados.fileData || dados.file_data || null,
+      arquivo_base64: dados.fileData || dados.file_data || null,
+      uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
+      enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
     },
       { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
   if (error) throw error;
