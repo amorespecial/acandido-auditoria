@@ -7,9 +7,29 @@ const STORAGE_PREFIX = "acandido_";
 
 // Month helper functions
 export const monthNameToNum = (name: string): number => {
-  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  const index = months.findIndex(m => m.toLowerCase() === name.toLowerCase());
-  return index !== -1 ? index + 1 : 5; // default to 5 (Maio)
+  const norm = (name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  const months = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  const index = months.indexOf(norm);
+  if (index !== -1) return index + 1;
+
+  // Check numeric values
+  const num = parseInt(norm, 10);
+  if (!isNaN(num) && num >= 1 && num <= 12) {
+    return num;
+  }
+
+  // Fallback for common 3-letter abbreviations
+  const abbreviations: Record<string, number> = {
+    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+    "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
+  };
+  const key = norm.substring(0, 3);
+  return abbreviations[key] || 1; // default to 1 (Janeiro)
 };
 
 export const monthNumToName = (num: number): string => {

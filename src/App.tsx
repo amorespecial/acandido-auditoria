@@ -2327,6 +2327,7 @@ export default function App() {
                     selectedSemesterFilter={selectedSemesterFilter}
                     setSelectedSemesterFilter={setSelectedSemesterFilter}
                     cycleState={cycleState}
+                    calendarData={calendarData}
                   />
                 )}
                 {adminTab === "HISTORICO" && <AdminHistory user={user} branches={processedBranches} calendarData={calendarData} />}

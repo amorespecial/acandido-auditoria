@@ -58,6 +58,7 @@ interface AdminRankingProps {
   selectedSemesterFilter: "1" | "2";
   setSelectedSemesterFilter: (sem: "1" | "2") => void;
   cycleState?: any;
+  calendarData?: any;
 }
 
 interface UnifiedEntry {
@@ -87,7 +88,8 @@ function AdminRankingContent({
   setActiveYear,
   selectedSemesterFilter,
   setSelectedSemesterFilter,
-  cycleState
+  cycleState,
+  calendarData
 }: AdminRankingProps) {
   useRealtimeSync();
   const [activeGroupTab, setActiveGroupTab] = useState<"A" | "B">("A");
@@ -135,6 +137,15 @@ function AdminRankingContent({
   // Independent local state for filters in the Ranking screen
   const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth || "Janeiro");
   const [localAccumulatedFilter, setLocalAccumulatedFilter] = useState<"1_SEMESTRE" | "2_SEMESTRE" | "ANO_TODO">("1_SEMESTRE");
+
+  const localCalendar = calendarData || (() => {
+    try {
+      const saved = localStorage.getItem("acandido_calendario_inventarios");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  })();
 
   const isAwaitingPair = (entry: UnifiedEntry | null) => {
     if (!entry || !entry.branches || entry.branches.length !== 2) return false;
@@ -254,6 +265,13 @@ function AdminRankingContent({
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
 
+  const normalizeMonthName = (name: string): string => {
+    return s(name).toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  };
+
   // Bulletproof core solver: Score for specified entry in a specific month
   const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
     if (!entry || !entry.branches) return 0;
@@ -267,20 +285,27 @@ function AdminRankingContent({
       }
     } catch (e) {}
 
-    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && s(c.activeMonth).toLowerCase() === s(monthName).toLowerCase() && c.status !== "NENHUM"
+    const branchIds = (entry.branches || []).map(b => b?.id).filter(Boolean);
+    const histEntries = Array.isArray(historyList) ? historyList : [];
+
+    const hasHistory = histEntries.some(
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
     );
-    if (!hasCycle) {
+
+    const isCurrentActive = normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth);
+
+    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
+      (c: any) => c && normalizeMonthName(c.activeMonth) === normalizeMonthName(monthName) && c.status !== "NENHUM"
+    );
+
+    // Permit score calculation if there's an active cycle, history, or if it is the currently active month
+    if (!hasCycle && !hasHistory && !isCurrentActive) {
       return 0;
     }
 
-    const branchIds = (entry.branches || []).map(b => b?.id).filter(Boolean);
-
     // 1. Check history
-    const histEntries = Array.isArray(historyList) ? historyList : [];
-
     const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && s(h.monthYear).toLowerCase().startsWith(s(monthName).toLowerCase())
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
     );
 
     if (matchingHist.length > 0) {
@@ -309,7 +334,7 @@ function AdminRankingContent({
     }
 
     // 2. Check dynamic evaluations
-    if (s(monthName).toLowerCase() === s(cycleStateParsed.activeMonth).toLowerCase()) {
+    if (normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth)) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           let consolidatedScore = 0;
@@ -350,22 +375,29 @@ function AdminRankingContent({
       }
     } catch (e) {}
 
-    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && s(c.activeMonth).toLowerCase() === s(monthName).toLowerCase() && c.status !== "NENHUM"
+    const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
+    const histEntries = Array.isArray(historyList) ? historyList : [];
+
+    const hasHistory = histEntries.some(
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
     );
-    if (!hasCycle) {
+
+    const isCurrentActive = normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth);
+
+    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
+      (c: any) => c && normalizeMonthName(c.activeMonth) === normalizeMonthName(monthName) && c.status !== "NENHUM"
+    );
+
+    if (!hasCycle && !hasHistory && !isCurrentActive) {
       return { status: "AGUARDANDO ENVIO", points: 0 };
     }
 
-    const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
     const refCriterion = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
     const pointsMax = refCriterion ? (refCriterion.pointsPossible ?? 0) : 0;
 
     // Check history
-    const histEntries = Array.isArray(historyList) ? historyList : [];
-
     const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && s(h.monthYear).toLowerCase().startsWith(s(monthName).toLowerCase())
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
     );
 
     if (matchingHist.length > 0) {
@@ -387,7 +419,7 @@ function AdminRankingContent({
     }
 
     // Check dynamic evaluations
-    if (s(monthName).toLowerCase() === s(cycleStateParsed.activeMonth).toLowerCase()) {
+    if (normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth)) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           const statuses = entry.branches.map((mRecord) => {
@@ -457,7 +489,56 @@ function AdminRankingContent({
     }
   };
 
-  const getEntryDisplayMax = () => {
+  const calcularMetaMensal = (entry: UnifiedEntry, mes: string) => {
+    // Base is 75 points (100 - 20 [inventario] - 5 [material sem movimentacao] = 75)
+    let meta = 75;
+    
+    // We check if ANY of the branches of this entry has an inventory scheduled in this month
+    const branchIds = (entry.branches || []).map(b => b?.id).filter(Boolean);
+    const temInventario = localCalendar.some((c: any) => {
+      if (!c || !c.data_agendada) return false;
+      const cleanAlmox = s(c.almoxarifado).toLowerCase().trim();
+      const isSameBranch = branchIds.includes(cleanAlmox) || branchIds.includes(s(c.branchId).toLowerCase());
+      if (!isSameBranch) return false;
+
+      const parts = c.data_agendada.split("-");
+      if (parts.length !== 3) return false;
+      const itemMonthNum = parseInt(parts[1], 10);
+
+      const targetMonthNum = MONTH_MAP[normalizeMonthName(mes)];
+      return targetMonthNum === itemMonthNum;
+    });
+
+    if (temInventario) {
+      meta += 20;
+    }
+
+    const mesNum = MONTH_MAP[normalizeMonthName(mes)];
+    if (mesNum === 6 || mesNum === 12) {
+      meta += 5;
+    }
+
+    return meta;
+  };
+
+  const getEntryDisplayMaxForEntry = (entry: UnifiedEntry) => {
+    if (rankingMode === "MES") {
+      return calcularMetaMensal(entry, localRankingMonth);
+    } else {
+      const months = localAccumulatedFilter === "1_SEMESTRE"
+        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+        : localAccumulatedFilter === "2_SEMESTRE"
+        ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+      
+      return months.reduce((sum, mName) => sum + calcularMetaMensal(entry, mName), 0);
+    }
+  };
+
+  const getEntryDisplayMax = (entry?: UnifiedEntry) => {
+    if (entry) {
+      return getEntryDisplayMaxForEntry(entry);
+    }
     if (rankingMode === "MES") {
       return 100;
     } else {
@@ -1421,7 +1502,11 @@ function AdminRankingContent({
             <select
               value={localRankingMonth}
               onChange={(e) => {
-                setLocalRankingMonth(e.target.value);
+                const newMonth = e.target.value;
+                setLocalRankingMonth(newMonth);
+                if (typeof setActiveMonth === "function") {
+                  setActiveMonth(newMonth);
+                }
                 setSelectedEntry(null);
               }}
               className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
@@ -1457,7 +1542,7 @@ function AdminRankingContent({
           </h4>
           {rankingMode === "MES" && (
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Meta do Mês: 100 PTS
+              Meta do Mês: 75 / 95 PTS
             </span>
           )}
         </div>
@@ -1465,16 +1550,15 @@ function AdminRankingContent({
         <div className="space-y-3.5">
           {!hasRealHistory && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center text-xs font-semibold text-slate-500 animate-pulse">
-               O ranking será calculado a partir do primeiro ciclo encerrado pelo auditor
+               O ranking será calculated a partir do primeiro ciclo encerrado pelo auditor
              </div>
           )}
 
           {currentLeaderboard.map((item, index) => {
             const place = index + 1;
             const displayScore = item.displayScore;
-            const maxPoints = getEntryDisplayMax();
-            const minGoal = rankingMode === "MES" ? 100 : (localAccumulatedFilter === "ANO_TODO" ? 600 : 300);
-            const isBelowGoal = displayScore < minGoal;
+            const maxPoints = getEntryDisplayMax(item);
+            const isBelowGoal = displayScore < maxPoints;
 
             return (
               <div
