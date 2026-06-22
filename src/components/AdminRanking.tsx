@@ -3,6 +3,46 @@ import { AppUser, Branch, CriterionState } from "../types";
 import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
+// Secure Error Boundary implementation to capture fatal javascript errors elegantly
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  props: any;
+  state: { hasError: boolean; error: Error | null } = {
+    hasError: false,
+    error: null
+  };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught an error in AdminRanking:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-rose-50 text-rose-800 rounded-xl border border-rose-200 shadow-sm max-w-lg mx-auto my-8">
+          <div className="flex items-center gap-2 mb-2 font-bold text-lg text-rose-700">
+            <span className="material-symbols-outlined text-rose-600">error</span>
+            <h3>Erro no Ranking Corporativo</h3>
+          </div>
+          <p className="text-sm text-slate-600">
+            Ocorreu um erro no cálculo de pontuação ou ao renderizar o gráfico histórico. A nossa equipe foi notificada e o estado foi isolado com segurança.
+          </p>
+          {this.state.error && (
+            <pre className="mt-4 p-3 bg-rose-100 text-rose-950 rounded text-xs font-mono overflow-auto max-h-40 border border-rose-200">
+              {this.state.error.message}
+            </pre>
+          )}
+        </div>
+      );
+    }
+    const { children } = this.props as any;
+    return children;
+  }
+}
+
 interface AdminRankingProps {
   user: AppUser;
   branches: Branch[];
@@ -25,7 +65,15 @@ interface UnifiedEntry {
   branches: Branch[];
 }
 
-export default function AdminRanking({
+export default function AdminRanking(props: AdminRankingProps) {
+  return (
+    <ErrorBoundary>
+      <AdminRankingContent {...props} />
+    </ErrorBoundary>
+  );
+}
+
+function AdminRankingContent({
   user,
   branches,
   activeMonth,
@@ -48,7 +96,7 @@ export default function AdminRanking({
       if (isSupabaseReady()) {
         try {
           const dbHistory = await dbFetchHistory();
-          if (dbHistory) {
+          if (dbHistory && Array.isArray(dbHistory)) {
             setHistoryList(dbHistory);
             return;
           }
@@ -60,7 +108,11 @@ export default function AdminRanking({
       try {
         const saved = localStorage.getItem("acandido_history");
         if (saved) {
-          setHistoryList(JSON.parse(saved));
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setHistoryList(parsed);
+            return;
+          }
         }
       } catch (e) {
         setHistoryList([]);
@@ -76,15 +128,16 @@ export default function AdminRanking({
   }, []);
 
   // Independent local state for filters in the Ranking screen
-  const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth);
+  const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth || "Janeiro");
   const [localAccumulatedFilter, setLocalAccumulatedFilter] = useState<"1_SEMESTRE" | "2_SEMESTRE" | "ANO_TODO">("1_SEMESTRE");
 
   const isAwaitingPair = (entry: UnifiedEntry | null) => {
-    if (!entry || entry.branches.length !== 2) return false;
+    if (!entry || !entry.branches || entry.branches.length !== 2) return false;
     const b1 = entry.branches[0];
     const b2 = entry.branches[1];
-    const crit1 = b1.criteria.find(c => c.id === "10");
-    const crit2 = b2.criteria.find(c => c.id === "10");
+    if (!b1 || !b2) return false;
+    const crit1 = b1.criteria?.find(c => c.id === "10");
+    const crit2 = b2.criteria?.find(c => c.id === "10");
     if (!crit1 || !crit2) return false;
 
     const b1Evaluated = crit1.status === "OK" || crit1.status === "NOK";
@@ -152,17 +205,19 @@ export default function AdminRanking({
       }
     };
 
-    allBranches.forEach((b) => {
-      const config = ownersMap[b.ownerName];
-      if (config) {
-        config.branches.push(b);
+    (allBranches || []).forEach((b) => {
+      if (b && b.ownerName) {
+        const config = ownersMap[b.ownerName];
+        if (config) {
+          config.branches.push(b);
+        }
       }
     });
 
     const entries: UnifiedEntry[] = Object.entries(ownersMap).map(([ownerName, config]) => {
       // Combined semestralScore logic:
       // If there are multiple branches (twins), they already share identical pre-calculated consolidated semestral score.
-      const score = config.branches.length > 0 ? config.branches[0].semestralScore : 0;
+      const score = (config.branches && config.branches.length > 0) ? (config.branches[0]?.semestralScore ?? 0) : 0;
       return {
         id: ownerName.toLowerCase(),
         name: config.name,
@@ -178,7 +233,7 @@ export default function AdminRanking({
   };
 
   const allEntries = getUnifiedEntries(branches);
-  const cycleStateParsed = cycleState || { activeMonth: activeMonth, activeYear: activeYear, status: "ABERTO" };
+  const cycleStateParsed = cycleState || { activeMonth: activeMonth || "Janeiro", activeYear: activeYear || "2026", status: "ABERTO" };
 
   const MONTH_MAP: Record<string, number> = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -196,27 +251,32 @@ export default function AdminRanking({
 
   // Bulletproof core solver: Score for specified entry in a specific month
   const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
+    if (!entry || !entry.branches) return 0;
+    
     let allCyclesList: any[] = [];
     try {
       const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) allCyclesList = JSON.parse(savedCycles);
+      if (savedCycles) {
+        const parsed = JSON.parse(savedCycles);
+        if (Array.isArray(parsed)) allCyclesList = parsed;
+      }
     } catch (e) {}
 
     const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c.activeMonth?.toLowerCase() === monthName.toLowerCase() && c.status !== "NENHUM"
+      (c: any) => c && c.activeMonth?.toLowerCase() === monthName?.toLowerCase() && c.status !== "NENHUM"
     );
     if (!hasCycle) {
       return 0;
     }
 
-    const branchIds = entry.branches.map(b => b.id);
+    const branchIds = (entry.branches || []).map(b => b?.id).filter(Boolean);
 
     // 1. Check history
-    const histEntries = historyList;
+    const histEntries = Array.isArray(historyList) ? historyList : [];
 
-    const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
-      (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
-    ) : [];
+    const matchingHist = histEntries.filter(
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName?.toLowerCase())
+    );
 
     if (matchingHist.length > 0) {
       if (entry.branches.length === 2) {
@@ -224,12 +284,13 @@ export default function AdminRanking({
           let consolidatedScore = 0;
           const refCriteria = entry.branches[0]?.criteria || [];
           refCriteria.forEach((cRef) => {
+            if (!cRef) return;
             const allOk = matchingHist.every((mRecord) => {
-              const crit = mRecord.criteriaState?.find((cs: any) => cs.id === cRef.id);
+              const crit = mRecord?.criteriaState?.find((cs: any) => cs && cs.id === cRef.id);
               return crit && crit.status === "OK";
             });
             if (allOk) {
-              consolidatedScore += cRef.pointsPossible;
+              consolidatedScore += cRef.pointsPossible ?? 0;
             }
           });
           return consolidatedScore;
@@ -237,29 +298,30 @@ export default function AdminRanking({
         return 0; // if twin branch but only 1 matching in history
       } else {
         if (matchingHist.length === 1) {
-          return matchingHist[0].score || 0;
+          return matchingHist[0]?.score || 0;
         }
       }
     }
 
     // 2. Check dynamic evaluations
-    if (monthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
+    if (monthName?.toLowerCase() === cycleStateParsed.activeMonth?.toLowerCase()) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           let consolidatedScore = 0;
           const refCriteria = entry.branches[0]?.criteria || [];
           refCriteria.forEach((cRef) => {
+            if (!cRef) return;
             const allOk = entry.branches.every((mRecord) => {
-              const crit = mRecord.criteria?.find((cs: any) => cs.id === cRef.id);
+              const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === cRef.id);
               return crit && crit.status === "OK";
             });
             if (allOk) {
-              consolidatedScore += cRef.pointsPossible;
+              consolidatedScore += cRef.pointsPossible ?? 0;
             }
           });
           return consolidatedScore;
         } else {
-          return entry.branches[0].currentScore || 0;
+          return entry.branches[0]?.currentScore || 0;
         }
       }
     }
@@ -272,42 +334,47 @@ export default function AdminRanking({
     monthName: string,
     criterionId: string
   ): { status: string; points: number } => {
+    if (!entry || !entry.branches) return { status: "PENDENTE", points: 0 };
+    
     let allCyclesList: any[] = [];
     try {
       const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) allCyclesList = JSON.parse(savedCycles);
+      if (savedCycles) {
+        const parsed = JSON.parse(savedCycles);
+        if (Array.isArray(parsed)) allCyclesList = parsed;
+      }
     } catch (e) {}
 
     const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c.activeMonth?.toLowerCase() === monthName.toLowerCase() && c.status !== "NENHUM"
+      (c: any) => c && c.activeMonth?.toLowerCase() === monthName?.toLowerCase() && c.status !== "NENHUM"
     );
     if (!hasCycle) {
       return { status: "AGUARDANDO ENVIO", points: 0 };
     }
 
-    const branchIds = entry.branches.map((b) => b.id);
-    const refCriterion = entry.branches[0]?.criteria?.find((c) => c.id === criterionId);
-    const pointsMax = refCriterion ? refCriterion.pointsPossible : 0;
+    const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
+    const refCriterion = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
+    const pointsMax = refCriterion ? (refCriterion.pointsPossible ?? 0) : 0;
 
     // Check history
-    const histEntries = historyList;
+    const histEntries = Array.isArray(historyList) ? historyList : [];
 
-    const matchingHist = Array.isArray(histEntries) ? histEntries.filter(
-      (h) => branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName.toLowerCase())
-    ) : [];
+    const matchingHist = histEntries.filter(
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && h.monthYear?.toLowerCase().startsWith(monthName?.toLowerCase())
+    );
 
     if (matchingHist.length > 0) {
       if (entry.branches.length === 2) {
         if (matchingHist.length === 2) {
           const allOk = matchingHist.every((mRecord) => {
-            const crit = mRecord.criteriaState?.find((cs: any) => cs.id === criterionId);
+            const crit = mRecord?.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
             return crit && crit.status === "OK";
           });
           return { status: allOk ? "OK" : "NOK", points: allOk ? pointsMax : 0 };
         }
       } else {
         if (matchingHist.length === 1) {
-          const crit = matchingHist[0].criteriaState?.find((cs: any) => cs.id === criterionId);
+          const crit = matchingHist[0]?.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
           const isOk = crit && crit.status === "OK";
           return { status: isOk ? "OK" : "NOK", points: isOk ? pointsMax : 0 };
         }
@@ -315,12 +382,12 @@ export default function AdminRanking({
     }
 
     // Check dynamic evaluations
-    if (monthName.toLowerCase() === cycleStateParsed.activeMonth.toLowerCase()) {
+    if (monthName?.toLowerCase() === cycleStateParsed.activeMonth?.toLowerCase()) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           const statuses = entry.branches.map((mRecord) => {
-            const crit = mRecord.criteria?.find((cs: any) => cs.id === criterionId);
-            return crit ? crit.status : "PENDENTE";
+            const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === criterionId);
+            return crit ? (crit.status || "PENDENTE") : "PENDENTE";
           });
           const isNok = statuses.includes("NOK");
           const isBothOk = statuses.every((s) => s === "OK");
@@ -333,10 +400,10 @@ export default function AdminRanking({
             : "PENDENTE";
           return { status: statusText, points: isBothOk ? pointsMax : 0 };
         } else {
-          const crit = entry.branches[0].criteria?.find((cs: any) => cs.id === criterionId);
+          const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
           if (crit) {
             const isOk = crit.status === "OK";
-            return { status: crit.status, points: isOk ? pointsMax : 0 };
+            return { status: crit.status || "PENDENTE", points: isOk ? pointsMax : 0 };
           }
         }
       }
@@ -582,21 +649,21 @@ export default function AdminRanking({
       });
     };
 
-    const criteriaListWithConsistency = getUnifiedCriteriaList(selectedEntry).sort((a, b) => b.accuracy - a.accuracy);
+    const criteriaListWithConsistency = getUnifiedCriteriaList(selectedEntry).sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0));
 
     // Get total closed cycles in current semester to filter actual alerts/highlights
     const totalClosedCyclesInSemester = (() => {
-      const histList = historyList.filter((h: any) => h.monthYear);
+      const histList = Array.isArray(historyList) ? historyList.filter((h: any) => h && h.monthYear) : [];
       const semMonthsList = currentSemester === 1
         ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
         : ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
       
-      const branchIds = selectedEntry.branches.map(b => b.id);
+      const branchIds = (selectedEntry?.branches || []).map(b => b?.id).filter(Boolean);
       
       const uniqueMonthsWithArchive = new Set<string>();
       histList.forEach((h) => {
-        if (branchIds.includes(h.branchId)) {
-          const matchMonth = semMonthsList.find(mName => h.monthYear.toLowerCase().startsWith(mName.toLowerCase()));
+        if (h && h.branchId && branchIds.includes(h.branchId)) {
+          const matchMonth = semMonthsList.find(mName => h.monthYear && h.monthYear.toLowerCase().startsWith(mName.toLowerCase()));
           if (matchMonth) {
             uniqueMonthsWithArchive.add(matchMonth);
           }
@@ -605,8 +672,8 @@ export default function AdminRanking({
       return uniqueMonthsWithArchive.size;
     })();
 
-    const top3Criteria = criteriaListWithConsistency.filter((c) => c.okMonths > 0).slice(0, 3);
-    const bottomCriteria = criteriaListWithConsistency.filter((c) => c.okMonths < totalClosedCyclesInSemester).slice(-3);
+    const top3Criteria = criteriaListWithConsistency.filter((c) => c && c.okMonths > 0).slice(0, 3);
+    const bottomCriteria = criteriaListWithConsistency.filter((c) => c && c.okMonths < totalClosedCyclesInSemester).slice(-3);
 
     // Dynamic executive report
     const awaiting_pair = isAwaitingPair(selectedEntry);

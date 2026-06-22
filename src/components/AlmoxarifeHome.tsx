@@ -11,6 +11,7 @@ interface AlmoxarifeHomeProps {
   activeMonth: string;
   activeYear: string;
   calendarData?: any[];
+  cycleState?: any;
 }
 
 export default function AlmoxarifeHome({
@@ -21,6 +22,7 @@ export default function AlmoxarifeHome({
   activeMonth,
   activeYear,
   calendarData,
+  cycleState,
 }: AlmoxarifeHomeProps) {
   useRealtimeSync();
   // Score parameters
@@ -62,6 +64,9 @@ export default function AlmoxarifeHome({
   };
 
   const currentCycleStatus = (() => {
+    if (cycleState && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear) {
+      return cycleState.status || "NENHUM";
+    }
     try {
       const saved = localStorage.getItem("acandido_cycle_state_manual");
       if (saved) {

@@ -236,6 +236,7 @@ export default function App() {
     }
 
     setCycleState(next);
+    localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(next));
 
     // 1. Sync activeMonth/activeYear to match updated cycle if it is currently selected
     if (next.activeMonth) setActiveMonth(next.activeMonth);
@@ -366,6 +367,7 @@ export default function App() {
             const dbCycle = await dbFetchCycleState();
             if (dbCycle && dbCycle.status) {
               setCycleState(dbCycle);
+              localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
               if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
               if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
             }
@@ -451,6 +453,7 @@ export default function App() {
         const dbCycle = await dbFetchCycleState();
         if (dbCycle && dbCycle.status) {
           setCycleState(dbCycle);
+          localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
           if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
           if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
         }
@@ -623,12 +626,14 @@ export default function App() {
         };
       });
 
-      const currentBrief = JSON.stringify(branches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-      const updatedBrief = JSON.stringify(updatedBranches.map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
-      
-      if (currentBrief !== updatedBrief) {
-        setBranches(updatedBranches);
-      }
+      setBranches((currentBranches) => {
+        const currentBrief = JSON.stringify((currentBranches || []).map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        const updatedBrief = JSON.stringify((updatedBranches || []).map(b => b.criteria.map(c => ({ id: c.id, status: c.status, pts: c.pointsObtained }))));
+        if (currentBrief !== updatedBrief) {
+          return updatedBranches;
+        }
+        return currentBranches;
+      });
       setLoadedPeriod({ month: activeMonth, year: activeYear });
     };
 
@@ -2396,6 +2401,7 @@ export default function App() {
                       activeMonth={activeMonth}
                       activeYear={activeYear}
                       calendarData={calendarData}
+                      cycleState={cycleState}
                     />
                   )
                 )}
