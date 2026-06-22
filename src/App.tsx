@@ -572,9 +572,18 @@ export default function App() {
 
       if (isSupabaseReady()) {
         try {
+          console.log('[DEBUG] Iniciando carregamento de avaliações para:', activeMonth, activeYear);
+          
+          // Test direct fetch exact count of total avaliacoes rows to verify RLS
+          const { data: testCount, error: testErr } = await supabase
+            .from('avaliacoes')
+            .select('count', { count: 'exact', head: true });
+          console.log('[DEBUG] Conectividade da tabela avaliacoes:', { testCount, testErr });
+
           const results = await Promise.all(
             defaultBranches.map(async (branch) => {
               const dbVals = await dbFetchEvaluations(branch.name, activeMonth, activeYear);
+              console.log(`[DEBUG] Filial ${branch.name} (${branch.id}): ${Object.keys(dbVals).length} avaliações encontradas`);
               return { branchName: branch.name, evals: dbVals };
             })
           );
@@ -585,8 +594,10 @@ export default function App() {
             }
           });
         } catch (err) {
-          console.error("Failed to fetch evaluations from Supabase:", err);
+          console.error("[DEBUG] Falha catastrófica ao buscar avaliações do Supabase:", err);
         }
+      } else {
+        console.warn('[DEBUG] Supabase não configurado ou URL/Key ausentes.');
       }
 
       // No localStorage loading / fallback - evaluations must be fetched from Supabase strictly to ensure same data across sessions
@@ -594,6 +605,7 @@ export default function App() {
       const updatedBranches = defaultBranches.map((branch) => {
         const dbEvaluations = evaluationsMap[branch.name];
         if (!dbEvaluations || Object.keys(dbEvaluations).length === 0) {
+          console.log(`[DEBUG] Branch ${branch.name}: Sem avaliações registradas no Supabase para ${activeMonth}/${activeYear}`);
           return branch;
         }
 
@@ -624,6 +636,8 @@ export default function App() {
         const scoreTotal = mergedCriteria.reduce(
           (acc, c) => acc + (c.status === "OK" ? Number(c.pointsPossible) : (Number(c.pointsObtained) || 0)), 0
         );
+
+        console.log(`[DEBUG] Branch ${branch.name} score final calculado: ${scoreTotal}`);
 
         const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
 
@@ -682,6 +696,33 @@ export default function App() {
       }
     };
   }, []);
+
+  // Diagnostic useEffect to verify live Supabase data connectivity in Production
+  useEffect(() => {
+    const testarSupabase = async () => {
+      if (!isSupabaseReady()) {
+        console.log('[PROD DEBUG] Supabase is NOT ready. Missing or placeholder credentials.');
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('avaliacoes')
+          .select('count', { count: 'exact', head: true })
+          .limit(1);
+        console.log('[PROD DEBUG] Supabase avaliacoes count:', { data, error });
+        
+        const { data: data2, error: error2 } = await supabase
+          .from('ciclos')
+          .select('*')
+          .eq('status', 'ABERTO')
+          .limit(1);
+        console.log('[PROD DEBUG] Ciclo ativo:', { data2, error2 });
+      } catch (err) {
+        console.error('[PROD DEBUG] Error running diagnostics:', err);
+      }
+    };
+    testarSupabase();
+  }, [user]);
 
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {

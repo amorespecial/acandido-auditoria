@@ -954,37 +954,44 @@ export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number
 
 export async function dbFetchAllNonMovingSummaries(ano: number, semestre: number): Promise<any[]> {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase
-    .from('materiais_parados')
-    .select('almoxarifado_id, status')
-    .eq('ano', ano)
-    .eq('semestre', semestre);
+  try {
+    const { data, error } = await supabase
+      .from('materiais_parados')
+      .select('almoxarifado_id, status')
+      .eq('ano', ano)
+      .eq('semestre', semestre);
 
-  if (error) {
-    console.error("Error in dbFetchAllNonMovingSummaries:", error);
+    if (error) {
+      console.warn("[Supabase] materiais_parados não encontrado ou erro ao buscar:", error);
+      return [];
+    }
+
+    if (!data) return [];
+
+    // Group by almoxarifado_id
+    const groups: Record<string, string[]> = {};
+    data.forEach((row) => {
+      const id = row.almoxarifado_id;
+      if (!groups[id]) groups[id] = [];
+      groups[id].push(row.status);
+    });
+
+    const summaries = Object.keys(groups).map((almoxarifado) => {
+      const statuses = groups[almoxarifado];
+      const hasNok = statuses.some(s => s === "NOK");
+      return {
+        almoxarifado,
+        ano,
+        semestre,
+        status: hasNok ? "NOK" : "OK"
+      };
+    });
+
+    return summaries;
+  } catch (err) {
+    console.warn("[Supabase] dbFetchAllNonMovingSummaries falhou:", err);
     return [];
   }
-
-  // Group by almoxarifado_id
-  const groups: Record<string, string[]> = {};
-  data.forEach((row) => {
-    const id = row.almoxarifado_id;
-    if (!groups[id]) groups[id] = [];
-    groups[id].push(row.status);
-  });
-
-  const summaries = Object.keys(groups).map((almoxarifado) => {
-    const statuses = groups[almoxarifado];
-    const hasNok = statuses.some(s => s === "NOK");
-    return {
-      almoxarifado,
-      ano,
-      semestre,
-      status: hasNok ? "NOK" : "OK"
-    };
-  });
-
-  return summaries;
 }
 
 // ======================= TOP 10 CONFIG =======================

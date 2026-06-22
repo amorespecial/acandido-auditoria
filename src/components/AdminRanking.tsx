@@ -3,6 +3,8 @@ import { AppUser, Branch, CriterionState } from "../types";
 import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
+const s = (v: any): string => (v == null ? "" : String(v));
+
 // Secure Error Boundary implementation to capture fatal javascript errors elegantly
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   props: any;
@@ -222,7 +224,7 @@ function AdminRankingContent({
       // If there are multiple branches (twins), they already share identical pre-calculated consolidated semestral score.
       const score = (config.branches && config.branches.length > 0) ? (config.branches[0]?.semestralScore ?? 0) : 0;
       return {
-        id: safeStr(ownerName).toLowerCase(),
+        id: s(ownerName).toLowerCase(),
         name: config.name,
         ownerName: ownerName,
         location: config.location,
@@ -242,7 +244,7 @@ function AdminRankingContent({
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
     "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
   };
-  const activeMonthNum = MONTH_MAP[safeStr(cycleStateParsed.activeMonth).toLowerCase()] || 6;
+  const activeMonthNum = MONTH_MAP[s(cycleStateParsed.activeMonth).toLowerCase()] || 6;
   const currentSemester = activeMonthNum <= 6 ? 1 : 2;
   const visibleCount = currentSemester === 1 ? activeMonthNum : activeMonthNum - 6;
   
@@ -266,7 +268,7 @@ function AdminRankingContent({
     } catch (e) {}
 
     const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && safeStr(c.activeMonth).toLowerCase() === safeStr(monthName).toLowerCase() && c.status !== "NENHUM"
+      (c: any) => c && s(c.activeMonth).toLowerCase() === s(monthName).toLowerCase() && c.status !== "NENHUM"
     );
     if (!hasCycle) {
       return 0;
@@ -278,7 +280,7 @@ function AdminRankingContent({
     const histEntries = Array.isArray(historyList) ? historyList : [];
 
     const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && safeStr(h.monthYear).toLowerCase().startsWith(safeStr(monthName).toLowerCase())
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && s(h.monthYear).toLowerCase().startsWith(s(monthName).toLowerCase())
     );
 
     if (matchingHist.length > 0) {
@@ -307,7 +309,7 @@ function AdminRankingContent({
     }
 
     // 2. Check dynamic evaluations
-    if (safeStr(monthName).toLowerCase() === safeStr(cycleStateParsed.activeMonth).toLowerCase()) {
+    if (s(monthName).toLowerCase() === s(cycleStateParsed.activeMonth).toLowerCase()) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           let consolidatedScore = 0;
@@ -349,7 +351,7 @@ function AdminRankingContent({
     } catch (e) {}
 
     const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && safeStr(c.activeMonth).toLowerCase() === safeStr(monthName).toLowerCase() && c.status !== "NENHUM"
+      (c: any) => c && s(c.activeMonth).toLowerCase() === s(monthName).toLowerCase() && c.status !== "NENHUM"
     );
     if (!hasCycle) {
       return { status: "AGUARDANDO ENVIO", points: 0 };
@@ -363,7 +365,7 @@ function AdminRankingContent({
     const histEntries = Array.isArray(historyList) ? historyList : [];
 
     const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && safeStr(h.monthYear).toLowerCase().startsWith(safeStr(monthName).toLowerCase())
+      (h) => h && h.branchId && branchIds.includes(h.branchId) && s(h.monthYear).toLowerCase().startsWith(s(monthName).toLowerCase())
     );
 
     if (matchingHist.length > 0) {
@@ -385,7 +387,7 @@ function AdminRankingContent({
     }
 
     // Check dynamic evaluations
-    if (safeStr(monthName).toLowerCase() === safeStr(cycleStateParsed.activeMonth).toLowerCase()) {
+    if (s(monthName).toLowerCase() === s(cycleStateParsed.activeMonth).toLowerCase()) {
       if (entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           const statuses = entry.branches.map((mRecord) => {
@@ -516,7 +518,7 @@ function AdminRankingContent({
     const currentList = isGroupA ? groupAEntries : groupBEntries;
 
     const myEntryIdx = currentList.findIndex(
-      (e) => safeStr(e.ownerName).toLowerCase() === safeStr(user.ownerName).toLowerCase()
+      (e) => s(e.ownerName).toLowerCase() === s(user.ownerName).toLowerCase()
     );
     const myPos = hasRealHistory && myEntryIdx !== -1 ? myEntryIdx + 1 : "—";
     const myEntry = currentList[myEntryIdx];
@@ -666,7 +668,7 @@ function AdminRankingContent({
       const uniqueMonthsWithArchive = new Set<string>();
       histList.forEach((h) => {
         if (h && h.branchId && branchIds.includes(h.branchId)) {
-          const matchMonth = semMonthsList.find(mName => h.monthYear && safeStr(h.monthYear).toLowerCase().startsWith(safeStr(mName).toLowerCase()));
+          const matchMonth = semMonthsList.find(mName => h.monthYear && s(h.monthYear).toLowerCase().startsWith(s(mName).toLowerCase()));
           if (matchMonth) {
             uniqueMonthsWithArchive.add(matchMonth);
           }
@@ -748,8 +750,8 @@ function AdminRankingContent({
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
                     <th className="py-2.5">Critério</th>
-                    <th className="py-2.5 px-4 text-center">{safeStr(selectedEntry.branches[0]?.name).replace("ALMOXARIFADO ", "")}</th>
-                    <th className="py-2.5 px-4 text-center">{safeStr(selectedEntry.branches[1]?.name).replace("ALMOXARIFADO ", "")}</th>
+                    <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[0]?.name).replace("ALMOXARIFADO ", "")}</th>
+                    <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[1]?.name).replace("ALMOXARIFADO ", "")}</th>
                     <th className="py-2.5 text-right font-black">Resultado Unificado</th>
                   </tr>
                 </thead>

@@ -11,6 +11,8 @@ interface AdminHistoryProps {
   calendarData?: any[];
 }
 
+const s = (v: any): string => (v == null ? "" : String(v));
+
 // 1. HELPERS FOR TEXT NORMALIZATION AND STRING MATCHING
 const removeAccentsAndSpaces = (str: string) => {
   return (str == null ? "" : String(str))
@@ -181,7 +183,7 @@ const planosDeAcao: Record<string, string> = {
 };
 
 const isSemestralMonth = (monthYear: string) => {
-  const m = monthYear.toLowerCase();
+  const m = s(monthYear).toLowerCase();
   return m.includes("janeiro") || m.includes("junho") || m.includes("dezembro") || m.includes("semestral");
 };
 
@@ -192,15 +194,15 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchNa
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
     "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
   };
-  const pts = monthYear.split(" ");
-  const monthName = pts[0]?.toLowerCase() || "";
+  const pts = s(monthYear).split(" ");
+  const monthName = s(pts[0]).toLowerCase();
   const activeYearNum = parseInt(pts[1]) || 2026;
   const activeMonthNum = MONTH_MAP[monthName] || 6;
   const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
   const matchBranch = (almoxName: string, bId: string, bName?: string) => {
-    const name = almoxName.toLowerCase().trim();
-    const branchId = bId.toLowerCase().trim();
+    const name = s(almoxName).toLowerCase().trim();
+    const branchId = s(bId).toLowerCase().trim();
     
     const normAlmox = name
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -212,7 +214,7 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchNa
 
     let normName = "";
     if (bName) {
-      normName = bName.toLowerCase()
+      normName = s(bName).toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9]/g, "")
         .replace("almoxarifado", "")
@@ -251,14 +253,14 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchNa
 const getScheduledInventoryDate = (branchName: string, monthYear: string, branchId: string | undefined, calendarData: any[] | undefined) => {
   const localCalendar = calendarData || [];
 
-  const m = monthYear.toLowerCase();
+  const m = s(monthYear).toLowerCase();
   const isSem2 = m.includes("julho") || m.includes("agosto") || m.includes("setembro") || m.includes("outubro") || m.includes("novembro") || m.includes("dezembro");
   const sem = isSem2 ? 2 : 1;
 
   const item = localCalendar.find((c) => {
     if (branchId && c.branchId === branchId) return c.semestre === sem;
-    const name = c.almoxarifado.toLowerCase().trim();
-    const brName = branchName.toLowerCase().trim();
+    const name = s(c.almoxarifado).toLowerCase().trim();
+    const brName = s(branchName).toLowerCase().trim();
     const cleanAlmox = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     const cleanBranch = brName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").replace("almoxarifado", "");
     return (cleanAlmox.includes(cleanBranch) || cleanBranch.includes(cleanAlmox)) && c.semestre === sem;
@@ -560,12 +562,12 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
       "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
     };
     return [...list].sort((a, b) => {
-      const partsA = a.monthYear.split(" ");
-      const partsB = b.monthYear.split(" ");
+      const partsA = s(a.monthYear).split(" ");
+      const partsB = s(b.monthYear).split(" ");
       const yearA = parseInt(partsA[1], 10) || 0;
       const yearB = parseInt(partsB[1], 10) || 0;
-      const monthA = monthsMap[partsA[0].toLowerCase()] || 0;
-      const monthB = monthsMap[partsB[0].toLowerCase()] || 0;
+      const monthA = monthsMap[s(partsA[0]).toLowerCase()] || 0;
+      const monthB = monthsMap[s(partsB[0]).toLowerCase()] || 0;
 
       if (yearA !== yearB) {
         return yearA - yearB;
@@ -1001,7 +1003,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         y += 7;
 
         historyList.forEach((h) => {
-          const isJanOrJul = h.monthYear.toLowerCase().includes("janeiro") || h.monthYear.toLowerCase().includes("julho");
+          const isJanOrJul = s(h.monthYear).toLowerCase().includes("janeiro") || s(h.monthYear).toLowerCase().includes("julho");
           const filteredNok = h.nokItems.filter(item => {
             if (item === "Inventário") {
               return isJanOrJul;
