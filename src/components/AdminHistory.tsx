@@ -13,7 +13,7 @@ interface AdminHistoryProps {
 
 // 1. HELPERS FOR TEXT NORMALIZATION AND STRING MATCHING
 const removeAccentsAndSpaces = (str: string) => {
-  return str
+  return (str == null ? "" : String(str))
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -1058,7 +1058,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
 
         // Sanitize name helper for filename output
         const sanitizeName = (name: string) => {
-          return name
+          return (name == null ? "" : String(name))
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")

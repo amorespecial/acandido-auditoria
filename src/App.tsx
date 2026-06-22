@@ -620,12 +620,18 @@ export default function App() {
           return crt;
         });
 
+        // CRÍTICO: somar os pontos AQUI
+        const scoreTotal = mergedCriteria.reduce(
+          (acc, c) => acc + (c.status === "OK" ? Number(c.pointsPossible) : (Number(c.pointsObtained) || 0)), 0
+        );
+
         const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
 
         return {
           ...branch,
           criteria: mergedCriteria,
-          currentScore: score,
+          currentScore: scoreTotal,           // ← atualiza o card
+          pointsObtainedSum: scoreTotal,       // ← atualiza o card (ambas as propriedades)
           status,
           scoreCategory
         };
@@ -637,6 +643,45 @@ export default function App() {
 
     fetchEvaluationsFromSupabase();
   }, [activeMonth, activeYear, refetchTrigger, user]);
+
+  // Real-time listener for evaluations updates & debug channel
+  useEffect(() => {
+    // 1. Listen to global realtime dispatch event
+    const handleRealtimeUpdate = () => {
+      console.log("[REALTIME] Event 'realtime-avaliacoes-update' detected! Refreshing scores...");
+      setRefetchTrigger((prev) => prev + 1);
+    };
+
+    window.addEventListener("realtime-avaliacoes-update", handleRealtimeUpdate);
+    window.addEventListener("realtime-ciclos-update", handleRealtimeUpdate);
+
+    // 2. Direct debug subscription as requested
+    let debugChannel: any = null;
+    if (isSupabaseReady()) {
+      debugChannel = supabase.channel('debug-avaliacoes')
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'avaliacoes'
+        }, (payload) => {
+          console.log('[REALTIME] Avaliação atualizada:', payload);
+          setRefetchTrigger((prev) => prev + 1);
+        })
+        .subscribe((status) => {
+          console.log('[REALTIME] Status da conexão:', status);
+        });
+    }
+
+    return () => {
+      window.removeEventListener("realtime-avaliacoes-update", handleRealtimeUpdate);
+      window.removeEventListener("realtime-ciclos-update", handleRealtimeUpdate);
+      if (debugChannel) {
+        try {
+          supabase.removeChannel(debugChannel);
+        } catch (err) {
+          console.error("Error removing debug channel:", err);
+        }
+      }
+    };
+  }, []);
 
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
@@ -1354,8 +1399,9 @@ export default function App() {
       const currentPeriodStatus = isCurrentPeriod ? cycleState.status : "NENHUM";
       const cycleStatusToUse = query_match ? query_match.status : (isCurrentPeriod ? currentPeriodStatus : "NENHUM");
       
-      // A cycle is active (evaluations are loadable/visible) if its status is defined and is NOT NENHUM
-      const isCycleActive = cycleStatusToUse !== "NENHUM";
+      // A cycle is active (evaluations are loadable/visible) if its status is defined and is NOT NENHUM, or if there are already evaluations saved.
+      const hasSavedEvaluations = b.criteria && b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+      const isCycleActive = (cycleStatusToUse !== "NENHUM") || hasSavedEvaluations;
       const liveActiveScore = isCycleActive ? finalScore : 0;
 
       return {
