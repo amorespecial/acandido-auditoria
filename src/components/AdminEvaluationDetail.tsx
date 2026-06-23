@@ -5,6 +5,7 @@ import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
 import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
+import { realtimeFlags } from "../supabaseClient";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -1160,15 +1161,21 @@ export default function AdminEvaluationDetail({
     setPtsInput(nextStatus === "OK" ? (selectedCriterion?.pointsPossible ?? 0) : 0);
   };
 
-  const handleToggleAuditMode = (criterionId: string, newMode: "Presencial" | "A_Distancia") => {
+  const handleToggleAuditMode = async (criterionId: string, newMode: "Presencial" | "A_Distancia") => {
     if (isCycleClosed) {
       alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas configurações de modo de auditoria.");
       return;
     }
 
     if (isSupabaseReady()) {
-      dbSaveAuditMode(branch.id, criterionId, activeMonth || "Janeiro", activeYear || "2026", newMode)
-        .catch(err => console.error("Error background saving audit mode toggle:", err));
+      try {
+        realtimeFlags.isLocalUpdate = true;
+        await dbSaveAuditMode(branch.id, criterionId, activeMonth || "Janeiro", activeYear || "2026", newMode);
+      } catch (err) {
+        console.error("Error saving audit mode toggle:", err);
+      } finally {
+        realtimeFlags.isLocalUpdate = false;
+      }
     }
 
     const updated = branch.criteria.map((c) => {
