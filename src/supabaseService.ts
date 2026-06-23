@@ -522,7 +522,7 @@ export const dbSaveEvaluation = async (
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    await supabase.from('avaliacoes').upsert({
+    const { error } = await supabase.from('avaliacoes').upsert({
       almoxarifado: almoxarifado,
       mes: mesNum,
       ano: anoNum,
@@ -537,6 +537,11 @@ export const dbSaveEvaluation = async (
       audit_mode: evaluation.auditMode || "A_Distancia",
       modo_auditoria: evaluation.auditMode || "A_Distancia"
     }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+
+    if (error) {
+      console.error("[dbSaveEvaluation] Supabase error during upsert:", error);
+      throw error;
+    }
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }

@@ -565,6 +565,10 @@ export default function App() {
   // Dynamic Supabase ratings loader for current month & year
   useEffect(() => {
     const fetchEvaluationsFromSupabase = async () => {
+      if (realtimeFlags.isLocalUpdate) {
+        console.log("[DEBUG] local update in progress. Skipping fetchEvaluationsFromSupabase from effect trigger.");
+        return;
+      }
       const defaultBranches = getCleanDefaultBranches();
       
       let evaluationsMap: Record<string, any> = {};
@@ -676,6 +680,10 @@ export default function App() {
         .on('postgres_changes', {
           event: '*', schema: 'public', table: 'avaliacoes'
         }, (payload) => {
+          if (realtimeFlags.isLocalUpdate) {
+            console.log('[REALTIME] Self-triggered postgres update. Ignoring in debug subscription payload:', payload);
+            return;
+          }
           console.log('[REALTIME] Avaliação atualizada:', payload);
           setRefetchTrigger((prev) => prev + 1);
         })
@@ -1009,7 +1017,8 @@ export default function App() {
   const isMonthOpen = (() => {
     const key = `${activeMonth}_${activeYear}`;
     const match = allCycles[key];
-    return match ? match.status === "ABERTO" : false;
+    if (match ? match.status === "ABERTO" : false) return true;
+    return !!(cycleState && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear && cycleState.status === "ABERTO");
   })();
   const currentConfig = cycleConfigs[currentConfigKey] || {
     configured: isMonthOpen,
@@ -2344,7 +2353,7 @@ export default function App() {
             {activeSubscreen ? (
               <>
                 {activeSubscreen === "CONTAGEM_TOP10" && (
-                  !currentConfig.configured ? (
+                  (cycleState?.status !== "ABERTO") ? (
                     <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
                       <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
                         <span className="material-symbols-outlined text-[36px]">lock_clock</span>
@@ -2374,7 +2383,7 @@ export default function App() {
                   )
                 )}
                 {activeSubscreen === "LAYOUT_ARRANJO" && (
-                  !currentConfig.configured ? (
+                  (cycleState?.status !== "ABERTO") ? (
                     <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
                       <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
                         <span className="material-symbols-outlined text-[36px]">lock_clock</span>
@@ -2403,7 +2412,7 @@ export default function App() {
                   )
                 )}
                 {activeSubscreen === "UNIMOBIN_CERTIFICADOS" && (
-                  !currentConfig.configured ? (
+                  (cycleState?.status !== "ABERTO") ? (
                     <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6">
                       <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
                         <span className="material-symbols-outlined text-[36px]">lock_clock</span>
@@ -2455,7 +2464,7 @@ export default function App() {
             ) : (
               <>
                 {almoxarifeTab === "HOME" && (
-                  !currentConfig.configured ? (
+                  (cycleState?.status !== "ABERTO") ? (
                     <div className="bg-white rounded-2xl border border-slate-150 p-8 text-center shadow-sm space-y-4 my-6 col-span-full">
                       <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto select-none animate-bounce">
                         <span className="material-symbols-outlined text-[36px]">lock_clock</span>
