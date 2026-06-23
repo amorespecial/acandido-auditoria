@@ -713,7 +713,12 @@ function AdminRankingContent({
     if (rankingMode === "MES") {
       return getEntryScoreForMonth(entry, localRankingMonth);
     } else {
-      const months = getFilteredAccumulatedMonths();
+      const months = localAccumulatedFilter === "1_SEMESTRE"
+        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+        : localAccumulatedFilter === "2_SEMESTRE"
+        ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
       return months.reduce((sum, mName) => sum + getUnifiedScoreForMonth(entry, mName), 0);
     }
   };
@@ -752,25 +757,17 @@ function AdminRankingContent({
 
   const getEntryDisplayMaxForEntry = (entry: UnifiedEntry) => {
     if (rankingMode === "MES") {
-      return calcularMetaMensal(entry, localRankingMonth);
+      return 100;
     } else {
-      const months = getFilteredAccumulatedMonths();
-      if (months.length === 0) return 75;
-      return months.reduce((sum, mName) => sum + calcularMetaMensal(entry, mName), 0);
+      return 600;
     }
   };
 
   const getEntryDisplayMax = (entry?: UnifiedEntry) => {
-    if (entry) {
-      return getEntryDisplayMaxForEntry(entry);
-    }
     if (rankingMode === "MES") {
       return 100;
     } else {
-      const months = getFilteredAccumulatedMonths();
-      if (months.length === 0) return 100;
-      const monthsCount = months.length;
-      return monthsCount * 100;
+      return 600;
     }
   };
 
@@ -1769,7 +1766,7 @@ function AdminRankingContent({
           </h4>
           {rankingMode === "MES" && (
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Meta do Mês: 75 / 95 PTS
+              Meta do Mês: 100 PTS
             </span>
           )}
         </div>
