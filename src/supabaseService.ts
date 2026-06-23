@@ -1303,7 +1303,7 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
   // Sincronização de almoxarifados duplos:
   const twinId = getTwinBranchId(almoxarifado_id);
   if (twinId) {
-    await supabase
+    const { error: twinError } = await supabase
       .from('unimobin_certificados')
       .upsert({
         almoxarifado_id: twinId, mes, ano, colaborador_nome,
@@ -1314,8 +1314,10 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
         uploaded_at: safeUploadedAt,
         enviado_em: safeUploadedAt
       },
-        { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' })
-      .catch((err) => console.error("[twin sync certificates] Error:", err));
+        { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
+    if (twinError) {
+      console.error("[twin sync certificates] Error:", twinError);
+    }
   }
 }
 
