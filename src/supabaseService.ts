@@ -1287,7 +1287,15 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
     },
       { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
-  if (error) throw error;
+  if (error) {
+    console.error("[dbSalvarCertificado ERROR DETAILED]:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint
+    });
+    throw error;
+  }
 
   // Sincronização de almoxarifados duplos:
   const twinId = getTwinBranchId(almoxarifado_id);
