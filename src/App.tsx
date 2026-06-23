@@ -1700,6 +1700,7 @@ export default function App() {
             );
           } catch (err) {
             console.error("Failed to insert twin into envios_almoxarife:", err);
+            if (criterionId === "6") throw err;
           }
         }
       }
@@ -1718,6 +1719,7 @@ export default function App() {
         );
       } catch (err) {
         console.error("Failed to insert into envios_almoxarife:", err);
+        if (criterionId === "6") throw err;
       }
     }
 

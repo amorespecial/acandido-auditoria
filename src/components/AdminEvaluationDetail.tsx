@@ -1525,10 +1525,10 @@ export default function AdminEvaluationDetail({
                 }
 
                 let badgeStyle = "bg-stone-50 text-stone-500 border-stone-200";
-                let badgeText: string = crit.status;
+                let badgeText: string = crit.status === "ENVIADO" ? "AGUARDANDO REVISÃO" : crit.status;
 
                 let consBadgeStyle = "bg-stone-50 text-stone-500 border-stone-200";
-                let consolidatedText: string = consolidatedStatus;
+                let consolidatedText: string = consolidatedStatus === "ENVIADO" ? "AGUARDANDO REVISÃO" : consolidatedStatus;
 
                 if (crit.isAguardandoRealizacao) {
                   badgeStyle = "bg-slate-100 text-slate-500 border-slate-300 font-bold normal-case";

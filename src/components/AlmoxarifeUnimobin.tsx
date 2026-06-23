@@ -5,7 +5,7 @@ import { dbBuscarCertificados, dbSalvarCertificado, isSupabaseReady } from "../s
 
 interface AlmoxarifeUnimobinProps {
   onBack: () => void;
-  onSubmitEvidence: (criterionId: string, comments: string, photos: string[]) => void;
+  onSubmitEvidence: (criterionId: string, comments: string, photos: string[]) => Promise<void> | void;
   criterionState?: CriterionState;
   branchId?: string;
   branchName?: string;
@@ -279,8 +279,8 @@ export default function AlmoxarifeUnimobin({
   const handleCompleteSend = async () => {
     setIsSending(true);
     try {
-      // 1. Persist each collaborator's certificate in database securely
       if (isSupabaseReady() && branchId) {
+        // 1. Persist each collaborator's certificate in database securely
         await Promise.all(
           certs.map((c) =>
             dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
@@ -310,14 +310,7 @@ export default function AlmoxarifeUnimobin({
       onBack();
     } catch (e) {
       console.error("Error confirming and completing certificate send:", e);
-      alert("Houve um erro de sincronização com o banco de dados. Os certificados foram salvos localmente e serão sincronizados em instantes.");
-      
-      // Fallback to offline submit to preserve usability
-      const completedCount = certs.filter((c) => c.status === "Certificado enviado").length;
-      const totalCollabs = certs.length;
-      const summaryNote = `Certificados do Curso Unimobin anexados. Proporção de conclusão: ${completedCount}/${totalCollabs} colaboradores devidamente certificados.`;
-      onSubmitEvidence("6", summaryNote, []);
-      onBack();
+      alert("Houve um erro de sincronização com o banco de dados. Os certificados não puderam ser gravados no banco de dados. Por favor, verifique sua conexão e tente novamente.");
     } finally {
       setIsSending(false);
     }
@@ -451,26 +444,33 @@ export default function AlmoxarifeUnimobin({
       </section>
 
       {/* Big Action Button */}
-      <button
-        onClick={handleCompleteSend}
-        disabled={isSending}
-        className="w-full bg-[#1B2A4A] active:bg-[#0F172B] text-white py-3 rounded-lg text-xs font-bold shadow-md hover:opacity-95 active:scale-95 transition-all text-center flex items-center justify-center gap-2"
-      >
-        {isSending ? (
-          <>
-            <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span>Transmitindo Certificados...</span>
-          </>
-        ) : (
-          <>
-            <span>Confirmar Envio do Tópico 06</span>
-            <span className="material-symbols-outlined text-[16px]">send</span>
-          </>
-        )}
-      </button>
+      {!isFinalized ? (
+        <button
+          onClick={handleCompleteSend}
+          disabled={isSending}
+          className="w-full bg-[#1B2A4A] active:bg-[#0F172B] text-white py-3 rounded-lg text-xs font-bold shadow-md hover:opacity-95 active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+        >
+          {isSending ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Transmitindo Certificados...</span>
+            </>
+          ) : (
+            <>
+              <span>Confirmar Envio do Tópico 06</span>
+              <span className="material-symbols-outlined text-[16px]">send</span>
+            </>
+          )}
+        </button>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold p-4 rounded-xl text-center flex items-center justify-center gap-2 shadow-sm animate-fade-in">
+          <span className="material-symbols-outlined text-emerald-600">check_circle</span>
+          <span>Certificados transmitidos com sucesso. Aguardando auditoria.</span>
+        </div>
+      )}
     </div>
   );
 }

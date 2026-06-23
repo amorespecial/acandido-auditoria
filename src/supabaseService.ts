@@ -1267,6 +1267,12 @@ export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, 
 
 // ======================= UNIMOBIN CERTIFICADOS =======================
 export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, ano: string, colaborador_nome: string, dados: any) {
+  // If fileData is too large, use a placeholder instead of sending megabytes over PostgREST/PostgreSQL
+  const inputData = dados.fileData || dados.file_data || null;
+  const safeFileData = (inputData && inputData.length > 50000)
+    ? "placeholder-heavy-data"
+    : inputData;
+
   const { error } = await supabase
     .from('unimobin_certificados')
     .upsert({
@@ -1274,9 +1280,9 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       status: dados.status || 'Aguardando envio',
       file_name: dados.fileName || dados.file_name || null,
       file_type: dados.fileType || dados.file_type || null,
-      file_data: dados.fileData || dados.file_data || null,
-      arquivo_url: dados.fileData || dados.file_data || null,
-      arquivo_base64: dados.fileData || dados.file_data || null,
+      file_data: safeFileData,
+      arquivo_url: safeFileData,
+      arquivo_base64: safeFileData,
       uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
       enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
     },
@@ -1293,9 +1299,9 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
         status: dados.status || 'Aguardando envio',
         file_name: dados.fileName || dados.file_name || null,
         file_type: dados.fileType || dados.file_type || null,
-        file_data: dados.fileData || dados.file_data || null,
-        arquivo_url: dados.fileData || dados.file_data || null,
-        arquivo_base64: dados.fileData || dados.file_data || null,
+        file_data: safeFileData,
+        arquivo_url: safeFileData,
+        arquivo_base64: safeFileData,
         uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
         enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
       },
