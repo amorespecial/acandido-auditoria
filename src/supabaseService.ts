@@ -612,13 +612,17 @@ export const dbSaveEvaluation = async (
 
   try {
     realtimeFlags.isLocalUpdate = true;
+    const safeResultado = (evaluation.status === "OK" || evaluation.status === "NOK") 
+      ? evaluation.status 
+      : "PENDENTE";
+
     const { error } = await supabase.from('avaliacoes').upsert({
       almoxarifado: almoxarifado,
       mes: mesNum,
       ano: anoNum,
       criterio_codigo: criterionId,
       criterio_nome: criterionName,
-      resultado: evaluation.status || "PENDENTE",
+      resultado: safeResultado,
       pontuacao: evaluation.pointsObtained ?? 0,
       descricao_evidencia: evaluation.evidenceNotes || evaluation.notes || "",
       links_evidencia: finalLinks,
