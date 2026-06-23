@@ -721,7 +721,7 @@ export const dbSubmitAlmoxarifeEvidence = async (
         quantidades: [],
         fotos: storageUrls,
         enviado_por: submittedBy,
-        enviado_em: new Date().toISOString()
+        uploaded_at: new Date().toISOString()
       }, { onConflict: 'almoxarifado_id,mes,ano' });
     }
 
@@ -1201,7 +1201,7 @@ export const dbSaveTop10Config = async (almoxarifado: string, mesName: string, a
 export async function dbSalvarTop10Envio(almoxarifado_id: string, mes: string, ano: string, quantidades: any[], fotos: any[], enviado_por: string) {
   const { error } = await supabase
     .from('top10_envios')
-    .upsert({ almoxarifado_id, mes, ano, quantidades, fotos, enviado_por, enviado_em: new Date().toISOString() },
+    .upsert({ almoxarifado_id, mes, ano, quantidades, fotos, enviado_por, uploaded_at: new Date().toISOString() },
       { onConflict: 'almoxarifado_id,mes,ano' });
   if (error) throw error;
 }
