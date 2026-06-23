@@ -1070,9 +1070,44 @@ export default function AdminEvaluationDetail({
         return;
       }
 
-      // Automatic Unimobin NOK Rule: if any collaborator has pending status ("Aguardando envio"), entire criterion is forced to NOK
-      const hasAnyNokCollab = selectedCriterion.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
-      const enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
+      let enforcedStatus = statusInput;
+      
+      if (selectedCriterion.id === "6") {
+        if (statusInput === "OK") {
+          enforcedStatus = "OK";
+          
+          // Force all collaborator certificates to "Certificado enviado" (completed/approved state)
+          const updatedCerts = auditorCerts.map(c => ({
+            ...c,
+            status: "Certificado enviado" as const,
+            uploadedAt: c.uploadedAt || new Date().toLocaleDateString("pt-BR")
+          }));
+          setAuditorCerts(updatedCerts);
+          localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updatedCerts));
+
+          if (isSupabaseReady()) {
+            try {
+              await Promise.all(
+                updatedCerts.map(c => 
+                  dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+                    status: "Certificado enviado",
+                    fileName: c.fileName || null,
+                    fileType: c.fileType || null,
+                    fileData: c.fileData || null,
+                    uploadedAt: c.uploadedAt || new Date().toISOString()
+                  })
+                )
+              );
+            } catch (err) {
+              console.error("Error updating certificates to approved in Supabase:", err);
+              throw new Error("Erro ao salvar os certificados no Supabase: " + (err instanceof Error ? err.message : String(err)));
+            }
+          }
+        } else {
+          const hasAnyNokCollab = auditorCerts.some(c => c.status === "Aguardando envio");
+          enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
+        }
+      }
 
       if (enforcedStatus === "NOK") {
         const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
@@ -1107,7 +1142,7 @@ export default function AdminEvaluationDetail({
 
       onUpdateCriteria(branch.id, updated);
 
-      const isShared = selectedCriterion.id === "10";
+      const isShared = selectedCriterion.id === "10" || selectedCriterion.id === "6";
       if (isShared && twinBranch) {
         const twinUpdated = twinBranch.criteria.map((c) => {
           if (c.id === selectedCriterion.id) {
