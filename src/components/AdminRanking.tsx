@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, CriterionState } from "../types";
-import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
+import { dbFetchHistory, isSupabaseReady, dbFetchYearEvaluations } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
 const s = (v: any): string => (v == null ? "" : String(v));
@@ -47,6 +47,42 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 const safeStr = (val: any): string => 
   val === null || val === undefined ? "" : String(val);
+
+const matchBranch = (almoxName: string, bId: string, bName?: string) => {
+  const name = safeStr(almoxName).toLowerCase().trim();
+  const branchId = safeStr(bId).toLowerCase().trim();
+  
+  // 1. Direct explicit rule maps for absolute safety
+  if (name.includes("santa maria")) return branchId === "santa-maria-jp";
+  if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
+  if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
+  if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+  if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
+  if (name.includes("goiana")) return branchId === "fretamento-goiana";
+  if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
+  if (name.includes("fret pe") || name.includes("jaboatao") || name === "trans fret pe") return branchId === "fretamento-jaboatao";
+  if (name.includes("rod ce") || name.includes("fortaleza")) return branchId === "rodoviario-fortaleza";
+  if (name.includes("rod pe") || name.includes("jaboatão pb") || name === "trans rod pe" || name.includes("jaboatao")) return branchId === "rodoviario-jaboatao";
+  if (name.includes("transnacional rn") || name.includes("reunidas") || name.includes("transnacional")) return branchId === "reunidas-nat";
+  if (name.includes("unissanta") || name.includes("unissana")) return branchId === "unissana-rn";
+  if (name.includes("unitrans")) return branchId === "unitrans-jp";
+
+  // 2. Exact check
+  if (branchId === name) return true;
+
+  // 3. Normalized fallback
+  const normAlmox = name
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+  const normId = branchId
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+  if (normAlmox === normId || normId === normAlmox) return true;
+  return false;
+};
+
 
 interface AdminRankingProps {
   user: AppUser;
@@ -97,6 +133,8 @@ function AdminRankingContent({
   const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);
   const [rankingMode, setRankingMode] = useState<"MES" | "ACUMULADO">("MES");
   const [historyList, setHistoryList] = useState<any[]>([]);
+  const [allEvaluationsOfYear, setAllEvaluationsOfYear] = useState<any[]>([]);
+  const [loadingAllEvals, setLoadingAllEvals] = useState(false);
 
   useEffect(() => {
     const loadRankingHist = async () => {
@@ -133,6 +171,30 @@ function AdminRankingContent({
       window.removeEventListener("storage", loadRankingHist);
     };
   }, []);
+
+  useEffect(() => {
+    const fetchAllEvals = async () => {
+      if (isSupabaseReady()) {
+        try {
+          setLoadingAllEvals(true);
+          const data = await dbFetchYearEvaluations(activeYear);
+          setAllEvaluationsOfYear(data);
+        } catch (e) {
+          console.error("Failed to load all evaluations of year in AdminRanking:", e);
+        } finally {
+          setLoadingAllEvals(false);
+        }
+      }
+    };
+    fetchAllEvals();
+    
+    // Refresh ranking state on external change too
+    window.addEventListener("realtime-avaliacoes-update", fetchAllEvals);
+    return () => {
+      window.removeEventListener("realtime-avaliacoes-update", fetchAllEvals);
+    };
+  }, [activeYear, branches]);
+
 
   // Independent local state for filters in the Ranking screen
   const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth || "Janeiro");
@@ -276,34 +338,32 @@ function AdminRankingContent({
   const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
     if (!entry || !entry.branches) return 0;
     
-    let allCyclesList: any[] = [];
-    try {
-      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) {
-        const parsed = JSON.parse(savedCycles);
-        if (Array.isArray(parsed)) allCyclesList = parsed;
+    // 1. If it's the currently active/selected month, we can use entry.branches directly!
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+      if (entry.branches.length > 0) {
+        if (entry.branches.length === 2) {
+          let consolidatedScore = 0;
+          const refCriteria = entry.branches[0]?.criteria || [];
+          refCriteria.forEach((cRef) => {
+            if (!cRef) return;
+            const allOk = entry.branches.every((mRecord) => {
+              const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === cRef.id);
+              return crit && crit.status === "OK";
+            });
+            if (allOk) {
+              consolidatedScore += cRef.pointsPossible ?? 0;
+            }
+          });
+          return consolidatedScore;
+        } else {
+          return entry.branches[0]?.currentScore || 0;
+        }
       }
-    } catch (e) {}
-
-    const branchIds = (entry.branches || []).map(b => b?.id).filter(Boolean);
-    const histEntries = Array.isArray(historyList) ? historyList : [];
-
-    const hasHistory = histEntries.some(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
-    );
-
-    const isCurrentActive = normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth);
-
-    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && normalizeMonthName(c.activeMonth) === normalizeMonthName(monthName) && c.status !== "NENHUM"
-    );
-
-    // Permit score calculation if there's an active cycle, history, or if it is the currently active month
-    if (!hasCycle && !hasHistory && !isCurrentActive) {
-      return 0;
     }
 
-    // 1. Check history
+    // 2. Check history list
+    const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
+    const histEntries = Array.isArray(historyList) ? historyList : [];
     const matchingHist = histEntries.filter(
       (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
     );
@@ -333,25 +393,98 @@ function AdminRankingContent({
       }
     }
 
-    // 2. Check dynamic evaluations
-    if (normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth)) {
-      if (entry.branches.length > 0) {
-        if (entry.branches.length === 2) {
+    // 3. Dynamic evaluations from the database
+    if (allEvaluationsOfYear && allEvaluationsOfYear.length > 0) {
+      const monthNum = MONTH_MAP[normalizeMonthName(monthName)];
+      if (monthNum) {
+        const calculatedBranches = entry.branches.map((b) => {
+          const dbRows = allEvaluationsOfYear.filter((row) => {
+            return Number(row.mes) === monthNum && matchBranch(row.almoxarifado || "", b.id, b.name);
+          });
+          const dbMapped: Record<string, any> = {};
+          dbRows.forEach((row) => {
+            dbMapped[String(row.criterio_codigo)] = row;
+          });
+
+          const semester = monthNum <= 6 ? 1 : 2;
+
+          // Compute dynamic calendar
+          const branchCalendar = (localCalendar || []).filter(item => 
+            (item.branchId === b.id || (!item.branchId && matchBranch(item.almoxarifado || "", b.id, b.name))) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          const evaluatedInventories = branchCalendar.filter(item => item.status === "OK" || item.status === "NOK");
+          let invStatus = "PENDENTE";
+          if (evaluatedInventories.length > 0) {
+            const hasNok = evaluatedInventories.some(it => it.status === "NOK");
+            const allOk = evaluatedInventories.every(it => it.status === "OK");
+            invStatus = hasNok ? "NOK" : (allOk ? "OK" : "PENDENTE");
+          }
+
+          // Compute dynamic material sem mov
+          let matStatus = "PENDENTE";
+          let localMatSemMov: any[] = [];
+          try {
+            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
+            localMatSemMov = saved ? JSON.parse(saved) : [];
+          } catch (e) {}
+          const branchMatSem = (localMatSemMov || []).find(item => 
+            matchBranch(item.almoxarifado || "", b.id, b.name) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          if (branchMatSem) {
+            matStatus = branchMatSem.status || "PENDENTE";
+          }
+
+          // Build criteria status map
+          const criteriaState = (b.criteria || []).map((c: any) => {
+            let status = "PENDENTE";
+            let pts = 0;
+            if (c.id === "1") {
+              status = invStatus;
+              pts = status === "OK" ? 20 : (status === "PENDENTE" && evaluatedInventories.length > 0 ? 10 : 0);
+            } else if (c.id === "10") {
+              status = matStatus;
+              pts = status === "OK" ? 5 : 0;
+            } else {
+              const row = dbMapped[c.id];
+              status = row ? (row.resultado || "PENDENTE") : "PENDENTE";
+              pts = status === "OK" ? (c.pointsPossible || 0) : 0;
+            }
+            return { id: c.id, status, pointsPossible: c.pointsPossible, pointsObtained: pts };
+          });
+
+          // Automate NF -> Recebimento
+          const nfC = criteriaState.find(c => c.id === "3");
+          if (nfC) {
+            const recC = criteriaState.find(c => c.id === "5");
+            if (recC) {
+              recC.status = nfC.status;
+              recC.pointsObtained = nfC.status === "OK" ? (recC.pointsPossible || 0) : 0;
+            }
+          }
+
+          return { ...b, criteriaState };
+        });
+
+        if (calculatedBranches.length === 2) {
+          const b1 = calculatedBranches[0];
+          const b2 = calculatedBranches[1];
           let consolidatedScore = 0;
-          const refCriteria = entry.branches[0]?.criteria || [];
-          refCriteria.forEach((cRef) => {
-            if (!cRef) return;
-            const allOk = entry.branches.every((mRecord) => {
-              const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === cRef.id);
-              return crit && crit.status === "OK";
-            });
+
+          b1.criteriaState.forEach((cRef: any) => {
+            const tc = b2.criteriaState.find((c: any) => c.id === cRef.id);
+            const allOk = cRef.status === "OK" && tc && tc.status === "OK";
             if (allOk) {
-              consolidatedScore += cRef.pointsPossible ?? 0;
+              consolidatedScore += cRef.pointsPossible || 0;
             }
           });
           return consolidatedScore;
-        } else {
-          return entry.branches[0]?.currentScore || 0;
+        } else if (calculatedBranches.length === 1) {
+          const b1 = calculatedBranches[0];
+          return b1.criteriaState.reduce((acc: number, c: any) => acc + (c.status === "OK" ? (c.pointsPossible || 0) : 0), 0);
         }
       }
     }
@@ -366,34 +499,38 @@ function AdminRankingContent({
   ): { status: string; points: number } => {
     if (!entry || !entry.branches) return { status: "PENDENTE", points: 0 };
     
-    let allCyclesList: any[] = [];
-    try {
-      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) {
-        const parsed = JSON.parse(savedCycles);
-        if (Array.isArray(parsed)) allCyclesList = parsed;
+    // 1. If it's the currently active/selected month, we can use entry.branches directly!
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+      if (entry.branches.length > 0) {
+        if (entry.branches.length === 2) {
+          const statuses = entry.branches.map((mRecord) => {
+            const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === criterionId);
+            return crit ? (crit.status || "PENDENTE") : "PENDENTE";
+          });
+          const isNok = statuses.includes("NOK");
+          const isBothOk = statuses.every((s) => s === "OK");
+          const statusText = isNok
+            ? "NOK"
+            : isBothOk
+            ? "OK"
+            : statuses.includes("ENVIADO")
+            ? "ENVIADO"
+            : "PENDENTE";
+          const refC = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
+          const pointsMax = refC ? (refC.pointsPossible ?? 0) : 0;
+          return { status: statusText, points: isBothOk ? pointsMax : 0 };
+        } else {
+          const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
+          if (crit) {
+            const isOk = crit.status === "OK";
+            return { status: crit.status || "PENDENTE", points: isOk ? (crit.pointsPossible ?? 0) : 0 };
+          }
+        }
       }
-    } catch (e) {}
+    }
 
     const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
     const histEntries = Array.isArray(historyList) ? historyList : [];
-
-    const hasHistory = histEntries.some(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
-    );
-
-    const isCurrentActive = normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth);
-
-    const hasCycle = Array.isArray(allCyclesList) && allCyclesList.some(
-      (c: any) => c && normalizeMonthName(c.activeMonth) === normalizeMonthName(monthName) && c.status !== "NENHUM"
-    );
-
-    if (!hasCycle && !hasHistory && !isCurrentActive) {
-      return { status: "AGUARDANDO ENVIO", points: 0 };
-    }
-
-    const refCriterion = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
-    const pointsMax = refCriterion ? (refCriterion.pointsPossible ?? 0) : 0;
 
     // Check history
     const matchingHist = histEntries.filter(
@@ -401,6 +538,9 @@ function AdminRankingContent({
     );
 
     if (matchingHist.length > 0) {
+      const refCriterion = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
+      const pointsMax = refCriterion ? (refCriterion.pointsPossible ?? 0) : 0;
+
       if (entry.branches.length === 2) {
         if (matchingHist.length === 2) {
           const allOk = matchingHist.every((mRecord) => {
@@ -418,29 +558,101 @@ function AdminRankingContent({
       }
     }
 
-    // Check dynamic evaluations
-    if (normalizeMonthName(monthName) === normalizeMonthName(cycleStateParsed.activeMonth)) {
-      if (entry.branches.length > 0) {
-        if (entry.branches.length === 2) {
-          const statuses = entry.branches.map((mRecord) => {
-            const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === criterionId);
-            return crit ? (crit.status || "PENDENTE") : "PENDENTE";
+    // 3. Dynamic evaluations from the database
+    if (allEvaluationsOfYear && allEvaluationsOfYear.length > 0) {
+      const monthNum = MONTH_MAP[normalizeMonthName(monthName)];
+      if (monthNum) {
+        const calculatedBranches = entry.branches.map((b) => {
+          const dbRows = allEvaluationsOfYear.filter((row) => {
+            return Number(row.mes) === monthNum && matchBranch(row.almoxarifado || "", b.id, b.name);
           });
-          const isNok = statuses.includes("NOK");
-          const isBothOk = statuses.every((s) => s === "OK");
-          const statusText = isNok
-            ? "NOK"
-            : isBothOk
-            ? "OK"
-            : statuses.includes("ENVIADO")
-            ? "ENVIADO"
-            : "PENDENTE";
-          return { status: statusText, points: isBothOk ? pointsMax : 0 };
-        } else {
-          const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
-          if (crit) {
-            const isOk = crit.status === "OK";
-            return { status: crit.status || "PENDENTE", points: isOk ? pointsMax : 0 };
+          const dbMapped: Record<string, any> = {};
+          dbRows.forEach((row) => {
+            dbMapped[String(row.criterio_codigo)] = row;
+          });
+
+          const semester = monthNum <= 6 ? 1 : 2;
+
+          // Compute dynamic calendar
+          const branchCalendar = (localCalendar || []).filter(item => 
+            (item.branchId === b.id || (!item.branchId && matchBranch(item.almoxarifado || "", b.id, b.name))) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          const evaluatedInventories = branchCalendar.filter(item => item.status === "OK" || item.status === "NOK");
+          let invStatus = "PENDENTE";
+          if (evaluatedInventories.length > 0) {
+            const hasNok = evaluatedInventories.some(it => it.status === "NOK");
+            const allOk = evaluatedInventories.every(it => it.status === "OK");
+            invStatus = hasNok ? "NOK" : (allOk ? "OK" : "PENDENTE");
+          }
+
+          // Compute dynamic material sem mov
+          let matStatus = "PENDENTE";
+          let localMatSemMov: any[] = [];
+          try {
+            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
+            localMatSemMov = saved ? JSON.parse(saved) : [];
+          } catch (e) {}
+          const branchMatSem = (localMatSemMov || []).find(item => 
+            matchBranch(item.almoxarifado || "", b.id, b.name) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          if (branchMatSem) {
+            matStatus = branchMatSem.status || "PENDENTE";
+          }
+
+          // Build criteria status map
+          const criteriaState = (b.criteria || []).map((c: any) => {
+            let status = "PENDENTE";
+            let pts = 0;
+            if (c.id === "1") {
+              status = invStatus;
+              pts = status === "OK" ? 20 : (status === "PENDENTE" && evaluatedInventories.length > 0 ? 10 : 0);
+            } else if (c.id === "10") {
+              status = matStatus;
+              pts = status === "OK" ? 5 : 0;
+            } else {
+              const row = dbMapped[c.id];
+              status = row ? (row.resultado || "PENDENTE") : "PENDENTE";
+              pts = status === "OK" ? (c.pointsPossible || 0) : 0;
+            }
+            return { id: c.id, status, pointsPossible: c.pointsPossible, pointsObtained: pts };
+          });
+
+          // Automate NF -> Recebimento
+          const nfC = criteriaState.find(c => c.id === "3");
+          if (nfC) {
+            const recC = criteriaState.find(c => c.id === "5");
+            if (recC) {
+              recC.status = nfC.status;
+              recC.pointsObtained = nfC.status === "OK" ? (recC.pointsPossible || 0) : 0;
+            }
+          }
+
+          return { ...b, criteriaState };
+        });
+
+        const refC = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
+        const pointsMax = refC ? (refC.pointsPossible ?? 0) : 0;
+
+        if (calculatedBranches.length === 2) {
+          const b1 = calculatedBranches[0];
+          const b2 = calculatedBranches[1];
+          const c1 = b1.criteriaState.find((c: any) => c.id === criterionId);
+          const c2 = b2.criteriaState.find((c: any) => c.id === criterionId);
+          if (c1 && c2) {
+            const isNok = c1.status === "NOK" || c2.status === "NOK";
+            const isBothOk = c1.status === "OK" && c2.status === "OK";
+            const statusText = isNok ? "NOK" : (isBothOk ? "OK" : "PENDENTE");
+            return { status: statusText, points: isBothOk ? pointsMax : 0 };
+          }
+        } else if (calculatedBranches.length === 1) {
+          const b1 = calculatedBranches[0];
+          const c1 = b1.criteriaState.find((c: any) => c.id === criterionId);
+          if (c1) {
+            return { status: c1.status, points: c1.status === "OK" ? pointsMax : 0 };
           }
         }
       }
@@ -475,16 +687,33 @@ function AdminRankingContent({
     return getUnifiedScoreForMonth(entry, monthName);
   };
 
+  const getFilteredAccumulatedMonths = () => {
+    const allPeriodMonths = localAccumulatedFilter === "1_SEMESTRE"
+      ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
+      : localAccumulatedFilter === "2_SEMESTRE"
+      ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+      : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+    const activeYrNum = parseInt(activeYear) || 2026;
+    const cycleYrNum = parseInt(cycleStateParsed.activeYear) || 2026;
+
+    if (activeYrNum < cycleYrNum) {
+      return allPeriodMonths;
+    } else if (activeYrNum > cycleYrNum) {
+      return allPeriodMonths;
+    } else {
+      return allPeriodMonths.filter((mName) => {
+        const mNum = MONTH_MAP[normalizeMonthName(mName)];
+        return mNum <= activeMonthNum;
+      });
+    }
+  };
+
   const getEntryDisplayScore = (entry: UnifiedEntry) => {
     if (rankingMode === "MES") {
       return getEntryScoreForMonth(entry, localRankingMonth);
     } else {
-      const months = localAccumulatedFilter === "1_SEMESTRE"
-        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
-        : localAccumulatedFilter === "2_SEMESTRE"
-        ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-        : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-      
+      const months = getFilteredAccumulatedMonths();
       return months.reduce((sum, mName) => sum + getUnifiedScoreForMonth(entry, mName), 0);
     }
   };
@@ -525,12 +754,8 @@ function AdminRankingContent({
     if (rankingMode === "MES") {
       return calcularMetaMensal(entry, localRankingMonth);
     } else {
-      const months = localAccumulatedFilter === "1_SEMESTRE"
-        ? ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"]
-        : localAccumulatedFilter === "2_SEMESTRE"
-        ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-        : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-      
+      const months = getFilteredAccumulatedMonths();
+      if (months.length === 0) return 75;
       return months.reduce((sum, mName) => sum + calcularMetaMensal(entry, mName), 0);
     }
   };
@@ -542,7 +767,9 @@ function AdminRankingContent({
     if (rankingMode === "MES") {
       return 100;
     } else {
-      const monthsCount = localAccumulatedFilter === "ANO_TODO" ? 12 : 6;
+      const months = getFilteredAccumulatedMonths();
+      if (months.length === 0) return 100;
+      const monthsCount = months.length;
       return monthsCount * 100;
     }
   };

@@ -1241,3 +1241,17 @@ export async function dbFetchHistory(): Promise<any[]> {
   }));
 }
 
+export async function dbFetchYearEvaluations(ano: string | number): Promise<any[]> {
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase
+    .from('avaliacoes')
+    .select('*')
+    .eq('ano', Number(ano));
+  if (error || !data) {
+    console.warn("Error in dbFetchYearEvaluations:", error);
+    return [];
+  }
+  return data;
+}
+
+
