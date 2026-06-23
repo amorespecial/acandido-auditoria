@@ -1281,8 +1281,7 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       file_name: dados.fileName || dados.file_name || null,
       file_type: dados.fileType || dados.file_type || null,
       file_data: safeFileData,
-      uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
-      enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
+      uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
     },
       { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
   if (error) {
@@ -1306,8 +1305,7 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
         file_name: dados.fileName || dados.file_name || null,
         file_type: dados.fileType || dados.file_type || null,
         file_data: safeFileData,
-        uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
-        enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
+        uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
       },
         { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' })
       .catch((err) => console.error("[twin sync certificates] Error:", err));
