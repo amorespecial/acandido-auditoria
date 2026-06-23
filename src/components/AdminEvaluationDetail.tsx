@@ -5,7 +5,7 @@ import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
 import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
-import { realtimeFlags } from "../supabaseClient";
+import { supabase, realtimeFlags } from "../supabaseClient";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -1205,9 +1205,40 @@ export default function AdminEvaluationDetail({
     if (isSupabaseReady()) {
       try {
         realtimeFlags.isLocalUpdate = true;
-        await dbSaveAuditMode(branch.id, criterionId, activeMonth || "Janeiro", activeYear || "2026", newMode);
+        
+        // Save for the main branch
+        const { error } = await supabase.from('audit_modes').upsert({
+          almoxarifado_id: branch.id,
+          criterio_id: criterionId,
+          mes: activeMonth || "Janeiro",
+          ano: activeYear || "2026",
+          modo: newMode
+        }, { onConflict: 'almoxarifado_id,criterio_id,mes,ano' });
+
+        if (error) {
+          console.error("Error saving audit mode:", error);
+          alert("Erro ao salvar modo de auditoria: " + error.message);
+          return;
+        }
+
+        // Save for the twin branch if it's a shared criterion
+        const isShared = criterionId === "10" || criterionId === "6";
+        if (isShared && twinBranch) {
+          const { error: twinError } = await supabase.from('audit_modes').upsert({
+            almoxarifado_id: twinBranch.id,
+            criterio_id: criterionId,
+            mes: activeMonth || "Janeiro",
+            ano: activeYear || "2026",
+            modo: newMode
+          }, { onConflict: 'almoxarifado_id,criterio_id,mes,ano' });
+
+          if (twinError) {
+            console.error("Error saving twin audit mode:", twinError);
+          }
+        }
       } catch (err) {
         console.error("Error saving audit mode toggle:", err);
+        return;
       } finally {
         realtimeFlags.isLocalUpdate = false;
       }
@@ -1232,6 +1263,29 @@ export default function AdminEvaluationDetail({
     });
 
     onUpdateCriteria(branch.id, updated);
+
+    // Update twin branch locally if it's a shared criterion
+    const isShared = criterionId === "10" || criterionId === "6";
+    if (isShared && twinBranch) {
+      const twinUpdated = twinBranch.criteria.map((c) => {
+        if (c.id === criterionId) {
+          let nextStatus = c.status;
+          if (newMode === "Presencial" && (c.status === "AGUARDANDO ENVIO" || c.status === "PENDENTE" || c.status === "ENVIADO")) {
+            nextStatus = "PENDENTE";
+          } else if (newMode === "A_Distancia" && c.status === "PENDENTE") {
+            nextStatus = "AGUARDANDO ENVIO";
+          }
+
+          return {
+            ...c,
+            auditMode: newMode,
+            status: nextStatus
+          };
+        }
+        return c;
+      });
+      onUpdateCriteria(twinBranch.id, twinUpdated);
+    }
   };
 
   const isInventarioScheduledThisMonth = (() => {

@@ -407,6 +407,10 @@ export async function dbSalvarAvaliacao(avaliacao: {
   const anoNum = typeof avaliacao.ano === "string" ? parseInt(avaliacao.ano) : avaliacao.ano;
   const links = [avaliacao.nok_link1, avaliacao.nok_link2, avaliacao.nok_link3].filter(Boolean) as string[];
 
+  const safeResultado = (avaliacao.status === "OK" || avaliacao.status === "NOK") 
+    ? avaliacao.status 
+    : "PENDENTE";
+
   const { error } = await supabase
     .from('avaliacoes')
     .upsert({
@@ -415,12 +419,14 @@ export async function dbSalvarAvaliacao(avaliacao: {
       ano: anoNum,
       criterio_codigo: avaliacao.criterio_id,
       criterio_nome: avaliacao.criterio_nome,
-      resultado: avaliacao.status,
+      resultado: safeResultado,
       pontuacao: avaliacao.pontos_obtidos,
       descricao_evidencia: avaliacao.nok_descricao || avaliacao.notes || "",
       links_evidencia: links,
       avaliado_por: avaliacao.avaliado_por || "Fernando Silva",
-      avaliado_em: new Date().toISOString()
+      avaliado_em: new Date().toISOString(),
+      audit_mode: "A_Distancia",
+      modo_auditoria: "A_Distancia"
     }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
 
   if (error) throw error;
@@ -547,8 +553,16 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     // Prefer audit mode from audit_modes table if available, fallback to evaluations values
     const finalAuditMode = auditModesMap[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
 
+    let displayStatus: EvaluationStatus = (row.resultado || "PENDENTE") as EvaluationStatus;
+    if (displayStatus === "PENDENTE") {
+      if (finalAuditMode === "A_Distancia") {
+        const hasEvidence = links.length > 0 || (row.descricao_evidencia && row.descricao_evidencia.trim().length > 0);
+        displayStatus = hasEvidence ? "ENVIADO" : "AGUARDANDO ENVIO";
+      }
+    }
+
     mapped[critId] = {
-      status: (row.resultado || "PENDENTE") as EvaluationStatus,
+      status: displayStatus,
       pointsObtained: row.pontuacao ?? 0,
       pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
       notes: row.descricao_evidencia || "",
@@ -563,8 +577,10 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
   // Ensure auditMode config is propagated even if no evaluations row exists yet
   Object.keys(auditModesMap).forEach(critId => {
     if (!mapped[critId]) {
+      const finalAuditMode = auditModesMap[critId] || "A_Distancia";
+      const displayStatus: EvaluationStatus = finalAuditMode === "A_Distancia" ? "AGUARDANDO ENVIO" : "PENDENTE";
       mapped[critId] = {
-        status: "PENDENTE",
+        status: displayStatus,
         pointsObtained: 0,
         pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
         notes: "",
@@ -572,7 +588,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
         nokEvidenceLinks: [],
         submittedPhotos: [],
         submittedAt: "",
-        auditMode: auditModesMap[critId]
+        auditMode: finalAuditMode
       };
     }
   });
@@ -736,7 +752,7 @@ export const dbSubmitAlmoxarifeEvidence = async (
       ano: anoNum,
       criterio_codigo: criterionId,
       criterio_nome: cName,
-      resultado: "ENVIADO",
+      resultado: "PENDENTE",
       pontuacao: 0,
       descricao_evidencia: comment,
       links_evidencia: storageUrls,
