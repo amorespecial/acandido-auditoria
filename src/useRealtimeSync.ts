@@ -22,6 +22,7 @@ export function useRealtimeSync(
     const channel = supabase.channel(`global-sync-${uniqueId}`);
 
     const tables = [
+      "audit_modes",
       "ciclos",
       "avaliacoes",
       "unimobin_certificados",
@@ -51,6 +52,7 @@ export function useRealtimeSync(
 
           // Define local mapping of tables to standard custom event names
           const eventMap: Record<string, string> = {
+            audit_modes: "realtime-audit-modes-update",
             ciclos: "realtime-ciclos-update",
             avaliacoes: "realtime-avaliacoes-update",
             unimobin_certificados: "realtime-unimobin-certificados-update",

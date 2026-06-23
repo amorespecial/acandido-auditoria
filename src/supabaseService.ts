@@ -455,6 +455,52 @@ export async function dbBuscarTodasAvaliacoes(mes: string | number, ano: string 
   return data || [];
 }
 
+export const getBranchIdByName = (name: string): string => {
+  const norm = (name || "").toUpperCase().trim();
+  if (norm.includes("UNITRANS JP")) return "unitrans-jp";
+  if (norm.includes("SANTA MARIA JP")) return "santa-maria-jp";
+  if (norm.includes("TRANS CG BAYEUX")) return "trans-cg-bayeux";
+  if (norm.includes("TRANS CG")) return "expresso-nacional";
+  if (norm.includes("A.CÂNDIDO CG") || norm.includes("CANDIDO CG")) return "acandido-cg";
+  if (norm.includes("RODOVIARIO JABOATAO") || norm.includes("RODOVIÁRIO JABOATÃO")) return "rodoviario-jaboatao";
+  if (norm.includes("FRETAMENTO JABOATAO") || norm.includes("FRETAMENTO JABOATÃO")) return "fretamento-jaboatao";
+  if (norm.includes("RODOVIARIO CABEDELO") || norm.includes("RODOVIÁRIO CABEDELO")) return "rodoviario-cabedelo";
+  if (norm.includes("RODOVIARIO FORTALEZA") || norm.includes("RODOVIÁRIO FORTALEZA")) return "rodoviario-fortaleza";
+  if (norm.includes("FRETAMENTO MARACANAU") || norm.includes("FRETAMENTO MARACANAÚ")) return "fretamento-maracanau";
+  return name.toLowerCase().replace(/\s+/g, "-");
+};
+
+const twinPairs = [
+  ["unitrans-jp", "santa-maria-jp"],
+  ["expresso-nacional", "acandido-cg"],
+  ["fretamento-jaboatao", "rodoviario-jaboatao"],
+  ["trans-cg-bayeux", "rodoviario-cabedelo"],
+  ["fretamento-maracanau", "rodoviario-fortaleza"]
+];
+
+export const getTwinBranchId = (branchId: string): string | null => {
+  const pair = twinPairs.find((p) => p.includes(branchId));
+  return pair ? (pair[0] === branchId ? pair[1] : pair[0]) : null;
+};
+
+export async function dbSaveAuditMode(branchId: string, criterionId: string, mes: string, ano: string, mode: "Presencial" | "A_Distancia") {
+  if (!isSupabaseReady()) return;
+  try {
+    const { error } = await supabase.from('audit_modes').upsert({
+      almoxarifado_id: branchId,
+      criterio_id: criterionId,
+      mes,
+      ano,
+      modo: mode
+    }, { onConflict: 'almoxarifado_id,criterio_id,mes,ano' });
+    if (error) {
+      console.error("[dbSaveAuditMode] error:", error);
+    }
+  } catch (err) {
+    console.error("[dbSaveAuditMode] catch error:", err);
+  }
+}
+
 export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, anoStr: string): Promise<Record<string, Partial<CriterionState>>> => {
   if (!isSupabaseReady()) {
     return {};
@@ -474,19 +520,63 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     return {};
   }
 
+  // BUG 1 Correction: Fetch audit modes from audit_modes table
+  let auditModesMap: Record<string, "Presencial" | "A_Distancia"> = {};
+  try {
+    const branchId = getBranchIdByName(almoxarifado);
+    const { data: modes, error: modesErr } = await supabase
+      .from('audit_modes')
+      .select('*')
+      .eq('almoxarifado_id', branchId)
+      .eq('mes', mesName)
+      .eq('ano', anoStr);
+    
+    if (!modesErr && modes) {
+      modes.forEach((m: any) => {
+        auditModesMap[m.criterio_id] = m.modo as "Presencial" | "A_Distancia";
+      });
+    }
+  } catch (err) {
+    console.error("Error fetching modes from audit_modes table:", err);
+  }
+
   const mapped: Record<string, Partial<CriterionState>> = {};
   data.forEach(row => {
     const links = Array.isArray(row.links_evidencia) ? row.links_evidencia : [];
-    mapped[row.criterio_codigo] = {
+    const critId = row.criterio_codigo;
+    // Prefer audit mode from audit_modes table if available, fallback to evaluations values
+    const finalAuditMode = auditModesMap[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
+
+    mapped[critId] = {
       status: (row.resultado || "PENDENTE") as EvaluationStatus,
       pointsObtained: row.pontuacao ?? 0,
-      pointsPossible: ["7", "8", "9", "10"].includes(row.criterio_codigo) ? 5 : 20,
+      pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
       notes: row.descricao_evidencia || "",
       evidenceNotes: row.descricao_evidencia || "",
       nokEvidenceLinks: links,
-      auditMode: (row.audit_mode || row.modo_auditoria || "A_Distancia") as "Presencial" | "A_Distancia"
+      submittedPhotos: links,
+      submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
+      auditMode: finalAuditMode as "Presencial" | "A_Distancia"
     };
   });
+
+  // Ensure auditMode config is propagated even if no evaluations row exists yet
+  Object.keys(auditModesMap).forEach(critId => {
+    if (!mapped[critId]) {
+      mapped[critId] = {
+        status: "PENDENTE",
+        pointsObtained: 0,
+        pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
+        notes: "",
+        evidenceNotes: "",
+        nokEvidenceLinks: [],
+        submittedPhotos: [],
+        submittedAt: "",
+        auditMode: auditModesMap[critId]
+      };
+    }
+  });
+
   return mapped;
 };
 
@@ -542,6 +632,18 @@ export const dbSaveEvaluation = async (
       console.error("[dbSaveEvaluation] Supabase error during upsert:", error);
       throw error;
     }
+
+    // Persist to audit_modes table as well
+    if (evaluation.auditMode) {
+      const branchId = getBranchIdByName(almoxarifado);
+      await supabase.from('audit_modes').upsert({
+        almoxarifado_id: branchId,
+        criterio_id: criterionId,
+        mes: mesName,
+        ano: anoStr,
+        modo: evaluation.auditMode
+      }, { onConflict: 'almoxarifado_id,criterio_id,mes,ano' });
+    }
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
@@ -571,10 +673,47 @@ export const dbSubmitAlmoxarifeEvidence = async (
 ) => {
   if (!isSupabaseReady()) return;
 
+  const mesNum = monthNameToNum(mesName);
+  const anoNum = parseInt(anoStr);
+
   try {
     realtimeFlags.isLocalUpdate = true;
-    // Map submissions of TOP 10 (which is criterion 1) or keep it recorded
-    if (criterionId === "1") {
+
+    // Convert criterionId to official Criterion Names to stay unified
+    const criterionNames: Record<string, string> = {
+      "2": "TOP 10",
+      "3": "Nota Fiscal",
+      "4": "LayOut",
+      "5": "Recebimento de Material",
+      "6": "Curso Unimobin",
+      "7": "Nível de Serviço",
+      "8": "Registro de Requisições",
+      "9": "Controle de Garantia",
+      "10": "Material Sem Movimentação"
+    };
+    const cName = criterionNames[criterionId] || "Evidência Almoxarife";
+
+    // Fetch active audit mode config to preserve it in the row
+    let currentAuditMode = "A_Distancia";
+    try {
+      const branchId = getBranchIdByName(almoxarifado);
+      const { data: modeData } = await supabase
+        .from('audit_modes')
+        .select('modo')
+        .eq('almoxarifado_id', branchId)
+        .eq('mes', mesName)
+        .eq('ano', anoStr)
+        .eq('criterio_id', criterionId)
+        .maybeSingle();
+      if (modeData && modeData.modo) {
+        currentAuditMode = modeData.modo;
+      }
+    } catch (e) {
+      console.error("Error fetching current audit mode inside dbSubmitAlmoxarifeEvidence:", e);
+    }
+
+    // Map submissions of TOP 10 (which is criterion 1 in top10_envios) or keep it recorded
+    if (criterionId === "1" || criterionId === "2") {
       await supabase.from('top10_envios').upsert({
         almoxarifado_id: almoxarifado,
         mes: mesName,
@@ -584,25 +723,28 @@ export const dbSubmitAlmoxarifeEvidence = async (
         enviado_por: submittedBy,
         enviado_em: new Date().toISOString()
       }, { onConflict: 'almoxarifado_id,mes,ano' });
-    } else {
-      // Save other criterion updates as and general evaluations if required
-      await supabase.from('avaliacoes').upsert({
-        almoxarifado_id: almoxarifado,
-        mes: mesName,
-        ano: anoStr,
-        criterio_id: criterionId,
-        criterio_nome: "Evidência Almoxarife",
-        status: "ENVIADO",
-        pontos_obtidos: 0,
-        pontos_possiveis: 20,
-        notes: comment,
-        nok_link1: storageUrls[0] || null,
-        nok_link2: storageUrls[1] || null,
-        nok_link3: storageUrls[2] || null,
-        avaliado_por: submittedBy,
-        avaliado_em: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'almoxarifado_id,mes,ano,criterio_id' });
+    }
+
+    // Also write to evaluations table with conforming schema columns to make it visible to auditors/almoxarifes
+    const { error } = await supabase.from('avaliacoes').upsert({
+      almoxarifado: almoxarifado,
+      mes: mesNum,
+      ano: anoNum,
+      criterio_codigo: criterionId,
+      criterio_nome: cName,
+      resultado: "ENVIADO",
+      pontuacao: 0,
+      descricao_evidencia: comment,
+      links_evidencia: storageUrls,
+      avaliado_por: submittedBy,
+      avaliado_em: new Date().toISOString(),
+      audit_mode: currentAuditMode,
+      modo_auditoria: currentAuditMode
+    }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+
+    if (error) {
+      console.error("Error upserting conforming submission row inside avaliacoes:", error);
+      throw error;
     }
   } finally {
     realtimeFlags.isLocalUpdate = false;
@@ -1140,6 +1282,26 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
     },
       { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
   if (error) throw error;
+
+  // Sincronização de almoxarifados duplos:
+  const twinId = getTwinBranchId(almoxarifado_id);
+  if (twinId) {
+    await supabase
+      .from('unimobin_certificados')
+      .upsert({
+        almoxarifado_id: twinId, mes, ano, colaborador_nome,
+        status: dados.status || 'Aguardando envio',
+        file_name: dados.fileName || dados.file_name || null,
+        file_type: dados.fileType || dados.file_type || null,
+        file_data: dados.fileData || dados.file_data || null,
+        arquivo_url: dados.fileData || dados.file_data || null,
+        arquivo_base64: dados.fileData || dados.file_data || null,
+        uploaded_at: dados.uploadedAt || dados.uploaded_at || new Date().toISOString(),
+        enviado_em: dados.uploadedAt || dados.uploaded_at || new Date().toISOString()
+      },
+        { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' })
+      .catch((err) => console.error("[twin sync certificates] Error:", err));
+  }
 }
 
 export async function dbBuscarCertificados(almoxarifado_id: string, mes: string, ano: string) {

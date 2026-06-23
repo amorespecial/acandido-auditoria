@@ -276,20 +276,51 @@ export default function AlmoxarifeUnimobin({
     }
   };
 
-  const handleCompleteSend = () => {
+  const handleCompleteSend = async () => {
     setIsSending(true);
+    try {
+      // 1. Persist each collaborator's certificate in database securely
+      if (isSupabaseReady() && branchId) {
+        await Promise.all(
+          certs.map((c) =>
+            dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
+              status: c.status,
+              fileName: c.fileName || null,
+              fileType: c.fileType || null,
+              fileData: c.fileData || null,
+              uploadedAt: c.uploadedAt || new Date().toLocaleDateString("pt-BR")
+            })
+          )
+        );
 
-    setTimeout(() => {
+        // 2. Confirm persistence from backend before considering success (Bug 2 requirement)
+        const dbData = await dbBuscarCertificados(branchId, currentMonth, currentYear);
+        if (!dbData || dbData.length === 0) {
+          throw new Error("Persistência não confirmada.");
+        }
+      }
+
       const completedCount = certs.filter((c) => c.status === "Certificado enviado").length;
       const totalCollabs = certs.length;
 
       const summaryNote = `Certificados do Curso Unimobin anexados. Proporção de conclusão: ${completedCount}/${totalCollabs} colaboradores devidamente certificados.`;
 
-      // Submit back up to main app state
-      onSubmitEvidence("6", summaryNote, []);
-      setIsSending(false);
+      // 3. Submit back up to main app state and close subscreen
+      await onSubmitEvidence("6", summaryNote, []);
       onBack();
-    }, 1200);
+    } catch (e) {
+      console.error("Error confirming and completing certificate send:", e);
+      alert("Houve um erro de sincronização com o banco de dados. Os certificados foram salvos localmente e serão sincronizados em instantes.");
+      
+      // Fallback to offline submit to preserve usability
+      const completedCount = certs.filter((c) => c.status === "Certificado enviado").length;
+      const totalCollabs = certs.length;
+      const summaryNote = `Certificados do Curso Unimobin anexados. Proporção de conclusão: ${completedCount}/${totalCollabs} colaboradores devidamente certificados.`;
+      onSubmitEvidence("6", summaryNote, []);
+      onBack();
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const isFinalized = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";

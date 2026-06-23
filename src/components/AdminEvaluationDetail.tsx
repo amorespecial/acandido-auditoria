@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminEvaluationDetailProps {
@@ -1164,6 +1164,11 @@ export default function AdminEvaluationDetail({
     if (isCycleClosed) {
       alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas configurações de modo de auditoria.");
       return;
+    }
+
+    if (isSupabaseReady()) {
+      dbSaveAuditMode(branch.id, criterionId, activeMonth || "Janeiro", activeYear || "2026", newMode)
+        .catch(err => console.error("Error background saving audit mode toggle:", err));
     }
 
     const updated = branch.criteria.map((c) => {

@@ -630,7 +630,10 @@ export default function App() {
               nokEvidenceFileType: matchedDb.nokEvidenceFileType || crt.nokEvidenceFileType,
               nokEvidenceFileData: matchedDb.nokEvidenceFileData || crt.nokEvidenceFileData,
               isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao,
-              auditMode: matchedDb.auditMode !== undefined ? matchedDb.auditMode : crt.auditMode
+              auditMode: matchedDb.auditMode !== undefined ? matchedDb.auditMode : crt.auditMode,
+              submittedPhotos: matchedDb.submittedPhotos || crt.submittedPhotos,
+              submittedAt: matchedDb.submittedAt || crt.submittedAt,
+              top10AlmoxarifeQuantities: matchedDb.top10AlmoxarifeQuantities || crt.top10AlmoxarifeQuantities
             };
           }
           return crt;
@@ -672,6 +675,8 @@ export default function App() {
 
     window.addEventListener("realtime-avaliacoes-update", handleRealtimeUpdate);
     window.addEventListener("realtime-ciclos-update", handleRealtimeUpdate);
+    window.addEventListener("realtime-audit-modes-update", handleRealtimeUpdate);
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtimeUpdate);
 
     // 2. Direct debug subscription as requested
     let debugChannel: any = null;
@@ -695,6 +700,8 @@ export default function App() {
     return () => {
       window.removeEventListener("realtime-avaliacoes-update", handleRealtimeUpdate);
       window.removeEventListener("realtime-ciclos-update", handleRealtimeUpdate);
+      window.removeEventListener("realtime-audit-modes-update", handleRealtimeUpdate);
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtimeUpdate);
       if (debugChannel) {
         try {
           supabase.removeChannel(debugChannel);
