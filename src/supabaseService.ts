@@ -273,7 +273,7 @@ export const dbDeleteUser = async (email: string, id?: any) => {
 export interface CycleState {
   activeMonth: string;
   activeYear: string;
-  status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
+  status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM" | "ARQUIVADO";
   openedAt?: string;
   openedBy?: string;
 }
@@ -401,14 +401,38 @@ export const dbSaveCycleState = async (cycle: CycleState) => {
 
   try {
     realtimeFlags.isLocalUpdate = true;
-    await supabase.from('ciclos').upsert({
-      mes: cycle.activeMonth,
-      ano: cycle.activeYear,
+    
+    // Convert string month to number (e.g. "Março" -> 3) and year to integer (e.g. "2026" -> 2026)
+    const dbMes = typeof cycle.activeMonth === "string" ? monthNameToNum(cycle.activeMonth) : cycle.activeMonth;
+    const dbAno = typeof cycle.activeYear === "string" ? parseInt(cycle.activeYear, 10) : cycle.activeYear;
+
+    const updateObj = {
+      mes: dbMes,
+      ano: dbAno,
       status: cycle.status === "NENHUM" ? "ABERTO" : cycle.status,
       aberto_por: cycle.openedBy || "Fernando Silva",
       aberto_em: cycle.openedAt || new Date().toISOString(),
-      fechado_em: cycle.status === "FECHADO" ? new Date().toISOString() : null
-    }, { onConflict: 'mes,ano' });
+      iniciado_por: cycle.openedBy || "Fernando Silva",
+      iniciado_em: cycle.openedAt || new Date().toISOString(),
+      fechado_em: cycle.status === "FECHADO" || cycle.status === "ARQUIVADO" ? new Date().toISOString() : null
+    };
+
+    const { error } = await supabase.from('ciclos').upsert(updateObj, { onConflict: 'mes,ano' });
+    if (error) {
+      console.warn("Error upserting cycle state, falling back to update:", error);
+      // Fallback to updating status and fechado_em directly if the row already exists and upsert fails
+      const { error: updateError } = await supabase
+        .from('ciclos')
+        .update({
+          status: updateObj.status,
+          fechado_em: updateObj.fechado_em
+        })
+        .eq('mes', dbMes)
+        .eq('ano', dbAno);
+      if (updateError) {
+        throw updateError;
+      }
+    }
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }

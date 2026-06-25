@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 
@@ -168,13 +168,7 @@ export default function App() {
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
   // Centralized cycle state for Fernando Silva (default to ABERTO for Janeiro 2026 on first load)
-  const [cycleState, setCycleState] = useState<{
-    activeMonth: string;
-    activeYear: string;
-    status: "ABERTO" | "AGUARDANDO_FECHAMENTO" | "FECHADO" | "NENHUM";
-    openedAt?: string;
-    openedBy?: string;
-  }>(() => {
+  const [cycleState, setCycleState] = useState<CycleState>(() => {
     const saved = localStorage.getItem("acandido_cycle_state_manual");
     if (saved) {
       try {
@@ -240,31 +234,31 @@ export default function App() {
       next = newStateOrFn;
     }
 
-    setCycleState(next);
-    localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(next));
-
-    // 1. Sync activeMonth/activeYear to match updated cycle if it is currently selected
-    if (next.activeMonth) setActiveMonth(next.activeMonth);
-    if (next.activeYear) setActiveYear(next.activeYear);
-
-    // 2. Also update allCycles map!
-    const key = `${next.activeMonth}_${next.activeYear}`;
-    setAllCycles((prev) => {
-      const updatedAll = { ...prev, [key]: next };
-      const list = Object.values(updatedAll);
-      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
-      return updatedAll;
-    });
-
-    // 3. Save to database
+    // 1. Save to database FIRST and wait for completion
     if (isSupabaseReady()) {
       try {
         await dbSaveCycleState(next);
       } catch (err) {
         console.error("Failed to sync cycle state to Supabase on explicit update:", err);
         setDbConnectionError(true);
+        alert("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
+        return; // Halt if DB save fails
       }
     }
+
+    // 2. ONLY then update state in screen (completely without localStorage)
+    setCycleState(next);
+
+    // Sync activeMonth/activeYear to match updated cycle if it is currently selected
+    if (next.activeMonth) setActiveMonth(next.activeMonth);
+    if (next.activeYear) setActiveYear(next.activeYear);
+
+    // Also update allCycles map!
+    const key = `${next.activeMonth}_${next.activeYear}`;
+    setAllCycles((prev) => {
+      const updatedAll = { ...prev, [key]: next };
+      return updatedAll;
+    });
   };
 
   // Lock Almoxarife view strictly to the currently open cycle (cycleState) loaded from database
@@ -1808,17 +1802,6 @@ export default function App() {
         console.error("Failed to fetch evaluation history from Supabase on archive:", e);
       }
     }
-    if (!previousSaved || previousSaved.length === 0) {
-      const saved = localStorage.getItem("acandido_history");
-      if (saved) {
-        try {
-          previousSaved = JSON.parse(saved);
-          if (!Array.isArray(previousSaved)) previousSaved = [];
-        } catch (e) {
-          previousSaved = [];
-        }
-      }
-    }
 
     const newHistoryEntries = processedBranches.map((b) => ({
       id: "hist-" + Date.now() + "-" + b.id,
@@ -1852,18 +1835,28 @@ export default function App() {
       }))
     }));
 
+    const key = `${month}_${year}`;
+    const nextState = {
+      activeMonth: month,
+      activeYear: year,
+      status: "ARQUIVADO" as const,
+      openedAt: allCycles[key]?.openedAt || new Date().toLocaleDateString("pt-BR"),
+      openedBy: allCycles[key]?.openedBy || "Fernando Silva"
+    };
+
+    // 1. Save to database FIRST and wait for completion
     if (isSupabaseReady()) {
       try {
         await dbSaveHistory(newHistoryEntries);
+        await dbSaveCycleState(nextState);
       } catch (err) {
-        console.error("Failed to post archive logs to database:", err);
+        console.error("Failed to post archive logs or save cycle state to database:", err);
+        alert("Erro ao arquivar e fechar o período no Supabase. Por favor, tente novamente.");
+        return; // Halt if DB save fails
       }
     }
 
-    const finalHistoryToSave = [...newHistoryEntries, ...previousSaved];
-    localStorage.setItem("acandido_history", JSON.stringify(finalHistoryToSave));
-
-    // Reset branches raw criteria states to prep for next cycle starting
+    // 2. ONLY then update states in screen (completely without localStorage)
     setBranches((prev) =>
       prev.map((b) => ({
         ...b,
@@ -1881,25 +1874,14 @@ export default function App() {
       }))
     );
 
-    // Save cycle with state ARQUIVADO in allCycles map
-    const key = `${month}_${year}`;
     setAllCycles((prev) => {
       const updatedAll = {
         ...prev,
-        [key]: {
-          activeMonth: month,
-          activeYear: year,
-          status: "ARQUIVADO" as const,
-          openedAt: prev[key]?.openedAt || new Date().toLocaleDateString("pt-BR"),
-          openedBy: prev[key]?.openedBy || "Fernando Silva"
-        }
+        [key]: nextState
       };
-      const list = Object.values(updatedAll);
-      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
       return updatedAll;
     });
 
-    // Reset current active cycleState to NENHUM
     setCycleState({
       activeMonth: month,
       activeYear: year,
@@ -1909,33 +1891,6 @@ export default function App() {
 
   const handleReopenCycle = async (month: string, year: string) => {
     const key = `${month}_${year}`;
-    
-    // Set the cycle to status "ABERTO" in allCycles map
-    setAllCycles((prev) => {
-      const existing = prev[key] || {
-        activeMonth: month,
-        activeYear: year,
-        status: "ABERTO" as const,
-        openedAt: new Date().toLocaleDateString("pt-BR"),
-        openedBy: "Fernando Silva"
-      };
-      
-      const updatedCycle = {
-        ...existing,
-        status: "ABERTO" as const
-      };
-      
-      const updatedAll = {
-        ...prev,
-        [key]: updatedCycle
-      };
-      
-      const list = Object.values(updatedAll);
-      localStorage.setItem("acandido_all_cycles_list", JSON.stringify(list));
-      return updatedAll;
-    });
-
-    // Update active cycleState
     const openedAtStamp = allCycles[key]?.openedAt || new Date().toLocaleDateString("pt-BR");
     const nextState = {
       activeMonth: month,
@@ -1944,40 +1899,45 @@ export default function App() {
       openedAt: openedAtStamp,
       openedBy: allCycles[key]?.openedBy || "Fernando Silva"
     };
-    
-    localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(nextState));
-    setCycleState(nextState);
 
-    // Update selected session month & year
+    // 1. Save to database FIRST and wait for completion
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveCycleState(nextState);
+        await supabase.from('historico_avaliacoes').delete().eq('month_year', `${month} ${year}`);
+      } catch (e) {
+        console.error("Failed to update cycle or delete history on reopen cycle in Supabase:", e);
+        alert("Erro ao reabrir o ciclo no Supabase. Por favor, tente novamente.");
+        return; // Halt if DB operation fails
+      }
+    }
+
+    // 2. ONLY then update states in screen (completely without localStorage)
+    setAllCycles((prev) => {
+      const existing = prev[key] || {
+        activeMonth: month,
+        activeYear: year,
+        status: "ABERTO" as const,
+        openedAt: openedAtStamp,
+        openedBy: "Fernando Silva"
+      };
+      const updatedCycle = {
+        ...existing,
+        status: "ABERTO" as const
+      };
+      const updatedAll = {
+        ...prev,
+        [key]: updatedCycle
+      };
+      return updatedAll;
+    });
+
+    setCycleState(nextState);
     setActiveMonth(month);
     setActiveYear(year);
 
-    // Baseline branches in memory to empty pristine state to wait for live Supabase fetch
     const cleanB = getCleanDefaultBranches();
     setBranches(cleanB);
-
-    // Filter out of consolidation history in localStorage (if any local cache remains)
-    let historyList = [];
-    const savedHistory = localStorage.getItem("acandido_history");
-    if (savedHistory) {
-      try {
-        historyList = JSON.parse(savedHistory);
-        if (Array.isArray(historyList)) {
-          const filtered = historyList.filter((entry) => entry.monthYear !== `${month} ${year}`);
-          localStorage.setItem("acandido_history", JSON.stringify(filtered));
-        }
-      } catch (e) {}
-    }
-
-    // Sync state on Supabase if ready
-    if (isSupabaseReady()) {
-      try {
-        dbSaveCycleState(nextState);
-        await supabase.from('historico_avaliacoes').delete().eq('month_year', `${month} ${year}`);
-      } catch (e) {
-        console.error("Failed to delete history on reopen cycle in Supabase:", e);
-      }
-    }
 
     alert(`O ciclo de ${month}/${year} foi reaberto com sucesso! Todas as avaliações, pontuações e histórico de evidências anteriores foram restaurados.`);
   };
