@@ -302,14 +302,17 @@ export default function AdminEvaluationDetail({
           layoutLocationInput.trim(),
           userName
         );
+      } else {
+        throw new Error("Conexão com o banco de dados (Supabase) indisponível.");
       }
-    } catch (error) {
-      console.error("Failed to save layout config to database:", error);
-    }
 
-    setLayoutConfigUpdatedCount(prev => prev + 1);
-    setShowLayoutConfigModal(false);
-    alert("Configuração do LayOut para este almoxarifado salva com sucesso!");
+      setLayoutConfigUpdatedCount(prev => prev + 1);
+      setShowLayoutConfigModal(false);
+      alert("Configuração do LayOut para este almoxarifado salva com sucesso!");
+    } catch (error: any) {
+      console.error("Failed to save layout config to database:", error);
+      alert("Erro ao salvar configuração do LayOut: " + (error?.message || error || "Erro desconhecido"));
+    }
   };
 
   const handleOpenTop10Config = () => {

@@ -1359,20 +1359,32 @@ export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, an
 
 // ======================= LAYOUT CONFIG =======================
 export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string, ano: string, localizacao: string, instrucoes: string) {
+  const mesInt = typeof mes === "number" ? mes : monthNameToNum(mes);
+  const anoInt = typeof ano === "number" ? ano : parseInt(String(ano), 10);
+
   const { error } = await supabase
     .from('layout_config')
-    .upsert({ almoxarifado_id, mes, ano, localizacao, instrucoes, updated_at: new Date().toISOString() },
-      { onConflict: 'almoxarifado_id,mes,ano' });
+    .upsert({ 
+      almoxarifado_id, 
+      mes: mesInt, 
+      ano: anoInt, 
+      localizacao, 
+      instrucoes, 
+      updated_at: new Date().toISOString() 
+    }, { onConflict: 'almoxarifado_id,mes,ano' });
   if (error) throw error;
 }
 
 export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string, ano: string) {
+  const mesInt = typeof mes === "number" ? mes : monthNameToNum(mes);
+  const anoInt = typeof ano === "number" ? ano : parseInt(String(ano), 10);
+
   const { data } = await supabase
     .from('layout_config')
     .select('*')
     .eq('almoxarifado_id', almoxarifado_id)
-    .eq('mes', mes)
-    .eq('ano', ano)
+    .eq('mes', mesInt)
+    .eq('ano', anoInt)
     .single();
   return data;
 }
@@ -1382,8 +1394,8 @@ export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string,
   const data = await dbBuscarLayoutConfig(almoxarifado, mesName, anoStr);
   if (!data) return null;
   return {
-    localizacao: data.localizacao,
-    instrucoes: data.instrucoes,
+    location: data.localizacao,
+    instructions: data.instrucoes,
     configurado_por: data.configurado_por || "Almoxarife",
     configurado_em: data.updated_at
   };
