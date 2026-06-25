@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
-import { dbFetchBranchSchedules } from "../supabaseService";
+import { dbFetchBranchSchedules, monthNumToName } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
+import { supabase } from "../supabaseClient";
 
 interface AlmoxarifeHomeProps {
   branch: Branch;
@@ -63,7 +64,71 @@ export default function AlmoxarifeHome({
     }
   };
 
-  const currentCycleStatus = (() => {
+  const [activeCycle, setActiveCycle] = useState<{
+    month: string;
+    year: string;
+    status: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const loadActiveCycle = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ciclos')
+          .select('*')
+          .in('status', ['ABERTO', 'aberto'])
+          .order('iniciado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data && !error) {
+          let monthStr = "Janeiro";
+          if (data.mes) {
+            if (typeof data.mes === "number") monthStr = monthNumToName(data.mes);
+            else {
+              const num = parseInt(data.mes, 10);
+              monthStr = !isNaN(num) ? monthNumToName(num) : data.mes;
+            }
+          }
+          setActiveCycle({
+            month: monthStr,
+            year: String(data.ano),
+            status: String(data.status).toUpperCase()
+          });
+        } else {
+          const { data: latest, error: latestErr } = await supabase
+            .from('ciclos')
+            .select('*')
+            .order('iniciado_em', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latest && !latestErr) {
+            let monthStr = "Janeiro";
+            if (latest.mes) {
+              if (typeof latest.mes === "number") monthStr = monthNumToName(latest.mes);
+              else {
+                const num = parseInt(latest.mes, 10);
+                monthStr = !isNaN(num) ? monthNumToName(num) : latest.mes;
+              }
+            }
+            setActiveCycle({
+              month: monthStr,
+              year: String(latest.ano),
+              status: String(latest.status).toUpperCase()
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error loading active cycle in AlmoxarifeHome:", err);
+      }
+    };
+    loadActiveCycle();
+  }, []);
+
+  const displayMonth = activeCycle ? activeCycle.month : activeMonth;
+  const displayYear = activeCycle ? activeCycle.year : activeYear;
+  const displayStatus = activeCycle ? activeCycle.status : (() => {
     if (cycleState && cycleState.activeMonth === activeMonth && cycleState.activeYear === activeYear) {
       return cycleState.status || "NENHUM";
     }
@@ -79,9 +144,9 @@ export default function AlmoxarifeHome({
     return "NENHUM";
   })();
 
-  const isClosedForAlmoxarife = currentCycleStatus !== "ABERTO";
+  const isClosedForAlmoxarife = displayStatus !== "ABERTO";
 
-  const isSemestralMonth = activeMonth.toLowerCase() === "janeiro" || activeMonth.toLowerCase() === "julho";
+  const isSemestralMonth = displayMonth.toLowerCase() === "janeiro" || displayMonth.toLowerCase() === "julho";
   const activeCriteria = branch.criteria;
 
   // Twin branches logic to show joint/cooperative rules
@@ -108,9 +173,9 @@ export default function AlmoxarifeHome({
           "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
           "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
         };
-        const activeMonthNum = MONTH_MAP[activeMonth.toLowerCase()] || 6;
+        const activeMonthNum = MONTH_MAP[displayMonth.toLowerCase()] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
-        const activeYearNum = parseInt(activeYear) || 2026;
+        const activeYearNum = parseInt(displayYear) || 2026;
 
         console.log(`[AlmoxarifeHome] Loading direct database calendar for branch: ${branch.id}, semestre: ${activeSemestre}, year: ${activeYearNum}`);
         const items = await dbFetchBranchSchedules(branch.id, { ano: activeYearNum, semestre: activeSemestre });
@@ -137,7 +202,7 @@ export default function AlmoxarifeHome({
       isSubscribed = false;
       window.removeEventListener("realtime-calendario-update", handleRealtimeUpdate);
     };
-  }, [branch.id, activeMonth, activeYear]);
+  }, [branch.id, displayMonth, displayYear]);
 
   return (
     <div className="space-y-6 max-w-md mx-auto">
@@ -179,7 +244,7 @@ export default function AlmoxarifeHome({
       </section>
 
       {/* QUICK INSTRUCTION ACTIONS CARD */}
-      {currentCycleStatus === "NENHUM" ? (
+      {displayStatus === "NENHUM" ? (
         <section className="bg-amber-50 border border-amber-200/60 rounded-xl p-5 text-center flex flex-col items-center justify-center space-y-3 shadow-sm select-none">
           <span className="material-symbols-outlined text-amber-500 text-[40px] animate-pulse">
             hourglass_empty
@@ -200,7 +265,7 @@ export default function AlmoxarifeHome({
           <div>
             <p className="text-xs font-black text-rose-900">Ciclo Trancado ou em Avaliação!</p>
             <p className="text-[11px] text-rose-800 leading-normal mt-0.5 font-medium">
-              O ciclo de <strong className="font-bold">{activeMonth} {activeYear}</strong> está fechado ou trancado para auditoria. Novos lançamentos de fotos e evidências técnicas estão temporariamente interrompidos.
+              O ciclo de <strong className="font-bold">{displayMonth} {displayYear}</strong> está fechado ou trancado para auditoria. Novos lançamentos de fotos e evidências técnicas estão temporariamente interrompidos.
             </p>
           </div>
         </section>
@@ -212,14 +277,14 @@ export default function AlmoxarifeHome({
           <div>
             <p className="text-xs font-black text-emerald-950">Ciclo Aberto — Transmitir Evidências</p>
             <p className="text-[11px] text-emerald-850 leading-normal mt-0.5">
-              O ciclo de <strong className="font-bold">{activeMonth} {activeYear}</strong> está ativo. Por favor, envie suas fotos e contagens físicas completas. O Auditor Geral Fernando Silva revisará suas submissões para atribuir a pontuação final.
+              O ciclo de <strong className="font-bold">{displayMonth} {displayYear}</strong> está ativo. Por favor, envie suas fotos e contagens físicas completas. O Auditor Geral Fernando Silva revisará suas submissões para atribuir a pontuação final.
             </p>
           </div>
         </section>
       )}
 
       {/* MOBILE LIST CHECKLISTS CRITERIAS */}
-      {currentCycleStatus !== "NENHUM" && (
+      {displayStatus !== "NENHUM" && (
         <section className="space-y-4">
           <h3 className="text-sm font-black text-[#1B2A4A] tracking-tight">Status e Envios por Item</h3>
 
@@ -559,8 +624,8 @@ export default function AlmoxarifeHome({
 
                     {crit.id === "6" && (() => {
                       const storageKey = branch.id 
-                        ? `acandido_certificates_${branch.id}_${activeMonth}_${activeYear}` 
-                        : `acandido_certificates_default_${activeMonth}_${activeYear}`;
+                        ? `acandido_certificates_${branch.id}_${displayMonth}_${displayYear}` 
+                        : `acandido_certificates_default_${displayMonth}_${displayYear}`;
                       const saved = localStorage.getItem(storageKey);
                       if (saved) {
                         try {

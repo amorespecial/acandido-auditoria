@@ -323,17 +323,33 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     return defaultState;
   }
 
-  // Fetch the active cycle (ABERTO) from the database
-  let { data, error } = await supabase.from('ciclos').select('*').eq('status', 'ABERTO').limit(1);
+  // Fetch the active cycle (ABERTO or aberto) from the database
+  let { data, error } = await supabase
+    .from('ciclos')
+    .select('*')
+    .in('status', ['ABERTO', 'aberto'])
+    .order('iniciado_em', { ascending: false })
+    .limit(1);
 
   if (error || !data || data.length === 0) {
-    // Fetch critical locked cycle (AGUARDANDO_FECHAMENTO)
-    const resBloq = await supabase.from('ciclos').select('*').eq('status', 'AGUARDANDO_FECHAMENTO').limit(1);
+    // Fetch critical locked cycle (AGUARDANDO_FECHAMENTO or aguardando_fechamento)
+    const resBloq = await supabase
+      .from('ciclos')
+      .select('*')
+      .in('status', ['AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
+      .order('iniciado_em', { ascending: false })
+      .limit(1);
+      
     if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
       data = resBloq.data;
     } else {
-      // Fetch the latest cycle of all (e.g. FECHADO)
-      const resLatest = await supabase.from('ciclos').select('*').order('aberto_em', { ascending: false }).limit(1);
+      // Fetch the latest cycle of all (e.g. FECHADO or fechado)
+      const resLatest = await supabase
+        .from('ciclos')
+        .select('*')
+        .order('iniciado_em', { ascending: false })
+        .limit(1);
+        
       if (!resLatest.error && resLatest.data && resLatest.data.length > 0) {
         data = resLatest.data;
       }
@@ -355,12 +371,28 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
 
   // Rule 3: Return exact DB status ("ABERTO", "AGUARDANDO_FECHAMENTO", "FECHADO") without any default overrides
   const current = data[0];
+  
+  // Normalize month integer or string
+  let monthStr = "Janeiro";
+  if (current.mes) {
+    if (typeof current.mes === "number") {
+      monthStr = monthNumToName(current.mes);
+    } else {
+      const num = parseInt(current.mes, 10);
+      if (!isNaN(num)) {
+        monthStr = monthNumToName(num);
+      } else {
+        monthStr = current.mes;
+      }
+    }
+  }
+
   return {
-    activeMonth: current.mes,
+    activeMonth: monthStr,
     activeYear: String(current.ano),
-    status: current.status as any,
-    openedAt: current.aberto_em,
-    openedBy: current.aberto_por
+    status: String(current.status).toUpperCase() as any,
+    openedAt: current.iniciado_em || current.aberto_em,
+    openedBy: current.iniciado_por || current.aberto_por
   };
 };
 
@@ -386,13 +418,28 @@ export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
   if (!isSupabaseReady()) return [];
   const { data, error } = await supabase.from('ciclos').select('*');
   if (error || !data) return [];
-  return data.map(item => ({
-    activeMonth: item.mes,
-    activeYear: String(item.ano),
-    status: item.status as any,
-    openedAt: item.aberto_em,
-    openedBy: item.aberto_por
-  }));
+  return data.map(item => {
+    let monthStr = "Janeiro";
+    if (item.mes) {
+      if (typeof item.mes === "number") {
+        monthStr = monthNumToName(item.mes);
+      } else {
+        const num = parseInt(item.mes, 10);
+        if (!isNaN(num)) {
+          monthStr = monthNumToName(num);
+        } else {
+          monthStr = item.mes;
+        }
+      }
+    }
+    return {
+      activeMonth: monthStr,
+      activeYear: String(item.ano),
+      status: String(item.status).toUpperCase() as any,
+      openedAt: item.iniciado_em || item.aberto_em,
+      openedBy: item.iniciado_por || item.aberto_por
+    };
+  });
 };
 
 // ======================= CRITERIA EVALUATIONS (avaliacoes) =======================

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 
@@ -368,17 +368,90 @@ export default function App() {
           } catch (listErr) {
             console.error("Failed to load initial cycle list:", listErr);
           }
-          try {
-            const dbCycle = await dbFetchCycleState();
-            if (dbCycle && dbCycle.status) {
-              setCycleState(dbCycle);
-              localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
-              if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
-              if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
+          const initializeCycleState = async () => {
+            try {
+              // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou aberto)
+              const { data, error } = await supabase
+                .from('ciclos')
+                .select('*')
+                .in('status', ['ABERTO', 'aberto'])
+                .order('iniciado_em', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!error && data) {
+                let monthStr = "Janeiro";
+                if (data.mes) {
+                  if (typeof data.mes === "number") monthStr = monthNumToName(data.mes);
+                  else {
+                    const num = parseInt(data.mes, 10);
+                    monthStr = !isNaN(num) ? monthNumToName(num) : data.mes;
+                  }
+                }
+                const cicloAtivo = {
+                  activeMonth: monthStr,
+                  activeYear: String(data.ano),
+                  status: String(data.status).toUpperCase() as any,
+                  openedAt: data.iniciado_em || data.aberto_em,
+                  openedBy: data.iniciado_por || data.aberto_por
+                };
+                setCycleState(cicloAtivo);
+                setActiveMonth(monthStr);
+                setActiveYear(String(data.ano));
+                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloAtivo));
+                return;
+              }
+
+              // PASSO 2 — Se não encontrou ciclo ABERTO, buscar o mais recente de todos
+              const { data: latest, error: latestErr } = await supabase
+                .from('ciclos')
+                .select('*')
+                .order('iniciado_em', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!latestErr && latest) {
+                let monthStr = "Janeiro";
+                if (latest.mes) {
+                  if (typeof latest.mes === "number") monthStr = monthNumToName(latest.mes);
+                  else {
+                    const num = parseInt(latest.mes, 10);
+                    monthStr = !isNaN(num) ? monthNumToName(num) : latest.mes;
+                  }
+                }
+                const cicloLatest = {
+                  activeMonth: monthStr,
+                  activeYear: String(latest.ano),
+                  status: String(latest.status).toUpperCase() as any,
+                  openedAt: latest.iniciado_em || latest.aberto_em,
+                  openedBy: latest.iniciado_por || latest.aberto_por
+                };
+                setCycleState(cicloLatest);
+                setActiveMonth(monthStr);
+                setActiveYear(String(latest.ano));
+                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloLatest));
+                return;
+              }
+
+            } catch (err) {
+              console.error("Erro ao buscar ciclo do Supabase:", err);
             }
-          } catch (cycleErr) {
-            console.error("Failed to load initial cycle state:", cycleErr);
-          }
+
+            // PASSO 3 — Supabase falhou completamente, usar localStorage como último recurso
+            const cached = localStorage.getItem("acandido_cycle_state_manual");
+            if (cached) {
+              try {
+                const parsed = JSON.parse(cached);
+                setCycleState(parsed);
+                if (parsed.activeMonth) setActiveMonth(parsed.activeMonth);
+                if (parsed.activeYear) setActiveYear(parsed.activeYear);
+              } catch (e) {
+                console.error("Erro ao fazer parse do cache local:", e);
+              }
+            }
+          };
+
+          await initializeCycleState();
           try {
             const dbUsers = await dbFetchUsers();
             if (dbUsers) {
