@@ -456,7 +456,7 @@ export default function AlmoxarifeHome({
                     <div className="bg-rose-50 border border-rose-200/50 p-3 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
                       <div className="flex items-center gap-1 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
                         <span className="material-symbols-outlined text-[13px]">report</span>
-                        <span>Evidência de Inconformidade (Auditor)</span>
+                        <span>Feedback do Auditor</span>
                       </div>
                       
                       {crit.notes ? (
@@ -469,47 +469,40 @@ export default function AlmoxarifeHome({
                         </p>
                       )}
 
-                      {crit.submittedPhotos && crit.submittedPhotos.length > 0 && (
-                        <div className="space-y-1.5 align-baseline">
-                          <span className="text-[9px] font-bold text-rose-800 block uppercase">Imagens anexadas da desconformidade:</span>
-                          <div className="grid grid-cols-4 gap-2">
-                            {crit.submittedPhotos.map((photo, i) => (
-                              <div key={i} className="relative aspect-square rounded-md overflow-hidden border border-rose-200 bg-white">
-                                <img
-                                  src={photo}
-                                  referrerPolicy="no-referrer"
-                                  alt="Foto da inconformidade registrada"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {/* ALWAYS RENDER THE EVIDENCE LINKS SECTION FOR NOK STATUS */}
+                      {(() => {
+                        const links = [
+                          ...(crit.nokEvidenceLinks || []),
+                          ...(crit.submittedPhotos || [])
+                        ].filter(Boolean).slice(0, 3);
 
-                      {crit.nokEvidenceLinks && crit.nokEvidenceLinks.length > 0 && (
-                        <div className="space-y-1 pt-1.5 border-t border-rose-200/50 mt-1.5">
-                          <span className="text-[9px] font-bold text-rose-800 block uppercase flex items-center gap-1 leading-none">
-                            <span className="material-symbols-outlined text-[13px] leading-none text-rose-700 font-bold">link</span>
-                            <span>🔗 Evidências:</span>
-                          </span>
-                          <div className="flex flex-col gap-1 pl-1">
-                            {crit.nokEvidenceLinks.map((link, idx) => (
-                              <div key={idx} className="flex items-center gap-1">
-                                <span className="text-rose-600 font-bold leading-none">•</span>
-                                <a
-                                  href={link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[10.5px] tracking-wide"
-                                >
-                                  [Ver evidência {idx + 1} ↗]
-                                </a>
+                        if (links.length > 0) {
+                          return (
+                            <div className="space-y-1 pt-1.5 border-t border-rose-200/50 mt-1.5">
+                              <span className="text-[10px] font-bold text-rose-800 block uppercase flex items-center gap-1 leading-none">
+                                <span className="material-symbols-outlined text-[14px] leading-none text-rose-700 font-bold">link</span>
+                                <span>🔗 EVIDÊNCIAS:</span>
+                              </span>
+                              <div className="flex flex-col gap-1 pl-1">
+                                {links.map((link, idx) => (
+                                  <div key={idx} className="flex items-center gap-1">
+                                    <span className="text-rose-600 font-bold leading-none">•</span>
+                                    <a
+                                      href={link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[10.5px] tracking-wide"
+                                    >
+                                      [Ver evidência {idx + 1} ↗]
+                                    </a>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <div className="flex items-center justify-between text-[10px] font-bold text-rose-800 font-mono pt-1">
                         <span>Pontuação: {crit.pointsObtained}/{crit.pointsPossible} pts</span>
@@ -586,7 +579,7 @@ export default function AlmoxarifeHome({
                 )}
 
                 {/* Notes/audit feedback if any */}
-                {crit.notes && (
+                {crit.notes && displayStatus !== "NOK" && (
                   <div className="mt-2 bg-rose-55 rounded text-[10px] p-2 bg-rose-50 text-rose-800 border border-rose-100/30">
                     <span className="font-extrabold uppercase mr-1">Feedback do Auditor:</span>
                     {crit.notes}
@@ -594,7 +587,7 @@ export default function AlmoxarifeHome({
                 )}
 
                 {/* Show Submitted Evidence inline for single-submission criteria (TOP 10, LayOut, Unimobin) when processed */}
-                {isSingleSubmited && (
+                {isSingleSubmited && displayStatus !== "NOK" && (
                   <div className="mt-2.5 p-3 bg-slate-50 border border-slate-100 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
                     <div className="flex items-center gap-1 text-slate-500 font-extrabold text-[9px] uppercase tracking-wider">
                       <span className="material-symbols-outlined text-[13px] text-indigo-500 font-black">visibility</span>
@@ -646,6 +639,64 @@ export default function AlmoxarifeHome({
                   </div>
                 )}
 
+                {/* ALWAYS RENDER THE EVIDENCE LINKS SECTION FOR NOK STATUS */}
+                {displayStatus === "NOK" && (
+                  <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200/50 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
+                    <div className="flex items-center gap-1 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
+                      <span className="material-symbols-outlined text-[13px]">report</span>
+                      <span>Feedback do Auditor</span>
+                    </div>
+                    {crit.notes ? (
+                      <p className="text-rose-900 font-black italic bg-white/60 p-2 rounded border border-rose-100">
+                        "{crit.notes}"
+                      </p>
+                    ) : (
+                      <p className="text-rose-800 font-medium italic">
+                        "Nenhuma justificativa detalhada inserida pelo auditor."
+                      </p>
+                    )}
+
+                    {(() => {
+                      const links = [
+                        ...(crit.nokEvidenceLinks || []),
+                        ...(crit.submittedPhotos || [])
+                      ].filter(Boolean).slice(0, 3);
+
+                      if (links.length > 0) {
+                        return (
+                          <div className="space-y-1 pt-1.5 border-t border-rose-200/50 mt-1.5">
+                            <span className="text-[10px] font-bold text-rose-800 block uppercase flex items-center gap-1 leading-none">
+                              <span className="material-symbols-outlined text-[14px] leading-none text-rose-700 font-bold">link</span>
+                              <span>🔗 EVIDÊNCIAS:</span>
+                            </span>
+                            <div className="flex flex-col gap-1 pl-1">
+                              {links.map((link, idx) => (
+                                <div key={idx} className="flex items-center gap-1">
+                                  <span className="text-rose-600 font-bold leading-none">•</span>
+                                  <a
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[10.5px] tracking-wide"
+                                  >
+                                    [Ver evidência {idx + 1} ↗]
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    <div className="flex items-center justify-between text-[10px] font-bold text-rose-800 font-mono pt-1">
+                      <span>Pontuação: {crit.pointsObtained}/{crit.pointsPossible} pts</span>
+                      <span className="bg-rose-100 px-1.5 py-0.5 rounded uppercase text-[8.5px] font-black">NOK</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Evidences notes if any for non-single-submission or while not yet audited */}
                 {!isSingleSubmited && crit.evidenceNotes && crit.status === "ENVIADO" && !crit.auditMode && (
                   <div className="mt-2 bg-violet-50/40 p-2 rounded text-[10px] text-violet-800 border border-violet-100/30">
@@ -694,7 +745,7 @@ export default function AlmoxarifeHome({
                     </div>
                   </div>
                 ) : (
-                  !isSingleSubmited && route && actionLabel && (
+                  !isSingleSubmited && route && actionLabel && displayStatus !== "NOK" && (
                     <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between gap-4">
                       <span className="text-[10px] font-bold text-slate-400 font-mono">
                         Nota Atual: {crit.pointsObtained}/{crit.pointsPossible} pts

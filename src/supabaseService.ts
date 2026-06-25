@@ -632,12 +632,31 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
       }
     }
 
+    let finalNotes = row.descricao_evidencia || "";
+    let finalAlmoxarifeQuantities: number[] | undefined = undefined;
+    let finalAuditorQuantities: number[] | undefined = undefined;
+
+    if (critId === "2" && row.descricao_evidencia) {
+      try {
+        if (row.descricao_evidencia.trim().startsWith("{")) {
+          const parsed = JSON.parse(row.descricao_evidencia);
+          finalNotes = parsed.notes || "";
+          finalAlmoxarifeQuantities = parsed.top10AlmoxarifeQuantities;
+          finalAuditorQuantities = parsed.top10AuditorQuantities;
+        }
+      } catch (e) {
+        console.error("Failed to parse JSON for top10 quantities inside dbFetchEvaluations:", e);
+      }
+    }
+
     mapped[critId] = {
       status: displayStatus,
       pointsObtained: row.pontuacao ?? 0,
       pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
-      notes: row.descricao_evidencia || "",
-      evidenceNotes: row.descricao_evidencia || "",
+      notes: finalNotes,
+      evidenceNotes: finalNotes,
+      top10AlmoxarifeQuantities: finalAlmoxarifeQuantities,
+      top10AuditorQuantities: finalAuditorQuantities,
       nokEvidenceLinks: links,
       submittedPhotos: links,
       submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
@@ -703,6 +722,15 @@ export const dbSaveEvaluation = async (
       ? evaluation.status 
       : "PENDENTE";
 
+    let finalDescricao = evaluation.evidenceNotes || evaluation.notes || "";
+    if (criterionId === "2") {
+      finalDescricao = JSON.stringify({
+        notes: evaluation.notes || evaluation.evidenceNotes || "",
+        top10AlmoxarifeQuantities: evaluation.top10AlmoxarifeQuantities || [],
+        top10AuditorQuantities: evaluation.top10AuditorQuantities || []
+      });
+    }
+
     const { error } = await supabase.from('avaliacoes').upsert({
       almoxarifado: almoxarifado,
       mes: mesNum,
@@ -711,7 +739,7 @@ export const dbSaveEvaluation = async (
       criterio_nome: criterionName,
       resultado: safeResultado,
       pontuacao: evaluation.pointsObtained ?? 0,
-      descricao_evidencia: evaluation.evidenceNotes || evaluation.notes || "",
+      descricao_evidencia: finalDescricao,
       links_evidencia: finalLinks,
       avaliado_por: evaluatedBy,
       avaliado_em: new Date().toISOString(),
@@ -760,7 +788,8 @@ export const dbSubmitAlmoxarifeEvidence = async (
   criterionId: string,
   submittedBy: string,
   comment: string,
-  storageUrls: string[]
+  storageUrls: string[],
+  top10Quantities?: number[]
 ) => {
   if (!isSupabaseReady()) return;
 
@@ -809,11 +838,20 @@ export const dbSubmitAlmoxarifeEvidence = async (
         almoxarifado_id: almoxarifado,
         mes: mesName,
         ano: anoStr,
-        quantidades: [],
+        quantidades: top10Quantities || [],
         fotos: storageUrls,
         enviado_por: submittedBy,
         uploaded_at: new Date().toISOString()
       }, { onConflict: 'almoxarifado_id,mes,ano' });
+    }
+
+    let finalDescricao = comment;
+    if (criterionId === "2") {
+      finalDescricao = JSON.stringify({
+        notes: comment,
+        top10AlmoxarifeQuantities: top10Quantities || [],
+        top10AuditorQuantities: []
+      });
     }
 
     // Also write to evaluations table with conforming schema columns to make it visible to auditors/almoxarifes
@@ -825,7 +863,7 @@ export const dbSubmitAlmoxarifeEvidence = async (
       criterio_nome: cName,
       resultado: "PENDENTE",
       pontuacao: 0,
-      descricao_evidencia: comment,
+      descricao_evidencia: finalDescricao,
       links_evidencia: storageUrls,
       avaliado_por: submittedBy,
       avaliado_em: new Date().toISOString(),
@@ -1491,17 +1529,37 @@ export async function dbSaveHistory(historyList: any[]) {
 
 export async function dbFetchHistory(): Promise<any[]> {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase
+  let result = await supabase
     .from('historico_avaliacoes')
     .select('*')
     .order('created_at', { ascending: false });
     
-  if (error) {
-    console.error("Error standardizing history in dbFetchHistory:", error);
+  if (result.error) {
+    console.warn("Could not order by created_at in dbFetchHistory, retrying without order:", result.error);
+    result = await supabase
+      .from('historico_avaliacoes')
+      .select('*');
+  }
+  
+  if (result.error) {
+    console.error("Error standardizing history in dbFetchHistory:", result.error);
     return [];
   }
   
-  return (data || []).map(entry => ({
+  const rawData = result.data || [];
+  
+  // Sort in memory safely
+  try {
+    rawData.sort((a: any, b: any) => {
+      const valA = a.created_at || a.date_evaluated || a.id || "";
+      const valB = b.created_at || b.date_evaluated || b.id || "";
+      return String(valB).localeCompare(String(valA));
+    });
+  } catch (e) {
+    console.warn("Failed to sort history in memory:", e);
+  }
+  
+  return rawData.map(entry => ({
     id: entry.id,
     branchId: entry.branch_id || entry.branchId,
     branchName: entry.branch_name || entry.branchName,

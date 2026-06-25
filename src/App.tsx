@@ -1763,7 +1763,8 @@ export default function App() {
               criterionId,
               user?.name || "Almoxarife",
               comments + ` (Compartilhado via ${currentBranch.name.replace("ALMOXARIFADO ", "")})`,
-              processedPhotos
+              processedPhotos,
+              top10Quantities
             );
           } catch (err) {
             console.error("Failed to insert twin into envios_almoxarife:", err);
@@ -1782,7 +1783,8 @@ export default function App() {
           criterionId,
           user?.name || "Almoxarife",
           comments,
-          processedPhotos
+          processedPhotos,
+          top10Quantities
         );
       } catch (err) {
         console.error("Failed to insert into envios_almoxarife:", err);
