@@ -2244,7 +2244,7 @@ export default function AdminEvaluationDetail({
                   <div className="text-[11px] text-[#1B2A4A] leading-relaxed">
                     <p className="font-bold">Comentários de {branch.ownerName}:</p>
                     <p className="italic text-slate-600 mt-1">
-                      {selectedCriterion.evidenceNotes || "De conformidade com as metas do mês, incluí as fotos e logs em anexo para validação imediata."}
+                      {selectedCriterion.evidenceNotes || "Nenhum comentário enviado"}
                     </p>
                   </div>
 

@@ -624,14 +624,6 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     // Prefer audit mode from audit_modes table if available, fallback to evaluations values
     const finalAuditMode = auditModesMap[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
 
-    let displayStatus: EvaluationStatus = (row.resultado || "PENDENTE") as EvaluationStatus;
-    if (displayStatus === "PENDENTE") {
-      if (finalAuditMode === "A_Distancia") {
-        const hasEvidence = links.length > 0 || (row.descricao_evidencia && row.descricao_evidencia.trim().length > 0);
-        displayStatus = hasEvidence ? "ENVIADO" : "AGUARDANDO ENVIO";
-      }
-    }
-
     let finalNotes = row.descricao_evidencia || "";
     let finalAlmoxarifeQuantities: number[] | undefined = undefined;
     let finalAuditorQuantities: number[] | undefined = undefined;
@@ -646,6 +638,20 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
         }
       } catch (e) {
         console.error("Failed to parse JSON for top10 quantities inside dbFetchEvaluations:", e);
+      }
+    }
+
+    let displayStatus: EvaluationStatus = (row.resultado || "PENDENTE") as EvaluationStatus;
+    if (displayStatus === "PENDENTE") {
+      if (finalAuditMode === "A_Distancia") {
+        let hasEvidence = false;
+        if (critId === "2") {
+          const hasAlmoxarifeQuantities = Array.isArray(finalAlmoxarifeQuantities) && finalAlmoxarifeQuantities.length > 0;
+          hasEvidence = links.length > 0 || hasAlmoxarifeQuantities;
+        } else {
+          hasEvidence = links.length > 0 || (row.descricao_evidencia && row.descricao_evidencia.trim().length > 0);
+        }
+        displayStatus = hasEvidence ? "ENVIADO" : "AGUARDANDO ENVIO";
       }
     }
 
