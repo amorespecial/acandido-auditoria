@@ -6,8 +6,26 @@ import { OFFICIAL_CREDENTIALS } from "./components/Login";
 const STORAGE_PREFIX = "acandido_";
 
 // Month helper functions
+export const MONTH_NORMALIZE: Record<string, string> = {
+  "1": "Janeiro", "01": "Janeiro", "janeiro": "Janeiro",
+  "2": "Fevereiro", "02": "Fevereiro", "fevereiro": "Fevereiro",
+  "3": "Março", "03": "Março", "marco": "Março", "março": "Março",
+  "4": "Abril", "04": "Abril", "abril": "Abril",
+  "5": "Maio", "05": "Maio", "maio": "Maio",
+  "6": "Junho", "06": "Junho", "junho": "Junho",
+  "7": "Julho", "07": "Julho", "julho": "Julho",
+  "8": "Agosto", "08": "Agosto", "agosto": "Agosto",
+  "9": "Setembro", "09": "Setembro", "setembro": "Setembro",
+  "10": "Outubro", "outubro": "Outubro",
+  "11": "Novembro", "novembro": "Novembro",
+  "12": "Dezembro", "dezembro": "Dezembro"
+};
+
 export const monthNameToNum = (name: string): number => {
-  const norm = (name || "")
+  const normInput = String(name || "").toLowerCase().trim();
+  const normalizedName = MONTH_NORMALIZE[normInput] || name || "";
+
+  const norm = String(normalizedName)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -25,7 +43,7 @@ export const monthNameToNum = (name: string): number => {
 
   // Fallback for common 3-letter abbreviations
   const abbreviations: Record<string, number> = {
-    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "junho": 6, "jun": 6,
     "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
   };
   const key = norm.substring(0, 3);
