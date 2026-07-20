@@ -340,56 +340,27 @@ function AdminRankingContent({
     
     // 1. If it's the currently active/selected month, we can use entry.branches directly!
     if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
-      if (entry.branches.length > 0) {
-        if (entry.branches.length === 2) {
-          let consolidatedScore = 0;
-          const refCriteria = entry.branches[0]?.criteria || [];
-          refCriteria.forEach((cRef) => {
-            if (!cRef) return;
-            const allOk = entry.branches.every((mRecord) => {
-              const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === cRef.id);
-              return crit && crit.status === "OK";
-            });
-            if (allOk) {
-              consolidatedScore += cRef.pointsPossible ?? 0;
-            }
-          });
-          return consolidatedScore;
-        } else {
-          return entry.branches[0]?.currentScore || 0;
-        }
+      if (entry.branches && entry.branches.length > 0) {
+        return entry.branches[0]?.currentScore || 0;
       }
     }
 
     // 2. Check history list
     const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
     const histEntries = Array.isArray(historyList) ? historyList : [];
-    const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
-    );
+    const matchingHist = histEntries.filter((h) => {
+      if (!h || !h.branchId || !h.monthYear) return false;
+      const isOurBranch = branchIds.includes(h.branchId);
+      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
+      return isOurBranch && isSameYear && isSameMonth;
+    });
 
     if (matchingHist.length > 0) {
-      if (entry.branches.length === 2) {
-        if (matchingHist.length === 2) {
-          let consolidatedScore = 0;
-          const refCriteria = entry.branches[0]?.criteria || [];
-          refCriteria.forEach((cRef) => {
-            if (!cRef) return;
-            const allOk = matchingHist.every((mRecord) => {
-              const crit = mRecord?.criteriaState?.find((cs: any) => cs && cs.id === cRef.id);
-              return crit && crit.status === "OK";
-            });
-            if (allOk) {
-              consolidatedScore += cRef.pointsPossible ?? 0;
-            }
-          });
-          return consolidatedScore;
-        }
-        return 0; // if twin branch but only 1 matching in history
-      } else {
-        if (matchingHist.length === 1) {
-          return matchingHist[0]?.score || 0;
-        }
+      // Find the first entry that has a score defined
+      const foundWithScore = matchingHist.find(h => h.score !== undefined);
+      if (foundWithScore) {
+        return foundWithScore.score;
       }
     }
 
@@ -484,7 +455,7 @@ function AdminRankingContent({
           return consolidatedScore;
         } else if (calculatedBranches.length === 1) {
           const b1 = calculatedBranches[0];
-          return b1.criteriaState.reduce((acc: number, c: any) => acc + (c.status === "OK" ? (c.pointsPossible || 0) : 0), 0);
+          return b1.criteriaState.reduce((acc: number, c: any) => acc + (c.pointsObtained || 0), 0);
         }
       }
     }
@@ -501,30 +472,13 @@ function AdminRankingContent({
     
     // 1. If it's the currently active/selected month, we can use entry.branches directly!
     if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
-      if (entry.branches.length > 0) {
-        if (entry.branches.length === 2) {
-          const statuses = entry.branches.map((mRecord) => {
-            const crit = mRecord?.criteria?.find((cs: any) => cs && cs.id === criterionId);
-            return crit ? (crit.status || "PENDENTE") : "PENDENTE";
-          });
-          const isNok = statuses.includes("NOK");
-          const isBothOk = statuses.every((s) => s === "OK");
-          const statusText = isNok
-            ? "NOK"
-            : isBothOk
-            ? "OK"
-            : statuses.includes("ENVIADO")
-            ? "ENVIADO"
-            : "PENDENTE";
-          const refC = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
-          const pointsMax = refC ? (refC.pointsPossible ?? 0) : 0;
-          return { status: statusText, points: isBothOk ? pointsMax : 0 };
-        } else {
-          const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
-          if (crit) {
-            const isOk = crit.status === "OK";
-            return { status: crit.status || "PENDENTE", points: isOk ? (crit.pointsPossible ?? 0) : 0 };
-          }
+      if (entry.branches && entry.branches.length > 0) {
+        const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
+        if (crit) {
+          return {
+            status: crit.status || "PENDENTE",
+            points: crit.pointsObtained ?? 0
+          };
         }
       }
     }
@@ -533,27 +487,46 @@ function AdminRankingContent({
     const histEntries = Array.isArray(historyList) ? historyList : [];
 
     // Check history
-    const matchingHist = histEntries.filter(
-      (h) => h && h.branchId && branchIds.includes(h.branchId) && normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName))
-    );
+    const matchingHist = histEntries.filter((h) => {
+      if (!h || !h.branchId || !h.monthYear) return false;
+      const isOurBranch = branchIds.includes(h.branchId);
+      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
+      return isOurBranch && isSameYear && isSameMonth;
+    });
 
     if (matchingHist.length > 0) {
       const refCriterion = entry.branches[0]?.criteria?.find((c) => c && c.id === criterionId);
       const pointsMax = refCriterion ? (refCriterion.pointsPossible ?? 0) : 0;
 
       if (entry.branches.length === 2) {
-        if (matchingHist.length === 2) {
-          const allOk = matchingHist.every((mRecord) => {
-            const crit = mRecord?.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
-            return crit && crit.status === "OK";
-          });
-          return { status: allOk ? "OK" : "NOK", points: allOk ? pointsMax : 0 };
+        // Find latest/first matching entry for each of the two branchIds
+        const b1Id = entry.branches[0].id;
+        const b2Id = entry.branches[1].id;
+        const h1 = matchingHist.find((h) => h.branchId === b1Id);
+        const h2 = matchingHist.find((h) => h.branchId === b2Id);
+
+        if (h1 && h2) {
+          const crit1 = h1.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
+          const crit2 = h2.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
+          const allOk = (crit1 && crit1.status === "OK") && (crit2 && crit2.status === "OK");
+          const isAnyNok = (crit1 && crit1.status === "NOK") || (crit2 && crit2.status === "NOK");
+          const statusText = isAnyNok ? "NOK" : (allOk ? "OK" : "PENDENTE");
+          return { status: statusText, points: allOk ? pointsMax : 0 };
+        }
+        // Fallback if one of them is missing from history
+        const singleH = h1 || h2;
+        if (singleH) {
+          const crit = singleH.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
+          const isOk = crit && crit.status === "OK";
+          return { status: crit ? crit.status : "PENDENTE", points: isOk ? pointsMax : 0 };
         }
       } else {
-        if (matchingHist.length === 1) {
-          const crit = matchingHist[0]?.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
+        const singleH = matchingHist[0];
+        if (singleH) {
+          const crit = singleH.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
           const isOk = crit && crit.status === "OK";
-          return { status: isOk ? "OK" : "NOK", points: isOk ? pointsMax : 0 };
+          return { status: crit ? crit.status : "PENDENTE", points: isOk ? pointsMax : 0 };
         }
       }
     }
@@ -653,6 +626,103 @@ function AdminRankingContent({
           const c1 = b1.criteriaState.find((c: any) => c.id === criterionId);
           if (c1) {
             return { status: c1.status, points: c1.status === "OK" ? pointsMax : 0 };
+          }
+        }
+      }
+    }
+
+    return { status: "PENDENTE", points: 0 };
+  };
+
+  /**
+   * CORREÇÃO 3: Helper function to fetch the exact status and points of a criterion for a specific branch in any given month.
+   * This is used in the Side-by-Side comparison table of the detailed view to avoid mixing months or showing only current month.
+   */
+  const getBranchCriterionForMonth = (
+    b: any,
+    monthName: string,
+    criterionId: string
+  ): { status: string; points: number } => {
+    if (!b) return { status: "PENDENTE", points: 0 };
+
+    // 1. If it's the currently active/selected month, we use the branch's in-memory criteria state
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+      const crit = b.criteria?.find((cs: any) => cs && cs.id === criterionId);
+      if (crit) {
+        const status = crit.rawStatus || crit.status || "PENDENTE";
+        const points = crit.rawPointsObtained !== undefined ? crit.rawPointsObtained : (status === "OK" ? (crit.pointsPossible ?? 0) : 0);
+        return { status, points };
+      }
+      return { status: "PENDENTE", points: 0 };
+    }
+
+    // 2. Check history list first
+    const histEntries = Array.isArray(historyList) ? historyList : [];
+    const matchingHist = histEntries.find((h) => {
+      if (!h || !h.branchId || !h.monthYear) return false;
+      const isOurBranch = h.branchId === b.id;
+      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
+      return isOurBranch && isSameYear && isSameMonth;
+    });
+
+    if (matchingHist) {
+      const crit = matchingHist.criteriaState?.find((cs: any) => cs && cs.id === criterionId);
+      if (crit) {
+        const status = crit.status || "PENDENTE";
+        const points = crit.pointsObtained !== undefined ? crit.pointsObtained : (status === "OK" ? (crit.pointsPossible ?? 0) : 0);
+        return { status, points };
+      }
+    }
+
+    // 3. Dynamic evaluations from the database
+    if (allEvaluationsOfYear && allEvaluationsOfYear.length > 0) {
+      const monthNum = MONTH_MAP[normalizeMonthName(monthName)];
+      if (monthNum) {
+        const dbRows = allEvaluationsOfYear.filter((row) => {
+          return Number(row.mes) === monthNum && matchBranch(row.almoxarifado || "", b.id, b.name);
+        });
+
+        if (criterionId === "1") {
+          const semester = monthNum <= 6 ? 1 : 2;
+          const branchCalendar = (calendarData || []).filter(item => 
+            (item.branchId === b.id || (!item.branchId && matchBranch(item.almoxarifado || "", b.id, b.name))) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          const evaluatedInventories = branchCalendar.filter(item => item.status === "OK" || item.status === "NOK");
+          let invStatus = "PENDENTE";
+          if (evaluatedInventories.length > 0) {
+            const hasNok = evaluatedInventories.some(it => it.status === "NOK");
+            const allOk = evaluatedInventories.every(it => it.status === "OK");
+            invStatus = hasNok ? "NOK" : (allOk ? "OK" : "PENDENTE");
+          }
+          const pts = invStatus === "OK" ? 20 : (invStatus === "PENDENTE" && evaluatedInventories.length > 0 ? 10 : 0);
+          return { status: invStatus, points: pts };
+        } else if (criterionId === "10") {
+          const semester = monthNum <= 6 ? 1 : 2;
+          let localMatSemMov: any[] = [];
+          try {
+            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
+            localMatSemMov = saved ? JSON.parse(saved) : [];
+          } catch (e) {}
+          const branchMatSem = (localMatSemMov || []).find(item => 
+            matchBranch(item.almoxarifado || "", b.id, b.name) &&
+            Number(item.ano) === Number(activeYear) &&
+            Number(item.semestre) === semester
+          );
+          let matStatus = "PENDENTE";
+          if (branchMatSem) {
+            matStatus = branchMatSem.status || "PENDENTE";
+          }
+          return { status: matStatus, points: matStatus === "OK" ? 5 : 0 };
+        } else {
+          const row = dbRows.find(r => String(r.criterio_codigo) === criterionId);
+          if (row) {
+            const status = row.resultado || "PENDENTE";
+            const refC = b.criteria?.find((c: any) => c.id === criterionId);
+            const pointsPossible = refC ? (refC.pointsPossible || 0) : 0;
+            return { status, points: status === "OK" ? pointsPossible : 0 };
           }
         }
       }
@@ -1030,115 +1100,134 @@ function AdminRankingContent({
 
           <div className="bg-[#1B2A4A] text-white p-4 rounded-xl flex items-center justify-center border border-white/5 shrink-0 min-w-[140px]">
             <div className="text-center">
-              <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontos Semestrais</p>
-              <p className="text-xl font-mono font-black">{selectedEntry.semestralScore} <span className="text-xs font-normal text-slate-400">/ 600</span></p>
+              {/* CORREÇÃO 3: Mostrar dados do mês filtrado ou acumulado conforme seleção */}
+              {rankingMode === "MES" ? (
+                <>
+                  <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontuação de {localRankingMonth}</p>
+                  <p className="text-xl font-mono font-black">{getUnifiedScoreForMonth(selectedEntry, localRankingMonth)} <span className="text-xs font-normal text-slate-400">/ 100</span></p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontos Semestrais</p>
+                  <p className="text-xl font-mono font-black">{selectedEntry.semestralScore} <span className="text-xs font-normal text-slate-400">/ 600</span></p>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Dynamic Side-by-Side Comparison for Double Garages */}
-        {selectedEntry.branches.length === 2 && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[#1B2A4A] text-[18px]">compare</span>
-                Detalhamento Lado a Lado (Garagem Dupla) — Mês Atual
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
-                <strong className="text-rose-600"> NOK</strong>, o resultado unificado é <strong className="text-rose-600"> NOK</strong> e nenhum pontuará.
-              </p>
-            </div>
+        {selectedEntry.branches.length === 2 && (() => {
+          const targetMonth = rankingMode === "MES" ? localRankingMonth : activeMonth;
+          return (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#1B2A4A] text-[18px]">compare</span>
+                  Detalhamento Lado a Lado (Garagem Dupla) — {rankingMode === "MES" ? localRankingMonth : "Mês Selecionado"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
+                  <strong className="text-rose-600"> NOK</strong>, o resultado unificado é <strong className="text-rose-600"> NOK</strong> e nenhum pontuará.
+                </p>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    <th className="py-2.5">Critério</th>
-                    <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[0]?.name).replace("ALMOXARIFADO ", "")}</th>
-                    <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[1]?.name).replace("ALMOXARIFADO ", "")}</th>
-                    <th className="py-2.5 text-right font-black">Resultado Unificado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedEntry.branches[0].criteria.map((c1) => {
-                    const c2 = selectedEntry.branches[1].criteria.find((tc) => tc.id === c1.id) || c1;
-                    const isShared = c1.id === "10";
-                    let unifiedStatusText = "";
-                    let unifiedStatusColor = "";
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      <th className="py-2.5">Critério</th>
+                      <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[0]?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[1]?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-2.5 text-right font-black">Resultado Unificado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedEntry.branches[0].criteria.map((c1) => {
+                      const isShared = c1.id === "10";
+                      let unifiedStatusText = "";
+                      let unifiedStatusColor = "";
 
-                    const pts1 = c1.status === "OK" ? c1.pointsPossible : (c1.id === "1" ? (c1.pointsObtained || 0) : 0);
-                    const pts2 = c2.status === "OK" ? c2.pointsPossible : (c2.id === "1" ? (c2.pointsObtained || 0) : 0);
-                    
-                    if (isShared) {
-                      const isNok = c1.status === "NOK" || c2.status === "NOK";
-                      const isBothOk = c1.status === "OK" && c2.status === "OK";
-                      if (isBothOk) {
-                        unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
-                        unifiedStatusColor = "bg-emerald-500 text-white";
-                      } else if (isNok) {
-                        unifiedStatusText = "NOK (0 pts)";
-                        unifiedStatusColor = "bg-rose-600 text-white";
-                      } else {
-                        unifiedStatusText = "Pendente (0 pts)";
-                        unifiedStatusColor = "bg-amber-400 text-slate-900";
-                      }
-                    } else {
-                      const totalPtsObtained = pts1 + pts2;
-                      const maxPts = c1.pointsPossible + c2.pointsPossible;
+                      const b1 = selectedEntry.branches[0];
+                      const b2 = selectedEntry.branches[1];
+                      const res1 = getBranchCriterionForMonth(b1, targetMonth, c1.id);
+                      const res2 = getBranchCriterionForMonth(b2, targetMonth, c1.id);
+
+                      const status1 = res1.status;
+                      const status2 = res2.status;
+                      const pts1 = res1.points;
+                      const pts2 = res2.points;
                       
-                      if (c1.status === "OK" && c2.status === "OK") {
-                        unifiedStatusText = `OK (${totalPtsObtained} pts)`;
-                        unifiedStatusColor = "bg-emerald-500 text-white";
-                      } else if (c1.status === "NOK" && c2.status === "NOK") {
-                        unifiedStatusText = "NOK (0 pts)";
-                        unifiedStatusColor = "bg-rose-600 text-white";
-                      } else if (c1.status === "PENDENTE" && c2.status === "PENDENTE") {
-                        unifiedStatusText = "Pendente (0 pts)";
-                        unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
+                      if (isShared) {
+                        const isNok = status1 === "NOK" || status2 === "NOK";
+                        const isBothOk = status1 === "OK" && status2 === "OK";
+                        if (isBothOk) {
+                          unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
+                          unifiedStatusColor = "bg-emerald-500 text-white";
+                        } else if (isNok) {
+                          unifiedStatusText = "NOK (0 pts)";
+                          unifiedStatusColor = "bg-rose-600 text-white";
+                        } else {
+                          unifiedStatusText = "Pendente (0 pts)";
+                          unifiedStatusColor = "bg-amber-400 text-slate-900";
+                        }
                       } else {
-                        unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
-                        unifiedStatusColor = "bg-indigo-500 text-white";
+                        const totalPtsObtained = pts1 + pts2;
+                        const maxPts = c1.pointsPossible * 2;
+                        
+                        if (status1 === "OK" && status2 === "OK") {
+                          unifiedStatusText = `OK (${totalPtsObtained} pts)`;
+                          unifiedStatusColor = "bg-emerald-500 text-white";
+                        } else if (status1 === "NOK" && status2 === "NOK") {
+                          unifiedStatusText = "NOK (0 pts)";
+                          unifiedStatusColor = "bg-rose-600 text-white";
+                        } else if (status1 === "PENDENTE" && status2 === "PENDENTE") {
+                          unifiedStatusText = "Pendente (0 pts)";
+                          unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
+                        } else {
+                          unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
+                          unifiedStatusColor = "bg-indigo-500 text-white";
+                        }
                       }
-                    }
 
-                    return (
-                      <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3">
-                          <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
-                          <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * (selectedEntry.branches.length)} pts max</p>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                            c1.status === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                            c1.status === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
-                            "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}>
-                            {c1.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                            c2.status === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                            c2.status === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
-                            "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}>
-                            {c2.status}
-                          </span>
-                        </td>
-                        <td className="py-3 text-right">
-                          <span className={`inline-block px-3 py-1 rounded text-xs font-black shadow-xs ${unifiedStatusColor}`}>
-                            {unifiedStatusText}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      return (
+                        <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3">
+                            <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * 2} pts max</p>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
+                              status1 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                              status1 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
+                              "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}>
+                              {status1}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
+                              status2 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                              status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
+                              "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}>
+                              {status2}
+                            </span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <span className={`inline-block px-3 py-1 rounded text-xs font-black shadow-xs ${unifiedStatusColor}`}>
+                              {unifiedStatusText}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {hasRealHistory ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1173,14 +1262,9 @@ function AdminRankingContent({
                 const chartWidth = width - paddingLeft - paddingRight;
                 const chartHeight = height - paddingTop - paddingBottom;
 
-                // Build visible month data based on active or evaluated status
-                const hasJuneData = selectedEntry.branches.some(
-                  (b) => b.criteria.some((c) => c.status === "OK" || c.status === "NOK")
-                );
-                const monthsWithData = monthlyVals.filter((m, idx) => {
-                  if (idx < 5) return true; // JAN to MAI are always closed
-                  return hasJuneData; // JUN is shown if evaluated/launched
-                });
+                // CORREÇÃO 4: O gráfico exibe todos os 6 meses do período sem filtrar dados fictícios ou ocultar meses vazios.
+                // Se não houver dados, exibe 0 para aquele mês.
+                const monthsWithData = monthlyVals;
 
                 let cumulativeSum = 0;
                 const visibleData = monthsWithData.map((item, idx) => {
@@ -1811,20 +1895,26 @@ function AdminRankingContent({
                 <div className="flex items-center justify-between sm:justify-start gap-4 shrink-0 border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-200/50">
                   {hasRealHistory && (
                     <>
-                      {place === 1 ? (
-                        <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                          Líder
-                        </span>
-                      ) : (
-                        isBelowGoal ? (
-                          <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                            🔴 ABAIXO DA META
+                      {/* CORREÇÃO 1 & CORREÇÃO 2: Regras de badges para Mês Selecionado vs Acumulado Anual */}
+                      {rankingMode === "ACUMULADO" ? (
+                        place === 1 ? (
+                          <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                            👑 LÍDER
                           </span>
                         ) : (
-                          <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                            🟢 ATINGIU A META
-                          </span>
+                          displayScore < 300 ? (
+                            <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
+                              🔴 ABAIXO DA META
+                            </span>
+                          ) : null
                         )
+                      ) : (
+                        // No Mês Selecionado (MES), mantemos apenas o 1º colocado como LÍDER dourado, sem badges de meta de 100 pontos.
+                        place === 1 ? (
+                          <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
+                            Líder
+                          </span>
+                        ) : null
                       )}
                     </>
                   )}
@@ -1867,7 +1957,7 @@ function AdminRankingContent({
                     </div>
                     <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
                       <div
-                        className={`h-full ${displayScore === 0 ? "bg-transparent" : (isBelowGoal ? "bg-rose-600" : "bg-emerald-500")}`}
+                        className={`h-full ${displayScore === 0 ? "bg-transparent" : ((rankingMode === "ACUMULADO" ? displayScore < 300 : false) ? "bg-rose-600" : "bg-emerald-500")}`}
                         style={{ width: `${displayScore === 0 ? 0 : Math.min(100, (displayScore / maxPoints) * 100)}%` }}
                       ></div>
                     </div>
@@ -1878,19 +1968,7 @@ function AdminRankingContent({
           })}
         </div>
 
-        {/* Dynamic Qualification separator */}
-        {rankingMode === "MES" && (
-          <div className="relative py-6">
-            <div className="absolute inset-0 flex items-center animate-pulse" aria-hidden="true">
-              <div className="w-full border-t-2 border-dashed border-amber-500/30"></div>
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white border border-amber-200 px-4 py-1 rounded-full font-black uppercase tracking-widest text-[9px] shadow-xs text-amber-600">
-                Meta Mínima de Conformidade Mensal (100 PTS)
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Separator removed for Correction 1 */}
       </section>
     </div>
   );
