@@ -336,131 +336,29 @@ function AdminRankingContent({
 
   // Bulletproof core solver: Score for specified entry in a specific month
   const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
-    if (!entry || !entry.branches) return 0;
-    
-    // 1. If it's the currently active/selected month, we can use entry.branches directly!
-    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
-      if (entry.branches && entry.branches.length > 0) {
-        return entry.branches[0]?.currentScore || 0;
-      }
-    }
+    if (!entry || !entry.branches || entry.branches.length === 0) return 0;
 
-    // 2. Check history list
-    const branchIds = (entry.branches || []).map((b) => b?.id).filter(Boolean);
-    const histEntries = Array.isArray(historyList) ? historyList : [];
-    const matchingHist = histEntries.filter((h) => {
-      if (!h || !h.branchId || !h.monthYear) return false;
-      const isOurBranch = branchIds.includes(h.branchId);
-      const isSameYear = h.monthYear.includes(activeYear);
-      const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
-      return isOurBranch && isSameYear && isSameMonth;
-    });
+    const monthNum = MONTH_MAP[normalizeMonthName(monthName)];
+    if (!monthNum) return 0;
 
-    if (matchingHist.length > 0) {
-      // Find the first entry that has a score defined
-      const foundWithScore = matchingHist.find(h => h.score !== undefined);
-      if (foundWithScore) {
-        return foundWithScore.score;
-      }
-    }
+    // Helper to calculate score for a single branch directly from the database rows in allEvaluationsOfYear
+    const getSingleBranchScore = (branch: any): number => {
+      if (!branch) return 0;
+      const branchEvals = (allEvaluationsOfYear || []).filter((row) => {
+        return Number(row.mes) === monthNum && matchBranch(row.almoxarifado || "", branch.id, branch.name);
+      });
 
-    // 3. Dynamic evaluations from the database
-    if (allEvaluationsOfYear && allEvaluationsOfYear.length > 0) {
-      const monthNum = MONTH_MAP[normalizeMonthName(monthName)];
-      if (monthNum) {
-        const calculatedBranches = entry.branches.map((b) => {
-          const dbRows = allEvaluationsOfYear.filter((row) => {
-            return Number(row.mes) === monthNum && matchBranch(row.almoxarifado || "", b.id, b.name);
-          });
-          const dbMapped: Record<string, any> = {};
-          dbRows.forEach((row) => {
-            dbMapped[String(row.criterio_codigo)] = row;
-          });
+      return branchEvals.reduce((sum, row) => {
+        return sum + (Number(row.pontuacao) || Number(row.pontos_obtidos) || 0);
+      }, 0);
+    };
 
-          const semester = monthNum <= 6 ? 1 : 2;
+    const score1 = getSingleBranchScore(entry.branches[0]);
+    const score2 = entry.branches.length > 1 ? getSingleBranchScore(entry.branches[1]) : 0;
 
-          // Compute dynamic calendar
-          const branchCalendar = (localCalendar || []).filter(item => 
-            (item.branchId === b.id || (!item.branchId && matchBranch(item.almoxarifado || "", b.id, b.name))) &&
-            Number(item.ano) === Number(activeYear) &&
-            Number(item.semestre) === semester
-          );
-          const evaluatedInventories = branchCalendar.filter(item => item.status === "OK" || item.status === "NOK");
-          let invStatus = "PENDENTE";
-          if (evaluatedInventories.length > 0) {
-            const hasNok = evaluatedInventories.some(it => it.status === "NOK");
-            const allOk = evaluatedInventories.every(it => it.status === "OK");
-            invStatus = hasNok ? "NOK" : (allOk ? "OK" : "PENDENTE");
-          }
-
-          // Compute dynamic material sem mov
-          let matStatus = "PENDENTE";
-          let localMatSemMov: any[] = [];
-          try {
-            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-            localMatSemMov = saved ? JSON.parse(saved) : [];
-          } catch (e) {}
-          const branchMatSem = (localMatSemMov || []).find(item => 
-            matchBranch(item.almoxarifado || "", b.id, b.name) &&
-            Number(item.ano) === Number(activeYear) &&
-            Number(item.semestre) === semester
-          );
-          if (branchMatSem) {
-            matStatus = branchMatSem.status || "PENDENTE";
-          }
-
-          // Build criteria status map
-          const criteriaState = (b.criteria || []).map((c: any) => {
-            let status = "PENDENTE";
-            let pts = 0;
-            if (c.id === "1") {
-              status = invStatus;
-              pts = status === "OK" ? 20 : (status === "PENDENTE" && evaluatedInventories.length > 0 ? 10 : 0);
-            } else if (c.id === "10") {
-              status = matStatus;
-              pts = status === "OK" ? 5 : 0;
-            } else {
-              const row = dbMapped[c.id];
-              status = row ? (row.resultado || "PENDENTE") : "PENDENTE";
-              pts = status === "OK" ? (c.pointsPossible || 0) : 0;
-            }
-            return { id: c.id, status, pointsPossible: c.pointsPossible, pointsObtained: pts };
-          });
-
-          // Automate NF -> Recebimento
-          const nfC = criteriaState.find(c => c.id === "3");
-          if (nfC) {
-            const recC = criteriaState.find(c => c.id === "5");
-            if (recC) {
-              recC.status = nfC.status;
-              recC.pointsObtained = nfC.status === "OK" ? (recC.pointsPossible || 0) : 0;
-            }
-          }
-
-          return { ...b, criteriaState };
-        });
-
-        if (calculatedBranches.length === 2) {
-          const b1 = calculatedBranches[0];
-          const b2 = calculatedBranches[1];
-          let consolidatedScore = 0;
-
-          b1.criteriaState.forEach((cRef: any) => {
-            const tc = b2.criteriaState.find((c: any) => c.id === cRef.id);
-            const allOk = cRef.status === "OK" && tc && tc.status === "OK";
-            if (allOk) {
-              consolidatedScore += cRef.pointsPossible || 0;
-            }
-          });
-          return consolidatedScore;
-        } else if (calculatedBranches.length === 1) {
-          const b1 = calculatedBranches[0];
-          return b1.criteriaState.reduce((acc: number, c: any) => acc + (c.pointsObtained || 0), 0);
-        }
-      }
-    }
-
-    return 0;
+    // For twin/dupla garages, we use the score of one of them (or the max of them to be robust).
+    // This strictly avoids summing them, dividing by 2, or making an average.
+    return entry.branches.length >= 2 ? Math.max(score1, score2) : score1;
   };
 
   const getCriterionScoreForMonth = (
