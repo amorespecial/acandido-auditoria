@@ -331,11 +331,12 @@ function AdminRankingContent({
   };
 
   // Bulletproof core solver: Score for specified entry in a specific month
-  const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string): number => {
+  const getUnifiedScoreForMonth = (entry: UnifiedEntry, monthName: string, targetYear?: string): number => {
     if (!entry || !entry.branches) return 0;
     
+    const yearToUse = targetYear || activeYear;
     // 1. If it's the currently active/selected month, we can use entry.branches directly!
-    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth) && String(yearToUse) === String(activeYear)) {
       if (entry.branches && entry.branches.length > 0) {
         if (entry.branches.length === 2) {
           const b1 = entry.branches[0];
@@ -361,7 +362,7 @@ function AdminRankingContent({
     const matchingHist = histEntries.filter((h) => {
       if (!h || !h.branchId || !h.monthYear) return false;
       const isOurBranch = branchIds.includes(h.branchId);
-      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameYear = h.monthYear.includes(yearToUse);
       const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
       return isOurBranch && isSameYear && isSameMonth;
     });
@@ -520,12 +521,14 @@ function AdminRankingContent({
   const getCriterionScoreForMonth = (
     entry: UnifiedEntry,
     monthName: string,
-    criterionId: string
+    criterionId: string,
+    targetYear?: string
   ): { status: string; points: number } => {
     if (!entry || !entry.branches) return { status: "PENDENTE", points: 0 };
     
+    const yearToUse = targetYear || activeYear;
     // 1. If it's the currently active/selected month, we can use entry.branches directly!
-    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth) && String(yearToUse) === String(activeYear)) {
       if (entry.branches && entry.branches.length > 0) {
         const crit = entry.branches[0]?.criteria?.find((cs: any) => cs && cs.id === criterionId);
         if (crit) {
@@ -544,7 +547,7 @@ function AdminRankingContent({
     const matchingHist = histEntries.filter((h) => {
       if (!h || !h.branchId || !h.monthYear) return false;
       const isOurBranch = branchIds.includes(h.branchId);
-      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameYear = h.monthYear.includes(yearToUse);
       const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
       return isOurBranch && isSameYear && isSameMonth;
     });
@@ -717,12 +720,14 @@ function AdminRankingContent({
   const getBranchCriterionForMonth = (
     b: any,
     monthName: string,
-    criterionId: string
+    criterionId: string,
+    targetYear?: string
   ): { status: string; points: number } => {
     if (!b) return { status: "PENDENTE", points: 0 };
 
+    const yearToUse = targetYear || activeYear;
     // 1. If it's the currently active/selected month, we use the branch's in-memory criteria state
-    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth)) {
+    if (normalizeMonthName(monthName) === normalizeMonthName(activeMonth) && String(yearToUse) === String(activeYear)) {
       const crit = b.criteria?.find((cs: any) => cs && cs.id === criterionId);
       if (crit) {
         const status = crit.rawStatus || crit.status || "PENDENTE";
@@ -737,7 +742,7 @@ function AdminRankingContent({
     const matchingHist = histEntries.find((h) => {
       if (!h || !h.branchId || !h.monthYear) return false;
       const isOurBranch = h.branchId === b.id;
-      const isSameYear = h.monthYear.includes(activeYear);
+      const isSameYear = h.monthYear.includes(yearToUse);
       const isSameMonth = normalizeMonthName(h.monthYear).startsWith(normalizeMonthName(monthName));
       return isOurBranch && isSameYear && isSameMonth;
     });
@@ -1107,6 +1112,24 @@ function AdminRankingContent({
 
     const criteriaListWithConsistency = getUnifiedCriteriaList(selectedEntry).sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0));
 
+    // Dynamic 2025 vs 2026 comparison variables
+    const targetSemesterLabel = localAccumulatedFilter === "2_SEMESTRE" ? "2º Semestre" : "1º Semestre";
+    const compareMonths = localAccumulatedFilter === "2_SEMESTRE"
+      ? ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+      : ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"];
+
+    const scoreCurrentSem = compareMonths.reduce((sum, m) => sum + getUnifiedScoreForMonth(selectedEntry, m, activeYear), 0);
+    const scorePrevSem = compareMonths.reduce((sum, m) => sum + getUnifiedScoreForMonth(selectedEntry, m, "2025"), 0);
+
+    const diffPoints = scoreCurrentSem - scorePrevSem;
+    const pctChange = scorePrevSem > 0 ? Math.round((diffPoints / scorePrevSem) * 100) : 0;
+
+    const histEntriesList = Array.isArray(historyList) ? historyList : [];
+    const branchIdsList = (selectedEntry.branches || []).map((b) => b?.id).filter(Boolean);
+    const has2025Data = histEntriesList.some((h) => {
+      return h && h.monthYear && h.monthYear.includes("2025") && branchIdsList.includes(h.branchId);
+    });
+
     // Get total closed cycles in current semester to filter actual alerts/highlights
     const totalClosedCyclesInSemester = (() => {
       const histList = Array.isArray(historyList) ? historyList.filter((h: any) => h && h.monthYear) : [];
@@ -1194,13 +1217,22 @@ function AdminRankingContent({
 
         {/* Dynamic Side-by-Side Comparison for Double Garages */}
         {selectedEntry.branches.length === 2 && (() => {
-          const targetMonth = rankingMode === "MES" ? localRankingMonth : activeMonth;
+          const b1 = selectedEntry.branches[0];
+          const b2 = selectedEntry.branches[1];
+          const periodLabel = rankingMode === "MES"
+            ? localRankingMonth
+            : localAccumulatedFilter === "1_SEMESTRE"
+            ? "1º Semestre (Janeiro-Junho)"
+            : localAccumulatedFilter === "2_SEMESTRE"
+            ? "2º Semestre (Julho-Dezembro)"
+            : "Ano Inteiro";
+
           return (
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[#1B2A4A] text-[18px]">compare</span>
-                  Detalhamento Lado a Lado (Garagem Dupla) — {rankingMode === "MES" ? localRankingMonth : "Mês Selecionado"}
+                  Detalhamento Lado a Lado (Garagem Dupla) — {periodLabel}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
@@ -1213,81 +1245,115 @@ function AdminRankingContent({
                   <thead>
                     <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
                       <th className="py-2.5">Critério</th>
-                      <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[0]?.name).replace("ALMOXARIFADO ", "")}</th>
-                      <th className="py-2.5 px-4 text-center">{s(selectedEntry.branches[1]?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-2.5 px-4 text-center">{s(b1?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-2.5 px-4 text-center">{s(b2?.name).replace("ALMOXARIFADO ", "")}</th>
                       <th className="py-2.5 text-right font-black">Resultado Unificado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedEntry.branches[0].criteria.map((c1) => {
+                    {b1.criteria.map((c1: any) => {
                       const isShared = c1.id === "10";
+                      let status1Display = "";
+                      let status1Style = "";
+                      let status2Display = "";
+                      let status2Style = "";
                       let unifiedStatusText = "";
                       let unifiedStatusColor = "";
 
-                      const b1 = selectedEntry.branches[0];
-                      const b2 = selectedEntry.branches[1];
-                      const res1 = getBranchCriterionForMonth(b1, targetMonth, c1.id);
-                      const res2 = getBranchCriterionForMonth(b2, targetMonth, c1.id);
+                      if (rankingMode === "MES") {
+                        const res1 = getBranchCriterionForMonth(b1, localRankingMonth, c1.id);
+                        const res2 = getBranchCriterionForMonth(b2, localRankingMonth, c1.id);
+                        const status1 = res1.status;
+                        const status2 = res2.status;
+                        const pts1 = res1.points;
+                        const pts2 = res2.points;
 
-                      const status1 = res1.status;
-                      const status2 = res2.status;
-                      const pts1 = res1.points;
-                      const pts2 = res2.points;
-                      
-                      if (isShared) {
-                        const isNok = status1 === "NOK" || status2 === "NOK";
-                        const isBothOk = status1 === "OK" && status2 === "OK";
-                        if (isBothOk) {
-                          unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
-                          unifiedStatusColor = "bg-emerald-500 text-white";
-                        } else if (isNok) {
-                          unifiedStatusText = "NOK (0 pts)";
-                          unifiedStatusColor = "bg-rose-600 text-white";
+                        status1Display = status1;
+                        status2Display = status2;
+
+                        status1Style = status1 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                       status1 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
+                                       "bg-amber-50 text-amber-700 border border-amber-200";
+
+                        status2Style = status2 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                       status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
+                                       "bg-amber-50 text-amber-700 border border-amber-200";
+
+                        if (isShared) {
+                          const isNok = status1 === "NOK" || status2 === "NOK";
+                          const isBothOk = status1 === "OK" && status2 === "OK";
+                          if (isBothOk) {
+                            unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
+                            unifiedStatusColor = "bg-emerald-500 text-white";
+                          } else if (isNok) {
+                            unifiedStatusText = "NOK (0 pts)";
+                            unifiedStatusColor = "bg-rose-600 text-white";
+                          } else {
+                            unifiedStatusText = "Pendente (0 pts)";
+                            unifiedStatusColor = "bg-amber-400 text-slate-900";
+                          }
                         } else {
-                          unifiedStatusText = "Pendente (0 pts)";
-                          unifiedStatusColor = "bg-amber-400 text-slate-900";
+                          const totalPtsObtained = pts1 + pts2;
+                          const maxPts = c1.pointsPossible * 2;
+                          
+                          if (status1 === "OK" && status2 === "OK") {
+                            unifiedStatusText = `OK (${totalPtsObtained} pts)`;
+                            unifiedStatusColor = "bg-emerald-500 text-white";
+                          } else if (status1 === "NOK" && status2 === "NOK") {
+                            unifiedStatusText = "NOK (0 pts)";
+                            unifiedStatusColor = "bg-rose-600 text-white";
+                          } else if (status1 === "PENDENTE" && status2 === "PENDENTE") {
+                            unifiedStatusText = "Pendente (0 pts)";
+                            unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
+                          } else {
+                            unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
+                            unifiedStatusColor = "bg-indigo-500 text-white";
+                          }
                         }
                       } else {
-                        const totalPtsObtained = pts1 + pts2;
-                        const maxPts = c1.pointsPossible * 2;
-                        
-                        if (status1 === "OK" && status2 === "OK") {
-                          unifiedStatusText = `OK (${totalPtsObtained} pts)`;
-                          unifiedStatusColor = "bg-emerald-500 text-white";
-                        } else if (status1 === "NOK" && status2 === "NOK") {
-                          unifiedStatusText = "NOK (0 pts)";
-                          unifiedStatusColor = "bg-rose-600 text-white";
-                        } else if (status1 === "PENDENTE" && status2 === "PENDENTE") {
-                          unifiedStatusText = "Pendente (0 pts)";
-                          unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
-                        } else {
-                          unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
-                          unifiedStatusColor = "bg-indigo-500 text-white";
-                        }
+                        // ACUMULADO mode: consolidate across all selected months
+                        const b1Statuses = selectedMonths.map(m => getBranchCriterionForMonth(b1, m, c1.id));
+                        const b2Statuses = selectedMonths.map(m => getBranchCriterionForMonth(b2, m, c1.id));
+
+                        const okCount1 = b1Statuses.filter(x => x.status === "OK").length;
+                        const okCount2 = b2Statuses.filter(x => x.status === "OK").length;
+
+                        status1Display = `${okCount1} / ${selectedMonths.length} OK`;
+                        status2Display = `${okCount2} / ${selectedMonths.length} OK`;
+
+                        status1Style = okCount1 === selectedMonths.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                       okCount1 === 0 ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                                       "bg-amber-50 text-amber-700 border border-amber-200";
+
+                        status2Style = okCount2 === selectedMonths.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                       okCount2 === 0 ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                                       "bg-amber-50 text-amber-700 border border-amber-200";
+
+                        const consolidatedC = criteriaListWithConsistency.find(cc => cc.id === c1.id);
+                        const okUnified = consolidatedC ? consolidatedC.okMonths : 0;
+                        const pointsUnifiedObtained = consolidatedC ? consolidatedC.pointsObtained : 0;
+                        const maxPossibleInPeriod = c1.pointsPossible * selectedMonths.length;
+
+                        unifiedStatusText = `${okUnified} / ${selectedMonths.length} OK (${pointsUnifiedObtained} / ${maxPossibleInPeriod} pts)`;
+                        unifiedStatusColor = okUnified === selectedMonths.length ? "bg-emerald-500 text-white" :
+                                             okUnified === 0 ? "bg-rose-600 text-white" :
+                                             "bg-indigo-500 text-white";
                       }
 
                       return (
                         <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                           <td className="py-3">
                             <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * 2} pts max</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * 2} pts max por mês</p>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                              status1 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                              status1 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
-                              "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}>
-                              {status1}
+                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${status1Style}`}>
+                              {status1Display}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${
-                              status2 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                              status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
-                              "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}>
-                              {status2}
+                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${status2Style}`}>
+                              {status2Display}
                             </span>
                           </td>
                           <td className="py-3 text-right">
@@ -1761,6 +1827,54 @@ function AdminRankingContent({
                   Se manter a média atual, encerrará o período com <strong>{totalAccumulatedScore} pts</strong>.
                 </div>
               </div>
+            </div>
+
+            {/* BLOCO EXTRA - EVOLUÇÃO EM RELAÇÃO AO SEMESTRE ANTERIOR */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                <span className="material-symbols-outlined text-[#C8A84B] text-[18px]">analytics</span>
+                Evolução em Relação ao Semestre Anterior
+              </h3>
+              
+              {!has2025Data ? (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-150/50 text-[10.5px] text-slate-500 italic text-center">
+                  Dados consolidados de 2025 indisponíveis para comparação neste almoxarifado.
+                </div>
+              ) : (
+                <div className="space-y-3 font-sans">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-slate-500">{targetSemesterLabel} 2025 (Histórico)</span>
+                    <span className="font-mono text-slate-700 font-extrabold">{scorePrevSem} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-100">
+                    <span className="text-slate-500">{targetSemesterLabel} 2026 (Atual)</span>
+                    <span className="font-mono text-slate-800 font-black">{scoreCurrentSem} pts</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-xs text-slate-500 font-bold">Variação Absoluta</span>
+                    <span className={`font-mono text-xs font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      {diffPoints >= 0 ? `+${diffPoints}` : diffPoints} pts
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 font-bold">Variação Percentual</span>
+                    <span className={`font-mono text-sm font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      <span className="material-symbols-outlined text-[16px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
+                      {diffPoints >= 0 ? `+${pctChange}%` : `${pctChange}%`}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500 leading-normal">
+                    {diffPoints >= 0 ? (
+                      <span>📈 Desempenho com crescimento positivo de <strong>{diffPoints} pontos</strong> em comparação com o mesmo período do ano anterior.</span>
+                    ) : (
+                      <span>📉 Redução de <strong>{Math.abs(diffPoints)} pontos</strong> detectada no acumulado do semestre comparado ao ano anterior. Requer atenção corretiva.</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
