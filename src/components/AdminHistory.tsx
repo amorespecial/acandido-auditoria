@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { jsPDF } from "jspdf";
 import { initialHistory } from "../mockData";
 import { AuditHistoryEntry, AppUser, Branch, CriterionState } from "../types";
-import { dbFetchHistory, isSupabaseReady } from "../supabaseService";
+import { dbFetchHistory, isSupabaseReady, MONTH_NAME_TO_NUM } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
 interface AdminHistoryProps {
@@ -190,14 +190,10 @@ const isSemestralMonth = (monthYear: string) => {
 const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName: string | undefined, calendarData: any[] | undefined) => {
   const localCalendar = calendarData || [];
 
-  const MONTH_MAP: Record<string, number> = {
-    "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-    "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-  };
   const pts = s(monthYear).split(" ");
   const monthName = s(pts[0]).toLowerCase();
   const activeYearNum = parseInt(pts[1]) || 2026;
-  const activeMonthNum = MONTH_MAP[monthName] || 6;
+  const activeMonthNum = MONTH_NAME_TO_NUM[monthName] || 6;
   const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
   const matchBranch = (almoxName: string, bId: string, bName?: string) => {
@@ -229,8 +225,8 @@ const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchNa
     // Keep legacy overrides for full backward compatibility
     if (name.includes("santa maria")) return branchId === "santa-maria-jp";
     if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-    if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
     if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+    if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
     if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
     if (name.includes("goiana")) return branchId === "fretamento-goiana";
     if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";

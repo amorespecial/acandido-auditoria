@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
-import { dbFetchBranchSchedules, monthNumToName } from "../supabaseService";
+import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase } from "../supabaseClient";
 
@@ -169,11 +169,7 @@ export default function AlmoxarifeHome({
     const loadLiveCalendar = async () => {
       try {
         setIsCalendarLoading(true);
-        const MONTH_MAP: Record<string, number> = {
-          "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-        };
-        const activeMonthNum = MONTH_MAP[displayMonth.toLowerCase()] || 6;
+        const activeMonthNum = MONTH_NAME_TO_NUM[displayMonth.toLowerCase()] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
         const activeYearNum = parseInt(displayYear) || 2026;
 

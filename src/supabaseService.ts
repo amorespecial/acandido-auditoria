@@ -6,6 +6,24 @@ import { OFFICIAL_CREDENTIALS } from "./components/Login";
 const STORAGE_PREFIX = "acandido_";
 
 // Month helper functions
+export const MONTH_NAME_TO_NUM: Record<string, number> = {
+  "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3,
+  "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+  "agosto": 8, "setembro": 9, "outubro": 10,
+  "novembro": 11, "dezembro": 12,
+  "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+  "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+  "1": 1, "01": 1, "2": 2, "02": 2, "3": 3, "03": 3, "4": 4, "04": 4,
+  "5": 5, "05": 5, "6": 6, "06": 6, "7": 7, "07": 7, "8": 8, "08": 8,
+  "9": 9, "09": 9, "10": 10, "11": 11, "12": 12
+};
+
+export const MONTH_NUM_TO_NAME: Record<number, string> = {
+  1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+  5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+  9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+};
+
 export const MONTH_NORMALIZE: Record<string, string> = {
   "1": "Janeiro", "01": "Janeiro", "janeiro": "Janeiro",
   "2": "Fevereiro", "02": "Fevereiro", "fevereiro": "Fevereiro",
@@ -23,36 +41,11 @@ export const MONTH_NORMALIZE: Record<string, string> = {
 
 export const monthNameToNum = (name: string): number => {
   const normInput = String(name || "").toLowerCase().trim();
-  const normalizedName = MONTH_NORMALIZE[normInput] || name || "";
-
-  const norm = String(normalizedName)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-
-  const months = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-  const index = months.indexOf(norm);
-  if (index !== -1) return index + 1;
-
-  // Check numeric values
-  const num = parseInt(norm, 10);
-  if (!isNaN(num) && num >= 1 && num <= 12) {
-    return num;
-  }
-
-  // Fallback for common 3-letter abbreviations
-  const abbreviations: Record<string, number> = {
-    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "junho": 6, "jun": 6,
-    "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
-  };
-  const key = norm.substring(0, 3);
-  return abbreviations[key] || 1; // default to 1 (Janeiro)
+  return MONTH_NAME_TO_NUM[normInput] || 1;
 };
 
 export const monthNumToName = (num: number): string => {
-  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  return months[num - 1] || "Maio";
+  return MONTH_NUM_TO_NAME[num] || "Janeiro";
 };
 
 // Base64 to Blob helper

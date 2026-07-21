@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 
@@ -214,11 +214,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.activeMonth) {
-          const MONTH_MAP: Record<string, number> = {
-            "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-          };
-          const activeMonthNum = MONTH_MAP[safeStr(parsed.activeMonth).toLowerCase()] || 6;
+          const activeMonthNum = MONTH_NAME_TO_NUM[safeStr(parsed.activeMonth).toLowerCase()] || 6;
           return activeMonthNum <= 6 ? "1" : "2";
         }
       }
@@ -473,12 +469,8 @@ export default function App() {
             console.error("Failed to load initial history in App.tsx:", histErr);
           }
           try {
-            const MONTH_MAP_INITIAL: Record<string, number> = {
-              "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-              "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-            };
             const actMonthLower = activeMonth.toLowerCase();
-            const activeMonthNum = MONTH_MAP_INITIAL[actMonthLower] || 6;
+            const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
             const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
             const activeYearNum = parseInt(activeYear) || 2026;
 
@@ -573,12 +565,8 @@ export default function App() {
   useEffect(() => {
     const fetchNonMovingSummaries = async () => {
       try {
-        const MONTH_MAP_RELOAD: Record<string, number> = {
-          "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-        };
         const actMonthLower = activeMonth.toLowerCase();
-        const activeMonthNum = MONTH_MAP_RELOAD[actMonthLower] || 6;
+        const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
         const activeYearNum = parseInt(activeYear) || 2026;
 
@@ -920,21 +908,29 @@ export default function App() {
     const obtained = active.reduce((sum, c) => sum + c.pointsObtained, 0);
     const ratio = obtained; // out of always 100 max potential points
 
+    const monthlyCriteria = criteria.filter((c) => c.id !== "1" && c.id !== "10");
+    const hasPendingMonthly = monthlyCriteria.some((c) => c.status !== "OK" && c.status !== "NOK");
+
     let scoreCategory: Branch["scoreCategory"] = "Excelente";
     let status: Branch["status"] = "OK";
 
-    if (ratio >= 85) {
-      scoreCategory = "Excelente";
-      status = "OK";
-    } else if (ratio >= 70) {
-      scoreCategory = "Bom";
-      status = "PENDENTE";
-    } else if (ratio >= 60) {
-      scoreCategory = "Médio";
+    if (hasPendingMonthly) {
+      scoreCategory = "Parcial";
       status = "PENDENTE";
     } else {
-      scoreCategory = "Abaixo da Meta";
-      status = "NOK";
+      if (ratio >= 85) {
+        scoreCategory = "Excelente";
+        status = "OK";
+      } else if (ratio >= 70) {
+        scoreCategory = "Bom";
+        status = "OK";
+      } else if (ratio >= 60) {
+        scoreCategory = "Médio";
+        status = "OK";
+      } else {
+        scoreCategory = "Abaixo da Meta";
+        status = "NOK";
+      }
     }
 
     return { score: ratio, status, scoreCategory };
@@ -1112,13 +1108,8 @@ export default function App() {
   };
 
   const processedBranches = (() => {
-    const MONTH_MAP: Record<string, number> = {
-      "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-      "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-    };
-
     const actMonthLower = activeMonth.toLowerCase();
-    const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+    const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
     const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
     const activeYearNum = parseInt(activeYear) || 2026;
 
@@ -1141,8 +1132,8 @@ export default function App() {
       // 1. Direct explicit rule maps for absolute safety
       if (name.includes("santa maria")) return branchId === "santa-maria-jp";
       if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-      if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
       if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+      if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
       if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
       if (name.includes("goiana")) return branchId === "fretamento-goiana";
       if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
@@ -1505,10 +1496,10 @@ export default function App() {
           status = "OK";
         } else if (ratio >= 70) {
           scoreCategory = "Bom";
-          status = "PENDENTE";
+          status = "OK";
         } else if (ratio >= 60) {
           scoreCategory = "Regular";
-          status = "PENDENTE";
+          status = "OK";
         } else {
           scoreCategory = "Abaixo da Meta";
           status = "NOK";

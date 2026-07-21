@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
 
@@ -134,11 +134,7 @@ export default function AdminEvaluationDetail({
       if (branch.id && isSupabaseReady()) {
         try {
           const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
-          const MONTH_MAP: Record<string, number> = {
-            "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-          };
-          const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+          const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
           const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
           const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
 
@@ -537,11 +533,7 @@ export default function AdminEvaluationDetail({
     if (isSupabaseReady()) {
       try {
         const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
-        const MONTH_MAP: Record<string, number> = {
-          "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-        };
-        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
         const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
 
@@ -588,11 +580,7 @@ export default function AdminEvaluationDetail({
     if (isSupabaseReady()) {
       try {
         const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
-        const MONTH_MAP: Record<string, number> = {
-          "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-        };
-        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
         const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
 
@@ -628,11 +616,7 @@ export default function AdminEvaluationDetail({
     if (isSupabaseReady()) {
       try {
         const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
-        const MONTH_MAP: Record<string, number> = {
-          "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-          "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-        };
-        const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+        const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
         const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
         const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
 
@@ -753,11 +737,7 @@ export default function AdminEvaluationDetail({
       if (isSupabaseReady()) {
         try {
           const actMonthLower = cycleStateParsed.activeMonth.toLowerCase();
-          const MONTH_MAP: Record<string, number> = {
-            "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-          };
-          const activeMonthNum = MONTH_MAP[actMonthLower] || 6;
+          const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
           const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
           const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
 
@@ -842,11 +822,7 @@ export default function AdminEvaluationDetail({
 
     if (crit.id === "1") {
       const activeYearNum = cycleStateParsed ? parseInt(cycleStateParsed.activeYear) || 2026 : 2026;
-      const MONTH_MAP: Record<string, number> = {
-        "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-      };
-      const activeMonthNum = cycleStateParsed ? MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6 : 6;
+      const activeMonthNum = cycleStateParsed ? MONTH_NAME_TO_NUM[cycleStateParsed.activeMonth.toLowerCase()] || 6 : 6;
       const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
       console.log(`Fetching live calendar data directly from Supabase for branch: ${branch.id}`);
@@ -1297,11 +1273,7 @@ export default function AdminEvaluationDetail({
       if (!savedManual) return false;
       const cycleStateParsed = JSON.parse(savedManual);
       const activeYearNum = parseInt(cycleStateParsed.activeYear) || 2026;
-      const MONTH_MAP: Record<string, number> = {
-        "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-      };
-      const activeMonthNum = MONTH_MAP[cycleStateParsed.activeMonth.toLowerCase()] || 6;
+      const activeMonthNum = MONTH_NAME_TO_NUM[cycleStateParsed.activeMonth.toLowerCase()] || 6;
       const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
 
       const localCalendar = calendarData || [];
@@ -1311,8 +1283,8 @@ export default function AdminEvaluationDetail({
         const branchId = bId.toLowerCase().trim();
         if (name.includes("santa maria")) return branchId === "santa-maria-jp";
         if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-        if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
         if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+        if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
         if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
         if (name.includes("goiana")) return branchId === "fretamento-goiana";
         if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";

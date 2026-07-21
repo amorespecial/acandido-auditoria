@@ -50,8 +50,8 @@ const matchBranch = (almoxName: string, bId: string, bName?: string) => {
   // Keep legacy overrides for full backward compatibility
   if (name.includes("santa maria")) return branchId === "santa-maria-jp";
   if (name.includes("a.candido") || name.includes("a.cândido")) return branchId === "acandido-cg";
-  if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
   if (name.includes("bayeux")) return branchId === "trans-cg-bayeux";
+  if (name === "trans cg" || name === "expresso nacional" || name.includes("trans cg") || name.includes("expresso nacional")) return branchId === "expresso-nacional";
   if (name.includes("cabedelo")) return branchId === "rodoviario-cabedelo";
   if (name.includes("goiana")) return branchId === "fretamento-goiana";
   if (name.includes("fret pb") || name.includes("fretamento pb")) return branchId === "fretamento-pb";
