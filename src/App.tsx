@@ -1924,12 +1924,10 @@ export default function App() {
     setUser(null);
     setSelectedBranchId(null);
     setActiveSubscreen(null);
+    try {
+      localStorage.removeItem("acandido_app_user");
+    } catch (e) {}
   };
-
-  // Login check
-  if (user === null) {
-    return <Login onLogin={(u) => setUser(u)} />;
-  }
 
   // Managed branches list if Almoxarife (Memoized for peak rendering performance)
   const managedBranches = useMemo(() => {
@@ -1956,6 +1954,11 @@ export default function App() {
   const rawSelectedBranch = useMemo(() => {
     return (branches.find((b) => b.id === selectedBranchId) || branches[0]) || initialBranches[0];
   }, [branches, selectedBranchId]);
+
+  // Login check
+  if (user === null) {
+    return <Login onLogin={(u) => setUser(u)} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#FBF8FC] flex flex-col font-sans select-none pb-12">
