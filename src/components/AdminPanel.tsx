@@ -383,6 +383,8 @@ export default function AdminPanel({
 
           let badgeColor = "bg-stone-150 text-stone-700 font-extrabold";
           let badgeText: string = branch.status;
+          let showBadge = true;
+
           if (isNotStarted) {
             badgeColor = "bg-slate-100/80 text-slate-400 border border-slate-200/50 font-black tracking-wide";
             badgeText = "Ciclo não iniciado";
@@ -390,9 +392,12 @@ export default function AdminPanel({
             badgeColor = "bg-emerald-600 text-white font-extrabold";
             badgeText = "Arquivado";
           } else {
-            if (branch.status === "OK") badgeColor = "bg-emerald-500 text-white font-extrabold";
-            if (branch.status === "PENDENTE") badgeColor = "bg-amber-500 text-white font-extrabold";
-            if (branch.status === "NOK") badgeColor = "bg-red-500 text-white font-extrabold";
+            if (!allMonthlyEvaluated) {
+              badgeColor = "bg-amber-500 text-white font-extrabold";
+              badgeText = "PENDENTE";
+            } else {
+              showBadge = false;
+            }
           }
 
           const scoreToDisplay = isNotStarted ? 0 : (branch.pointsObtainedSum ?? branch.currentScore);
@@ -436,9 +441,11 @@ export default function AdminPanel({
                       {branch.location} • <span className="font-extrabold text-slate-600 font-mono">Grupo {branch.group}</span>
                     </p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor} shrink-0`}>
-                    {badgeText}
-                  </span>
+                  {showBadge && (
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor} shrink-0`}>
+                      {badgeText}
+                    </span>
+                  )}
                 </div>
  
                 <div className="flex flex-col items-center justify-center py-4 bg-slate-50/50 rounded-xl mb-4 font-mono">
