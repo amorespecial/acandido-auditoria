@@ -112,37 +112,6 @@ export const uploadFile = async (
   return data.signedUrl;
 };
 
-// ==========================================
-// ROLE AND PERMISSION VALIDATION HELPERS (FASE 7)
-// ==========================================
-export const getRequesterRole = (): string | null => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    const raw = window.localStorage.getItem("acandido_app_user");
-    if (raw) {
-      try {
-        const u = JSON.parse(raw);
-        return u.role || null;
-      } catch (e) {
-        return null;
-      }
-    }
-  }
-  return null;
-};
-
-export const checkPermission = (allowedRoles: string[], requesterRole?: string) => {
-  // If we are in the browser, always prioritize the true localStorage session role
-  // to prevent spoofing via manually passed parameters in developer tools.
-  const sessionRole = getRequesterRole();
-  const role = sessionRole || requesterRole;
-  if (!role) {
-    throw new Error("Acesso negado: Usuário não autenticado no sistema.");
-  }
-  if (!allowedRoles.includes(role)) {
-    throw new Error(`Acesso negado: O perfil '${role}' não possui permissão para executar esta operação.`);
-  }
-};
-
 // UUID helper generator
 const generateUUID = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -237,8 +206,7 @@ export interface MigrationReport {
   errors: string[];
 }
 
-export const dbMigrateUsersPasswords = async (requesterRole?: string): Promise<MigrationReport> => {
-  checkPermission(["ADMIN"], requesterRole);
+export const dbMigrateUsersPasswords = async (): Promise<MigrationReport> => {
   const report: MigrationReport = {
     totalFound: 0,
     migratedCount: 0,
@@ -326,113 +294,25 @@ export const dbMigrateUsersPasswords = async (requesterRole?: string): Promise<M
   return report;
 };
 
-export interface CleanupReport {
-  totalUsers: number;
-  cleanedCount: number;
-  alreadyCleanedCount: number;
-  errorCount: number;
-  errors: string[];
-}
-
-export const dbCleanupLegacyPlainPasswords = async (requesterRole?: string): Promise<CleanupReport> => {
-  checkPermission(["ADMIN"], requesterRole);
-  const report: CleanupReport = {
-    totalUsers: 0,
-    cleanedCount: 0,
-    alreadyCleanedCount: 0,
-    errorCount: 0,
-    errors: []
-  };
-
-  if (!isSupabaseReady()) {
-    report.errors.push("Supabase não está configurado.");
-    return report;
-  }
-
-  try {
-    const { data: users, error } = await supabase.from("usuarios").select("*");
-    if (error) {
-      throw error;
-    }
-
-    if (!users || users.length === 0) {
-      return report;
-    }
-
-    report.totalUsers = users.length;
-
-    for (const u of users) {
-      const email = u.email ? u.email.toLowerCase().trim() : "";
-      const nome = u.nome || "Sem Nome";
-
-      // Safety check: only clean if we have a valid bcrypt hash
-      const hasHash = u.senha_hash && (
-        u.senha_hash.startsWith("$2a$") || 
-        u.senha_hash.startsWith("$2b$") || 
-        u.senha_hash.startsWith("$2y$")
-      );
-
-      if (!hasHash) {
-        report.errorCount++;
-        report.errors.push(`${nome} (${email}): Usuário não possui senha_hash. Abortando limpeza para este usuário.`);
-        continue;
-      }
-
-      let extra: any = {};
-      let needsSaving = false;
-
-      if (u.almoxarifado && typeof u.almoxarifado === "string" && u.almoxarifado.trim().startsWith("{")) {
-        try {
-          extra = JSON.parse(u.almoxarifado);
-        } catch (e) {
-          report.errorCount++;
-          report.errors.push(`${nome} (${email}): Erro ao parsear JSON almoxarifado.`);
-          continue;
-        }
-      }
-
-      // If password field is present and has ANY non-empty value, we clear it!
-      if (extra && extra.password !== undefined && extra.password !== "") {
-        extra.password = "";
-        needsSaving = true;
-      }
-
-      if (needsSaving) {
-        const { error: updateError } = await supabase
-          .from("usuarios")
-          .update({ almoxarifado: JSON.stringify(extra) })
-          .eq("id", u.id);
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        report.cleanedCount++;
-      } else {
-        report.alreadyCleanedCount++;
-      }
-    }
-  } catch (err: any) {
-    report.errorCount++;
-    report.errors.push(`Erro geral durante a limpeza: ${err.message || JSON.stringify(err)}`);
-  }
-
-  return report;
-};
-
 export const validateUserPassword = (
   passwordEntered: string,
-  senhaHash?: string
+  senhaHash?: string,
+  passwordPlain?: string
 ): boolean => {
   if (!passwordEntered) return false;
 
-  // Validate exclusively using bcrypt.compareSync
+  // If we have a bcrypt hash, validate using bcrypt.compareSync
   if (senhaHash && (senhaHash.startsWith("$2a$") || senhaHash.startsWith("$2b$") || senhaHash.startsWith("$2y$"))) {
     try {
       return bcrypt.compareSync(passwordEntered, senhaHash);
     } catch (err) {
       console.error("Error in bcrypt comparison:", err);
     }
+  }
+
+  // Fallback to plain text password (for migration and backward compatibility)
+  if (passwordPlain) {
+    return passwordPlain === passwordEntered;
   }
 
   return false;
@@ -462,6 +342,7 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
 
     // Match with OFFICIAL_CREDENTIALS for robust fallback definitions
     const official = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === u.email.toLowerCase().trim());
+    const password = extra.password || (official ? official.password : "123456");
     const cargo = extra.cargo || (official ? (official as any).cargo : "");
     const almoxarifados = extra.almoxarifados || (official ? (official as any).almoxarifados : []);
     const group = extra.group || (official ? official.group : "A");
@@ -476,15 +357,14 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
       group: group,
       status: u.ativo ? "ATIVO" : "DESATIVADO",
       almoxarifados: almoxarifados || [],
-      password: "", // ALWAYS empty, we never expose or read the plain password from database JSON anymore
+      password: password,
       senha_hash: u.senha_hash || undefined,
       cargo: cargo
     };
   });
 };
 
-export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
-  checkPermission(["ADMIN"], requesterRole);
+export const dbSaveUser = async (user: AppUser) => {
   if (!isSupabaseReady()) {
     return;
   }
@@ -507,15 +387,58 @@ export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
   }
 
   let finalPasswordHash = user.senha_hash || (existingUser ? existingUser.senha_hash : undefined);
+  let finalPlainPasswordInJson = "";
 
-  if (user.password && user.password.trim() !== "") {
-    // A password was typed (creation or edit/update). Hash it safely with bcryptjs.
-    const salt = bcrypt.genSaltSync(10);
-    finalPasswordHash = bcrypt.hashSync(user.password.trim(), salt);
+  // Recover existing plain password from DB if any (for backward compatibility)
+  let oldPlainPassword = "";
+  if (existingUser && existingUser.almoxarifado) {
+    try {
+      const parsed = JSON.parse(existingUser.almoxarifado);
+      oldPlainPassword = parsed.password || "";
+    } catch (e) {}
+  }
+
+  if (existingUser) {
+    // EDIT MODE
+    if (user.password) {
+      const hasPasswordChanged = user.password !== oldPlainPassword;
+      const isHashMissing = !existingUser.senha_hash;
+
+      if (hasPasswordChanged || isHashMissing) {
+        // Password was altered or hash was missing. Hash it using bcryptjs.
+        const salt = bcrypt.genSaltSync(10);
+        finalPasswordHash = bcrypt.hashSync(user.password, salt);
+        
+        // STOPS saving any new plain-text passwords. Keep it empty.
+        finalPlainPasswordInJson = "";
+      } else {
+        // Password was not changed. Keep the existing plain password for backward compatibility
+        // (Do not delete existing data unless they are changing/creating it).
+        finalPlainPasswordInJson = oldPlainPassword;
+      }
+    } else {
+      finalPlainPasswordInJson = oldPlainPassword;
+    }
+  } else {
+    // CREATE MODE
+    if (user.password) {
+      const salt = bcrypt.genSaltSync(10);
+      finalPasswordHash = bcrypt.hashSync(user.password, salt);
+    }
+    // New users NEVER have a plain password in the JSON
+    finalPlainPasswordInJson = "";
+  }
+
+  // Safety protection: Ensure no plain text password is saved if a hash exists or is generated
+  if (user.password && finalPasswordHash) {
+    // If the password was specified/changed and we have a hash, force plain-text to empty!
+    if (user.password !== oldPlainPassword) {
+      finalPlainPasswordInJson = "";
+    }
   }
 
   const extraPayload = {
-    password: "", // ALWAYS empty, no plain text password ever stored in JSON
+    password: finalPlainPasswordInJson,
     cargo: (user as any).cargo || "",
     group: user.group || "A",
     ownerName: user.ownerName || user.name.split(" ")[0],
@@ -523,7 +446,7 @@ export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
   };
 
   const payload: any = {
-    id: user.id && String(user.id).length > 5 ? user.id : (existingUser ? existingUser.id : undefined),
+    id: user.id && user.id.length > 5 ? user.id : (existingUser ? existingUser.id : undefined),
     nome: user.name,
     email: cleanEmail,
     perfil: perf,
@@ -537,12 +460,18 @@ export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
 
   const { error } = await supabase.from('usuarios').upsert(payload, { onConflict: 'email' });
   if (error) {
-    throw error;
+    console.warn("Error during upsert with senha_hash:", error);
+    if (error.message && error.message.includes('column "senha_hash" of relation "usuarios" does not exist')) {
+      console.log("Falling back: upserting without 'senha_hash' column...");
+      delete payload.senha_hash;
+      await supabase.from('usuarios').upsert(payload, { onConflict: 'email' });
+    } else {
+      throw error;
+    }
   }
 };
 
-export const dbDeleteUser = async (email: string, id?: any, requesterRole?: string) => {
-  checkPermission(["ADMIN"], requesterRole);
+export const dbDeleteUser = async (email: string, id?: any) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -577,8 +506,7 @@ export async function dbGetCicloAtivo() {
   return data;
 }
 
-export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string, requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string) {
   const { data, error } = await supabase
     .from('ciclos')
     .upsert({ mes, ano, status: 'ABERTO', aberto_por, aberto_em: new Date().toISOString() })
@@ -587,8 +515,7 @@ export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string,
   return data;
 }
 
-export async function dbFecharCiclo(mes: string, ano: string, requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+export async function dbFecharCiclo(mes: string, ano: string) {
   const { error } = await supabase
     .from('ciclos')
     .update({ status: 'FECHADO', fechado_em: new Date().toISOString() })
@@ -688,8 +615,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   };
 };
 
-export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string) => {
-  checkPermission(["ADMIN"], requesterRole);
+export const dbSaveCycleState = async (cycle: CycleState) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -766,8 +692,7 @@ export async function dbSalvarAvaliacao(avaliacao: {
   pontos_obtidos: number, pontos_possiveis: number,
   notes?: string, nok_link1?: string, nok_link2?: string,
   nok_link3?: string, nok_descricao?: string, avaliado_por?: string
-}, requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+}) {
   const mesNum = typeof avaliacao.mes === "string" ? monthNameToNum(avaliacao.mes) : avaliacao.mes;
   const anoNum = typeof avaliacao.ano === "string" ? parseInt(avaliacao.ano) : avaliacao.ano;
   const links = [avaliacao.nok_link1, avaliacao.nok_link2, avaliacao.nok_link3].filter(Boolean) as string[];
@@ -854,8 +779,7 @@ export const getTwinBranchId = (branchId: string): string | null => {
   return pair ? (pair[0] === branchId ? pair[1] : pair[0]) : null;
 };
 
-export async function dbSaveAuditMode(branchId: string, criterionId: string, mes: string, ano: string, mode: "Presencial" | "A_Distancia", requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+export async function dbSaveAuditMode(branchId: string, criterionId: string, mes: string, ano: string, mode: "Presencial" | "A_Distancia") {
   if (!isSupabaseReady()) return;
   try {
     const { error } = await supabase.from('audit_modes').upsert({
@@ -985,166 +909,6 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
   });
 
   return mapped;
-};
-
-export const getBranchNameById = (id: string): string => {
-  const branchId = id.toLowerCase().trim();
-  if (branchId === "unitrans-jp") return "ALMOXARIFADO UNITRANS JP";
-  if (branchId === "santa-maria-jp") return "SANTA MARIA JP";
-  if (branchId === "trans-cg-bayeux") return "TRANS CG BAYEUX";
-  if (branchId === "expresso-nacional") return "TRANS CG";
-  if (branchId === "acandido-cg") return "A.CÂNDIDO CG";
-  if (branchId === "rodoviario-jaboatao") return "RODOVIÁRIO JABOATÃO";
-  if (branchId === "fretamento-jaboatao") return "FRETAMENTO JABOATÃO";
-  if (branchId === "rodoviario-cabedelo") return "RODOVIÁRIO CABEDELO";
-  if (branchId === "rodoviario-fortaleza") return "RODOVIÁRIO FORTALEZA";
-  if (branchId === "fretamento-maracanau") return "FRETAMENTO MARACANAU";
-  if (branchId === "reunidas-nat") return "REUNIDAS TRANSPORTES NAT";
-  if (branchId === "fretamento-pb") return "FRETAMENTO PB";
-  if (branchId === "unissana-rn") return "ALMOXARIFADO UNISSANA RN";
-  return id;
-};
-
-export const dbFetchAllEvaluationsForPeriod = async (
-  mesName: string,
-  anoStr: string
-): Promise<Record<string, Record<string, Partial<CriterionState>>>> => {
-  if (!isSupabaseReady()) {
-    return {};
-  }
-
-  const mesNum = monthNameToNum(mesName);
-  const anoNum = parseInt(anoStr, 10);
-
-  // Run both queries in parallel to fetch all data for the period at once
-  const [evaluationsResult, auditModesResult] = await Promise.all([
-    supabase
-      .from('avaliacoes')
-      .select('*')
-      .eq('mes', mesNum)
-      .eq('ano', anoNum),
-    supabase
-      .from('audit_modes')
-      .select('*')
-      .eq('mes', mesName)
-      .eq('ano', anoStr)
-  ]);
-
-  const { data: evaluationsData, error: evalsError } = evaluationsResult;
-  const { data: auditModesData, error: modesError } = auditModesResult;
-
-  if (evalsError) {
-    console.error("Error in dbFetchAllEvaluationsForPeriod (avaliacoes):", evalsError);
-  }
-  if (modesError) {
-    console.error("Error in dbFetchAllEvaluationsForPeriod (audit_modes):", modesError);
-  }
-
-  const result: Record<string, Record<string, Partial<CriterionState>>> = {};
-
-  // Build a structure for audit modes first
-  const auditModesMap: Record<string, Record<string, "Presencial" | "A_Distancia">> = {};
-  if (auditModesData) {
-    auditModesData.forEach((m: any) => {
-      const branchName = getBranchNameById(m.almoxarifado_id);
-      if (branchName) {
-        if (!auditModesMap[branchName]) {
-          auditModesMap[branchName] = {};
-        }
-        auditModesMap[branchName][m.criterio_id] = m.modo as "Presencial" | "A_Distancia";
-      }
-    });
-  }
-
-  // Map evaluationsData
-  if (evaluationsData) {
-    evaluationsData.forEach((row: any) => {
-      const almoxarifado = row.almoxarifado;
-      if (!almoxarifado) return;
-
-      if (!result[almoxarifado]) {
-        result[almoxarifado] = {};
-      }
-
-      const critId = row.criterio_codigo;
-      const branchAuditModes = auditModesMap[almoxarifado] || {};
-      const finalAuditMode = branchAuditModes[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
-
-      let finalNotes = row.descricao_evidencia || "";
-      let finalAlmoxarifeQuantities: number[] | undefined = undefined;
-      let finalAuditorQuantities: number[] | undefined = undefined;
-
-      const links = Array.isArray(row.links_evidencia) ? row.links_evidencia : [];
-
-      if (critId === "2" && row.descricao_evidencia) {
-        try {
-          if (row.descricao_evidencia.trim().startsWith("{")) {
-            const parsed = JSON.parse(row.descricao_evidencia);
-            finalNotes = parsed.notes || "";
-            finalAlmoxarifeQuantities = parsed.top10AlmoxarifeQuantities;
-            finalAuditorQuantities = parsed.top10AuditorQuantities;
-          }
-        } catch (e) {
-          console.error("Failed to parse JSON for top10 quantities in batch fetch:", e);
-        }
-      }
-
-      let displayStatus: EvaluationStatus = (row.resultado || "PENDENTE") as EvaluationStatus;
-      if (displayStatus === "PENDENTE") {
-        if (finalAuditMode === "A_Distancia") {
-          let hasEvidence = false;
-          if (critId === "2") {
-            const hasAlmoxarifeQuantities = Array.isArray(finalAlmoxarifeQuantities) && finalAlmoxarifeQuantities.length > 0;
-            hasEvidence = links.length > 0 || hasAlmoxarifeQuantities;
-          } else {
-            hasEvidence = links.length > 0 || (row.descricao_evidencia && row.descricao_evidencia.trim().length > 0);
-          }
-          displayStatus = hasEvidence ? "ENVIADO" : "AGUARDANDO ENVIO";
-        }
-      }
-
-      result[almoxarifado][critId] = {
-        status: displayStatus,
-        pointsObtained: row.pontuacao ?? 0,
-        pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
-        notes: finalNotes,
-        evidenceNotes: finalNotes,
-        top10AlmoxarifeQuantities: finalAlmoxarifeQuantities,
-        top10AuditorQuantities: finalAuditorQuantities,
-        nokEvidenceLinks: links,
-        submittedPhotos: links,
-        submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
-        auditMode: finalAuditMode as "Presencial" | "A_Distancia"
-      };
-    });
-  }
-
-  // Propagate remaining audit modes even if no evaluations row exists
-  Object.keys(auditModesMap).forEach((branchName) => {
-    if (!result[branchName]) {
-      result[branchName] = {};
-    }
-    const branchModes = auditModesMap[branchName];
-    Object.keys(branchModes).forEach((critId) => {
-      if (!result[branchName][critId]) {
-        const finalAuditMode = branchModes[critId] || "A_Distancia";
-        const displayStatus: EvaluationStatus = finalAuditMode === "A_Distancia" ? "AGUARDANDO ENVIO" : "PENDENTE";
-        result[branchName][critId] = {
-          status: displayStatus,
-          pointsObtained: 0,
-          pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
-          notes: "",
-          evidenceNotes: "",
-          nokEvidenceLinks: [],
-          submittedPhotos: [],
-          submittedAt: "",
-          auditMode: finalAuditMode
-        };
-      }
-    });
-  });
-
-  return result;
 };
 
 export const dbSaveEvaluation = async (
@@ -1370,8 +1134,7 @@ export const dbFetchSchedules = async (): Promise<any[]> => {
   });
 };
 
-export const dbSaveSchedules = async (schedules: any[], forceYear?: number, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export const dbSaveSchedules = async (schedules: any[], forceYear?: number) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -1427,8 +1190,7 @@ export const dbFetchBranchSchedules = async (branchId: string, options?: { ano?:
   });
 };
 
-export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string) => {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
@@ -1452,8 +1214,7 @@ export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string, 
   }
 };
 
-export const dbDeleteSchedule = async (id: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export const dbDeleteSchedule = async (id: string) => {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
@@ -1464,8 +1225,7 @@ export const dbDeleteSchedule = async (id: string, requesterRole?: string) => {
 };
 
 // ======================= WARRANTIES (garantias) =======================
-export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarGarantia(garantia: any) {
   const { error } = await supabase
     .from('garantias')
     .upsert({
@@ -1517,8 +1277,7 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   }));
 };
 
-export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveWarranties = async (warranties: WarrantyItem[]) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -1549,8 +1308,7 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
 };
 
 // ======================= LEVEL OF SERVICE OCCURRENCES =======================
-export async function dbSalvarNivelServico(registro: any, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarNivelServico(registro: any) {
   const { error } = await supabase
     .from('nivel_servico')
     .upsert({
@@ -1581,8 +1339,7 @@ export async function dbBuscarNivelServico(almoxarifado_id: string) {
   return data || [];
 }
 
-export const dbDeleteOccurrence = async (id: string, requesterRole?: string): Promise<boolean> => {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export const dbDeleteOccurrence = async (id: string): Promise<boolean> => {
   if (!isSupabaseReady()) return false;
   try {
     realtimeFlags.isLocalUpdate = true;
@@ -1621,8 +1378,7 @@ export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
   }));
 };
 
-export const dbSaveOccurrences = async (occs: MaterialOccurrence[], requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveOccurrences = async (occs: MaterialOccurrence[]) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -1649,8 +1405,7 @@ export const dbSaveOccurrences = async (occs: MaterialOccurrence[], requesterRol
 };
 
 // ======================= MATERIAIS PARADOS =======================
-export async function dbSalvarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number, materiais: any[], requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number, materiais: any[]) {
   await supabase.from('materiais_parados')
     .delete()
     .eq('almoxarifado_id', almoxarifado_id)
@@ -1706,8 +1461,7 @@ export const dbFetchNonMovingMaterials = async (almoxarifado: string, ano: numbe
   };
 };
 
-export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number, payload: any, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveNonMovingMaterials = async (almoxarifado: string, ano: number, semestre: number, payload: any) => {
   if (!isSupabaseReady()) return;
 
   try {
@@ -1762,8 +1516,7 @@ export async function dbFetchAllNonMovingSummaries(ano: number, semestre: number
 }
 
 // ======================= TOP 10 CONFIG =======================
-export async function dbSalvarTop10Config(almoxarifado_id: string, mes: string, ano: string, itens: any[], configurado_por: string, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export async function dbSalvarTop10Config(almoxarifado_id: string, mes: string, ano: string, itens: any[], configurado_por: string) {
   const { error } = await supabase
     .from('top10_config')
     .upsert({ almoxarifado_id, mes, ano, itens, configurado_por, updated_at: new Date().toISOString() },
@@ -1793,15 +1546,13 @@ export const dbFetchTop10Config = async (almoxarifado: string, mesName: string, 
   };
 };
 
-export const dbSaveTop10Config = async (almoxarifado: string, mesName: string, anoStr: string, itens: any[], user: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+export const dbSaveTop10Config = async (almoxarifado: string, mesName: string, anoStr: string, itens: any[], user: string) => {
   if (!isSupabaseReady()) return;
   await dbSalvarTop10Config(almoxarifado, mesName, anoStr, itens, user);
 };
 
 // ======================= TOP 10 ENVIOS =======================
-export async function dbSalvarTop10Envio(almoxarifado_id: string, mes: string, ano: string, quantidades: any[], fotos: any[], enviado_por: string, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarTop10Envio(almoxarifado_id: string, mes: string, ano: string, quantidades: any[], fotos: any[], enviado_por: string) {
   const { error } = await supabase
     .from('top10_envios')
     .upsert({ almoxarifado_id, mes, ano, quantidades, fotos, enviado_por, uploaded_at: new Date().toISOString() },
@@ -1826,15 +1577,13 @@ export const dbFetchTop10Envios = async (almoxarifado: string, mesName: string, 
   return data || null;
 };
 
-export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, anoStr: string, fotos: any[], user: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, anoStr: string, fotos: any[], user: string) => {
   if (!isSupabaseReady()) return;
-  await dbSalvarTop10Envio(almoxarifado, mesName, anoStr, [], fotos, user, requesterRole);
+  await dbSalvarTop10Envio(almoxarifado, mesName, anoStr, [], fotos, user);
 };
 
 // ======================= LAYOUT CONFIG =======================
-export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string, ano: string, localizacao: string, instrucoes: string, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string, ano: string, localizacao: string, instrucoes: string) {
   const mesInt = typeof mes === "number" ? mes : monthNameToNum(mes);
   const anoInt = typeof ano === "number" ? ano : parseInt(String(ano), 10);
 
@@ -1877,15 +1626,13 @@ export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string,
   };
 };
 
-export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string) => {
   if (!isSupabaseReady()) return;
-  await dbSalvarLayoutConfig(almoxarifado, mesName, anoStr, localizacao, "", requesterRole);
+  await dbSalvarLayoutConfig(almoxarifado, mesName, anoStr, localizacao, "");
 };
 
 // ======================= UNIMOBIN CERTIFICADOS =======================
-export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, ano: string, colaborador_nome: string, dados: any, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, ano: string, colaborador_nome: string, dados: any) {
   // If fileData is too large, use a placeholder instead of sending megabytes over PostgREST/PostgreSQL
   const inputData = dados.fileData || dados.file_data || null;
   const safeFileData = (inputData && inputData.length > 50000)
@@ -1968,18 +1715,16 @@ export const dbFetchColaboradoresUnimobin = async () => {
   }));
 };
 
-export const dbSaveColaboradorUnimobin = async (name: string, cargo: string, requesterRole?: string) => {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+export const dbSaveColaboradorUnimobin = async (name: string, cargo: string) => {
   if (!isSupabaseReady()) return;
   // Just save a blank mock certificate
   await dbSalvarCertificado("default", "Janeiro", "2026", name, {
     status: "Aguardando envio"
-  }, requesterRole);
+  });
 };
 
 // ======================= HISTORICO AVALIACOES =======================
-export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+export async function dbSalvarHistorico(entry: any) {
   if (!isSupabaseReady()) return;
   
   // Create object mapping both camelCase and snake_case properties
@@ -2007,13 +1752,12 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   }
 }
 
-export async function dbSaveHistory(historyList: any[], requesterRole?: string) {
-  checkPermission(["ADMIN"], requesterRole);
+export async function dbSaveHistory(historyList: any[]) {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
     for (const entry of historyList) {
-      await dbSalvarHistorico(entry, requesterRole);
+      await dbSalvarHistorico(entry);
     }
   } finally {
     realtimeFlags.isLocalUpdate = false;

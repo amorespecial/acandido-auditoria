@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 
@@ -631,27 +631,12 @@ export default function App() {
 
       if (isSupabaseReady()) {
         try {
-          console.log('[DEBUG] Iniciando carregamento de avaliações para:', activeMonth, activeYear);
+          console.log('[DEBUG] Iniciando carregamento de avaliações em lote para:', activeMonth, activeYear);
           
-          // Test direct fetch exact count of total avaliacoes rows to verify RLS
-          const { data: testCount, error: testErr } = await supabase
-            .from('avaliacoes')
-            .select('count', { count: 'exact', head: true });
-          console.log('[DEBUG] Conectividade da tabela avaliacoes:', { testCount, testErr });
-
-          const results = await Promise.all(
-            defaultBranches.map(async (branch) => {
-              const dbVals = await dbFetchEvaluations(branch.name, activeMonth, activeYear);
-              console.log(`[DEBUG] Filial ${branch.name} (${branch.id}): ${Object.keys(dbVals).length} avaliações encontradas`);
-              return { branchName: branch.name, evals: dbVals };
-            })
-          );
-          results.forEach(({ branchName, evals }) => {
-            if (Object.keys(evals).length > 0) {
-              evaluationsMap[branchName] = evals;
-              loadedFromSupabase = true;
-            }
-          });
+          // Bulk fetch all evaluations for this period to avoid parallel query explosion (~30 queries down to 2)
+          const bulkEvaluations = await dbFetchAllEvaluationsForPeriod(activeMonth, activeYear);
+          evaluationsMap = bulkEvaluations;
+          loadedFromSupabase = Object.keys(bulkEvaluations).length > 0;
         } catch (err) {
           console.error("[DEBUG] Falha catastrófica ao buscar avaliações do Supabase:", err);
         }
@@ -1107,7 +1092,7 @@ export default function App() {
     materialParadoUploaded: true
   };
 
-  const processedBranches = (() => {
+  const processedBranches = useMemo(() => {
     const actMonthLower = activeMonth.toLowerCase();
     const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
     const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
@@ -1545,7 +1530,7 @@ export default function App() {
         pointsObtainedSum: isCycleActive ? obtained : 0
       };
     });
-  })();
+  }, [branches, calendarData, allNonMovingSummaries, activeMonth, activeYear, allCycles, cycleState]);
 
   // Callback to update criteria (saves into raw state, triggering processedBranches update)
   const handleUpdateCriteria = (branchId: string, updatedCriteria: CriterionState[]) => {
@@ -1946,20 +1931,31 @@ export default function App() {
     return <Login onLogin={(u) => setUser(u)} />;
   }
 
-  // Managed branches list if Almoxarife
-  const managedBranches = user.role === "ALMOXARIFE"
-    ? processedBranches.filter((b) => {
-        if (user.email === "robson.almoxarife@acandidogrupo.com.br") {
-          return b.id.includes("jaboatao") || b.ownerName === "Sérgio";
-        }
-        return safeStr(b.ownerName).toLowerCase() === safeStr(user.ownerName).toLowerCase();
-      })
-    : [];
+  // Managed branches list if Almoxarife (Memoized for peak rendering performance)
+  const managedBranches = useMemo(() => {
+    if (!user) return [];
+    return user.role === "ALMOXARIFE"
+      ? processedBranches.filter((b) => {
+          if (user.email === "robson.almoxarife@acandidogrupo.com.br") {
+            return b.id.includes("jaboatao") || b.ownerName === "Sérgio";
+          }
+          return safeStr(b.ownerName).toLowerCase() === safeStr(user.ownerName).toLowerCase();
+        })
+      : [];
+  }, [user, processedBranches]);
 
-  // Resolves active & selected branches from PROCESSED set
-  const activeBranch = (processedBranches.find((b) => b.id === activeBranchId) || managedBranches[0] || processedBranches[0]) || initialBranches[0];
-  const selectedBranch = (processedBranches.find((b) => b.id === selectedBranchId) || processedBranches[0]) || initialBranches[0];
-  const rawSelectedBranch = (branches.find((b) => b.id === selectedBranchId) || branches[0]) || initialBranches[0];
+  // Resolves active & selected branches from PROCESSED set (Memoized to prevent unnecessary lookups)
+  const activeBranch = useMemo(() => {
+    return (processedBranches.find((b) => b.id === activeBranchId) || managedBranches[0] || processedBranches[0]) || initialBranches[0];
+  }, [processedBranches, activeBranchId, managedBranches]);
+
+  const selectedBranch = useMemo(() => {
+    return (processedBranches.find((b) => b.id === selectedBranchId) || processedBranches[0]) || initialBranches[0];
+  }, [processedBranches, selectedBranchId]);
+
+  const rawSelectedBranch = useMemo(() => {
+    return (branches.find((b) => b.id === selectedBranchId) || branches[0]) || initialBranches[0];
+  }, [branches, selectedBranchId]);
 
   return (
     <div className="min-h-screen bg-[#FBF8FC] flex flex-col font-sans select-none pb-12">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
-import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules, dbFetchOccurrences, dbSaveOccurrences, dbMigrateUsersPasswords, MigrationReport, dbCleanupLegacyPlainPasswords, CleanupReport } from "../supabaseService";
+import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules, dbFetchOccurrences, dbSaveOccurrences, dbMigrateUsersPasswords, MigrationReport } from "../supabaseService";
 import { supabase } from "../supabaseClient";
 
 const ALMOXARIFADOS_LIST = [
@@ -148,11 +148,6 @@ export default function AdminConfiguracoes({
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<MigrationReport | null>(null);
   const [migrationError, setMigrationError] = useState<string | null>(null);
-
-  // ================= STATE: PASSWORD CLEANUP (FASE 4) =================
-  const [isCleaning, setIsCleaning] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<CleanupReport | null>(null);
-  const [cleanupError, setCleanupError] = useState<string | null>(null);
 
   // Calculations for pending branches
   const branchesCount = branches.length;
@@ -820,22 +815,6 @@ export default function AdminConfiguracoes({
       setMigrationError(err.message || "Erro inesperado ao rodar a migração.");
     } finally {
       setIsMigrating(false);
-    }
-  };
-
-  // ================= FUNCTION: RUN PASSWORD CLEANUP (FASE 4) =================
-  const handleRunCleanup = async () => {
-    setIsCleaning(true);
-    setCleanupResult(null);
-    setCleanupError(null);
-    try {
-      const res = await dbCleanupLegacyPlainPasswords();
-      setCleanupResult(res);
-      await loadRealtimeUsers();
-    } catch (err: any) {
-      setCleanupError(err.message || "Erro inesperado ao rodar a limpeza.");
-    } finally {
-      setIsCleaning(false);
     }
   };
 
@@ -1702,128 +1681,6 @@ export default function AdminConfiguracoes({
                   <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs text-blue-800 flex items-center gap-1.5 font-medium">
                     <span className="material-symbols-outlined text-[16px]">info</span>
                     Todos os usuários já estavam migrados (senha_hash presente). Nenhuma ação foi necessária.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PAINEL DE LIMPEZA DEFINITIVA DE SENHAS (FASE 4) */}
-        {user?.role === "ADMIN" && (
-          <div className="bg-white rounded-xl border border-slate-100 shadow-xs p-5 space-y-4 mt-6">
-            <div className="pb-2 border-b border-slate-150">
-              <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-red-600">cleaning_services</span>
-                Limpeza Definitiva das Senhas Legadas (Fase 4.2)
-              </h3>
-              <p className="text-[11.5px] text-slate-400 mt-0.5">
-                Esta rotina remove de forma definitiva as senhas em texto puro armazenadas no campo JSON dos usuários que já possuem um hash seguro de senha cadastrado.
-              </p>
-            </div>
-
-            <div className="text-xs text-slate-600 space-y-2 bg-slate-50/50 p-4 rounded-lg border border-slate-100">
-              <p className="font-semibold text-[#1B2A4A]">O que esta ação faz:</p>
-              <ul className="list-disc pl-4 space-y-1">
-                <li>Percorre todos os usuários na base do Supabase.</li>
-                <li>Verifica se o usuário possui a coluna <code>senha_hash</code> preenchida.</li>
-                <li>Caso possua, limpa com segurança a propriedade <code>password</code> dentro do JSON da coluna <code>almoxarifado</code>.</li>
-                <li>Mantém intactas todas as demais configurações do JSON (cargo, grupo, almoxarifados permitidos, etc.).</li>
-                <li><strong>Garantia de Segurança:</strong> A partir deste momento, nenhum usuário terá senhas em texto puro salvas no sistema e o login utilizará estritamente a senha criptografada.</li>
-              </ul>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                onClick={handleRunCleanup}
-                disabled={isCleaning}
-                className={`px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow active:scale-95 transition-all ${
-                  isCleaning
-                    ? "bg-slate-200 text-slate-450 cursor-not-allowed"
-                    : "bg-red-600 hover:bg-red-700 text-white"
-                }`}
-              >
-                {isCleaning ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Limpando Senhas...
-                  </>
-                ) : (
-                  <>
-                    <span className="material-symbols-outlined text-[16px]">cleaning_services</span>
-                    Executar Limpeza de Senhas Legadas
-                  </>
-                )}
-              </button>
-
-              {cleanupResult && (
-                <button
-                  onClick={() => {
-                    setCleanupResult(null);
-                    setCleanupError(null);
-                  }}
-                  className="px-3 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-lg text-xs font-bold uppercase tracking-wider"
-                >
-                  Limpar Relatório
-                </button>
-              )}
-            </div>
-
-            {cleanupError && (
-              <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700 flex items-start gap-2">
-                <span className="material-symbols-outlined text-[16px] mt-0.5">error</span>
-                <div>
-                  <span className="font-bold">Erro de execução:</span> {cleanupError}
-                </div>
-              </div>
-            )}
-
-            {cleanupResult && (
-              <div className="space-y-3 pt-2">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-slate-50/50 border border-slate-100 p-3 rounded-lg text-center">
-                    <div className="text-lg font-black text-[#1B2A4A]">{cleanupResult.totalUsers}</div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Usuários Totais</div>
-                  </div>
-                  <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-lg text-center">
-                    <div className="text-lg font-black text-emerald-700">{cleanupResult.cleanedCount}</div>
-                    <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Limpos Nesta Execução</div>
-                  </div>
-                  <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-lg text-center">
-                    <div className="text-lg font-black text-blue-700">{cleanupResult.alreadyCleanedCount}</div>
-                    <div className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Já Estavam Limpos</div>
-                  </div>
-                  <div className="bg-red-50/50 border border-red-100 p-3 rounded-lg text-center">
-                    <div className="text-lg font-black text-red-700">{cleanupResult.errorCount}</div>
-                    <div className="text-[10px] text-red-500 font-bold uppercase tracking-wider">Erros / Alertas</div>
-                  </div>
-                </div>
-
-                {cleanupResult.errors.length > 0 && (
-                  <div className="bg-red-50/30 border border-red-100 rounded-lg p-3 space-y-1">
-                    <div className="text-[11px] font-bold text-red-800 uppercase tracking-wider">Falhas ou Alertas Identificados:</div>
-                    <div className="max-h-40 overflow-y-auto font-mono text-[10.5px] text-red-600 space-y-1 pl-4 list-disc">
-                      {cleanupResult.errors.map((err, idx) => (
-                        <div key={idx}>{err}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {cleanupResult.errors.length === 0 && cleanupResult.cleanedCount > 0 && (
-                  <div className="p-3 bg-emerald-50/40 border border-emerald-100 rounded-lg text-xs text-emerald-800 flex items-center gap-1.5 font-medium">
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    Limpeza concluída com sucesso! Os dados de senhas legadas foram apagados das contas migradas.
-                  </div>
-                )}
-
-                {cleanupResult.errors.length === 0 && cleanupResult.cleanedCount === 0 && (
-                  <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg text-xs text-blue-800 flex items-center gap-1.5 font-medium">
-                    <span className="material-symbols-outlined text-[16px]">info</span>
-                    Todos os usuários qualificados já estavam totalmente livres de senhas legadas.
                   </div>
                 )}
               </div>

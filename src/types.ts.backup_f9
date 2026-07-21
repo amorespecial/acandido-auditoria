@@ -96,7 +96,7 @@ export interface InventoryItemToCount {
 }
 
 export interface AppUser {
-  id?: string | number;
+  id?: any;
   name: string;
   role: "ADMIN" | "ALMOXARIFE" | "SUPERVISOR";
   email: string;
@@ -118,6 +118,6 @@ export interface AuditHistoryEntry {
   score: number;
   nokItems: string[];
   auditedDetails?: string;
-  criteriaState?: CriterionState[];
+  criteriaState?: any[];
   branchId?: string;
 }

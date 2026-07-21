@@ -2,6 +2,7 @@ import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
 import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus, CollaboratorCertificate } from "./types";
 import { OFFICIAL_CREDENTIALS } from "./components/Login";
+import bcrypt from "bcryptjs";
 
 const STORAGE_PREFIX = "acandido_";
 
@@ -192,6 +193,126 @@ export const seedDatabaseIfEmpty = async () => {
 };
 
 // ======================= USERS (usuarios) =======================
+export interface MigrationReport {
+  totalFound: number;
+  migratedCount: number;
+  ignoredCount: number;
+  errorCount: number;
+  errors: string[];
+}
+
+export const dbMigrateUsersPasswords = async (): Promise<MigrationReport> => {
+  const report: MigrationReport = {
+    totalFound: 0,
+    migratedCount: 0,
+    ignoredCount: 0,
+    errorCount: 0,
+    errors: []
+  };
+
+  if (!isSupabaseReady()) {
+    report.errors.push("Supabase não está configurado.");
+    return report;
+  }
+
+  try {
+    const { data: users, error } = await supabase.from("usuarios").select("*");
+    if (error) {
+      throw error;
+    }
+
+    if (!users || users.length === 0) {
+      return report;
+    }
+
+    report.totalFound = users.length;
+
+    for (const u of users) {
+      const email = u.email ? u.email.toLowerCase().trim() : "";
+      const nome = u.nome || "Sem Nome";
+
+      // Check if already has a valid bcrypt password hash
+      const hasHash = u.senha_hash && (
+        u.senha_hash.startsWith("$2a$") || 
+        u.senha_hash.startsWith("$2b$") || 
+        u.senha_hash.startsWith("$2y$")
+      );
+
+      if (hasHash) {
+        report.ignoredCount++;
+        continue;
+      }
+
+      // Recover plain password
+      let plainPassword = "";
+      if (u.almoxarifado && typeof u.almoxarifado === "string" && u.almoxarifado.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(u.almoxarifado);
+          plainPassword = parsed.password || "";
+        } catch (e) {}
+      }
+
+      if (!plainPassword) {
+        const official = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === email);
+        if (official) {
+          plainPassword = official.password;
+        }
+      }
+
+      if (!plainPassword) {
+        plainPassword = "123456"; // Default safe fallback
+      }
+
+      try {
+        const salt = bcrypt.genSaltSync(10);
+        const hash = bcrypt.hashSync(plainPassword, salt);
+
+        const { error: updateError } = await supabase
+          .from("usuarios")
+          .update({ senha_hash: hash })
+          .eq("id", u.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        report.migratedCount++;
+      } catch (err: any) {
+        report.errorCount++;
+        report.errors.push(`${nome} (${email}): ${err.message || JSON.stringify(err)}`);
+      }
+    }
+  } catch (err: any) {
+    report.errors.push(`Erro geral durante a migração: ${err.message || JSON.stringify(err)}`);
+  }
+
+  return report;
+};
+
+export const validateUserPassword = (
+  passwordEntered: string,
+  senhaHash?: string,
+  passwordPlain?: string
+): boolean => {
+  if (!passwordEntered) return false;
+
+  // If we have a bcrypt hash, validate using bcrypt.compareSync
+  if (senhaHash && (senhaHash.startsWith("$2a$") || senhaHash.startsWith("$2b$") || senhaHash.startsWith("$2y$"))) {
+    try {
+      return bcrypt.compareSync(passwordEntered, senhaHash);
+    } catch (err) {
+      console.error("Error in bcrypt comparison:", err);
+    }
+  }
+
+  // Fallback to plain text password (for migration and backward compatibility)
+  if (passwordPlain) {
+    return passwordPlain === passwordEntered;
+  }
+
+  return false;
+};
+
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
   if (!isSupabaseReady()) {
     const saved = localStorage.getItem("acandido_users");
@@ -232,6 +353,7 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
       status: u.ativo ? "ATIVO" : "DESATIVADO",
       almoxarifados: almoxarifados || [],
       password: password,
+      senha_hash: u.senha_hash || undefined,
       cargo: cargo
     };
   });
@@ -243,24 +365,88 @@ export const dbSaveUser = async (user: AppUser) => {
   }
 
   const perf = user.role === "ADMIN" ? "auditor" : user.role === "SUPERVISOR" ? "supervisor" : "almoxarife";
-  
-  // Package extra properties like password and warehouses securely to avoid db structure constraints
+  const cleanEmail = user.email.toLowerCase().trim();
+
+  // Check if the user already exists in the database to distinguish between create and edit
+  let existingUser: any = null;
+  try {
+    const { data } = await supabase
+      .from('usuarios')
+      .select('id, senha_hash, almoxarifado')
+      .eq('email', cleanEmail);
+    if (data && data.length > 0) {
+      existingUser = data[0];
+    }
+  } catch (err) {
+    console.error("Error querying existing user:", err);
+  }
+
+  let finalPasswordHash = user.senha_hash || (existingUser ? existingUser.senha_hash : undefined);
+  let shouldSavePlainPassword = true;
+  let finalPlainPassword = user.password;
+
+  if (existingUser) {
+    // EDIT MODE
+    if (user.password) {
+      let oldPlainPassword = "";
+      if (existingUser.almoxarifado) {
+        try {
+          const parsed = JSON.parse(existingUser.almoxarifado);
+          oldPlainPassword = parsed.password || "";
+        } catch (e) {}
+      }
+
+      const hasPasswordChanged = user.password !== oldPlainPassword;
+      const isHashMissing = !existingUser.senha_hash;
+
+      if (hasPasswordChanged || isHashMissing) {
+        const salt = bcrypt.genSaltSync(10);
+        finalPasswordHash = bcrypt.hashSync(user.password, salt);
+      }
+    }
+    shouldSavePlainPassword = true;
+  } else {
+    // CREATE MODE
+    if (user.password) {
+      const salt = bcrypt.genSaltSync(10);
+      finalPasswordHash = bcrypt.hashSync(user.password, salt);
+    }
+    shouldSavePlainPassword = false;
+    finalPlainPassword = undefined;
+  }
+
   const extraPayload = {
-    password: user.password,
+    password: shouldSavePlainPassword ? finalPlainPassword : "",
     cargo: (user as any).cargo || "",
     group: user.group || "A",
     ownerName: user.ownerName || user.name.split(" ")[0],
     almoxarifados: user.almoxarifados || []
   };
 
-  await supabase.from('usuarios').upsert({
-    id: user.id && user.id.length > 5 ? user.id : undefined,
+  const payload: any = {
+    id: user.id && user.id.length > 5 ? user.id : (existingUser ? existingUser.id : undefined),
     nome: user.name,
-    email: user.email.toLowerCase().trim(),
+    email: cleanEmail,
     perfil: perf,
     almoxarifado: JSON.stringify(extraPayload),
     ativo: user.status !== "DESATIVADO"
-  }, { onConflict: 'email' });
+  };
+
+  if (finalPasswordHash) {
+    payload.senha_hash = finalPasswordHash;
+  }
+
+  const { error } = await supabase.from('usuarios').upsert(payload, { onConflict: 'email' });
+  if (error) {
+    console.warn("Error during upsert with senha_hash:", error);
+    if (error.message && error.message.includes('column "senha_hash" of relation "usuarios" does not exist')) {
+      console.log("Falling back: upserting without 'senha_hash' column...");
+      delete payload.senha_hash;
+      await supabase.from('usuarios').upsert(payload, { onConflict: 'email' });
+    } else {
+      throw error;
+    }
+  }
 };
 
 export const dbDeleteUser = async (email: string, id?: any) => {

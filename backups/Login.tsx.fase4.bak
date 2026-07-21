@@ -196,12 +196,14 @@ export default function Login({ onLogin }: LoginProps) {
         return;
       }
 
+      console.log("Senha no banco / fallback:", matchedUser.password ? "[PRESENT]" : "[EMPTY]");
       console.log("Senha hash:", matchedUser.senha_hash ? "[PRESENT]" : "[EMPTY]");
 
-      // Compara senha usando validador bcrypt (senha_hash)
+      // Compara senha usando validador unificado (suporta modo híbrido bcrypt e texto plano)
       const isPasswordCorrect = validateUserPassword(
         password,
-        matchedUser.senha_hash
+        matchedUser.senha_hash,
+        matchedUser.password
       );
 
       if (!isPasswordCorrect) {
