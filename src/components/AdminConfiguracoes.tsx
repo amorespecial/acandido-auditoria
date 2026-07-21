@@ -128,6 +128,22 @@ interface MiniCollaborator {
   branchId: string;
 }
 
+function formatCycleDate(dateStr?: string) {
+  if (!dateStr || dateStr === "--") return "--";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} às ${hours}:${minutes}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 export default function AdminConfiguracoes({
   branches,
   onUpdateBranchNames,
@@ -1379,13 +1395,13 @@ export default function AdminConfiguracoes({
       </header>
 
       {/* Inner Tabs Menu */}
-      <div className="flex flex-wrap border-b border-slate-200 gap-x-2 gap-y-1 py-1 mb-2" id="menus-config-gui">
+      <div className="flex flex-wrap border-b border-slate-200 gap-x-1 gap-y-1 py-1 mb-4" id="menus-config-gui">
         <button
           onClick={() => setActiveTab("USUARIOS")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "USUARIOS"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">group</span>
@@ -1393,10 +1409,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("ALMOXARIFADOS")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "ALMOXARIFADOS"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">warehouse</span>
@@ -1404,10 +1420,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("COLABORADORES")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "COLABORADORES"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">school</span>
@@ -1415,10 +1431,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("GARANTIAS")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "GARANTIAS"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">verified_user</span>
@@ -1426,10 +1442,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("CICLO")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "CICLO"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">cycle</span>
@@ -1437,10 +1453,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("SUPERVISOR")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "SUPERVISOR"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">assignment_ind</span>
@@ -1448,10 +1464,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("INVENTARIOS")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "INVENTARIOS"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">calendar_today</span>
@@ -1459,10 +1475,10 @@ export default function AdminConfiguracoes({
         </button>
         <button
           onClick={() => setActiveTab("CRITERIOS")}
-          className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+          className={`px-4 py-2.5 text-[13px] tracking-wide border-b-2 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
             activeTab === "CRITERIOS"
-              ? "border-[#1B2A4A] text-[#1B2A4A] font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-[#F11E26] text-[#00194C] font-semibold"
+              : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">edit_note</span>
@@ -1529,7 +1545,7 @@ export default function AdminConfiguracoes({
                             return b ? b.name.replace("ALMOXARIFADO ", "") : id;
                           }).join(", ")
                         ) : (
-                          <span className="text-rose-500 font-bold">Nenhum</span>
+                          <span className="text-[#94A3B8] font-medium">Nenhum</span>
                         )}
                       </td>
                       <td className="p-3 text-center">
@@ -1541,14 +1557,14 @@ export default function AdminConfiguracoes({
                           {u.status === "SUSPENSO" ? "🚫 Suspenso" : "✅ Ativo"}
                         </span>
                       </td>
-                      <td className="p-3 text-right space-x-1 shrink-0">
+                      <td className="p-3 text-right flex items-center justify-end gap-2 shrink-0">
                         <button
                           onClick={() => handleOpenEditUser(u)}
                           disabled={isFernando}
-                          className={`px-2.5 py-1 text-[11.5px] rounded font-bold uppercase border transition ${
+                          className={`h-8 px-3 text-[11.5px] rounded-md font-semibold uppercase border transition cursor-pointer ${
                             isFernando
                               ? "text-slate-350 bg-slate-50 border-slate-100 cursor-not-allowed"
-                              : "text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-100 hover:text-blue-850"
+                              : "text-[#00194C] border-[#00194C] bg-transparent hover:bg-[#00194C]/10"
                           }`}
                         >
                           Editar
@@ -1557,12 +1573,12 @@ export default function AdminConfiguracoes({
                         <button
                           onClick={() => handleToggleUserStatus(u)}
                           disabled={isFernando}
-                          className={`px-2 py-1 text-[11.5px] rounded font-bold uppercase border transition ${
+                          className={`h-8 px-3 text-[11.5px] rounded-md font-semibold uppercase border transition cursor-pointer ${
                             isFernando
                               ? "text-slate-350 bg-slate-50 border-slate-100 cursor-not-allowed"
                               : u.status === "SUSPENSO"
-                              ? "text-emerald-700 bg-emerald-50 border-emerald-100 hover:bg-emerald-100"
-                              : "text-amber-700 bg-amber-50 border-amber-100 hover:bg-amber-100"
+                              ? "text-emerald-700 border-emerald-600 bg-transparent hover:bg-emerald-50"
+                              : "text-[#D97706] border-[#D97706] bg-transparent hover:bg-[#FEF3C7]"
                           }`}
                         >
                           {u.status === "SUSPENSO" ? "Reativar" : "Suspender"}
@@ -1571,10 +1587,10 @@ export default function AdminConfiguracoes({
                         <button
                           onClick={() => handleRequestExcludeUser(u)}
                           disabled={isFernando}
-                          className={`px-2 py-1 text-[11px] rounded font-bold uppercase border transition ${
+                          className={`h-8 px-3 text-[11.5px] rounded-md font-semibold uppercase border transition cursor-pointer ${
                             isFernando
                               ? "text-slate-350 bg-slate-50 border-slate-100 cursor-not-allowed"
-                              : "text-red-600 bg-red-50 border-red-150 hover:bg-red-100"
+                              : "text-[#F11E26] border-[#F11E26] bg-transparent hover:bg-[#FEE8E8]"
                           }`}
                         >
                           Excluir
@@ -2166,7 +2182,7 @@ export default function AdminConfiguracoes({
                     ) : cycleState?.status === "AGUARDANDO_FECHAMENTO" ? (
                       <span className="text-amber-600">● AVALIAÇÃO / PENDENTE</span>
                     ) : (
-                      <span className="text-slate-400">● NENHUM CICLO ABERTO</span>
+                      <span className="text-[#64748B]">● NENHUM CICLO ABERTO</span>
                     )}
                   </strong>
                 </div>
@@ -2264,7 +2280,7 @@ export default function AdminConfiguracoes({
                                 {c.status} {isActive && "(Ativo no Painel)"}
                               </span>
                             </td>
-                            <td className="p-3 text-slate-500 font-medium">{c.openedAt || "--"}</td>
+                            <td className="p-3 text-slate-500 font-medium">{formatCycleDate(c.openedAt)}</td>
                             <td className="p-3 text-slate-500 font-medium">{c.openedBy || "--"}</td>
                             <td className="p-3 text-center">
                               {c.status !== "ABERTO" && c.status !== "AGUARDANDO_FECHAMENTO" ? (

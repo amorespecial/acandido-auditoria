@@ -8,7 +8,7 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--gray-50);
+  background-color: #F8FAFC;
   color: var(--gray-900);
 }
 
@@ -148,9 +148,9 @@ body {
 }
 
 .badge-pendente {
-  background-color: var(--warning-bg);
-  color: var(--warning);
-  border: 1px solid rgba(217, 119, 6, 0.25);
+  background-color: #FEF3C7;
+  color: #D97706;
+  border: 1px solid #FCD34D;
   font-weight: 700;
   font-size: 12px;
   padding: 4px 10px;

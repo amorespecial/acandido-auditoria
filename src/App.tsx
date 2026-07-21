@@ -1961,7 +1961,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF8FC] flex flex-col font-sans select-none pb-12">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans select-none pb-12">
       {showLiveUpdateToast && (
         <div className="fixed top-20 right-4 bg-emerald-600 text-white font-semibold text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 z-50 border border-emerald-500/30 transition-all duration-300 animate-slide-in">
           <span className="text-sm">🔄</span>
@@ -2012,8 +2012,9 @@ export default function App() {
                 </span>
               )}
               {cycleState.status === "NENHUM" && (
-                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider shadow-sm select-none">
-                  🔘 NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
+                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                  <span className="w-2 h-2 rounded-full bg-[#94A3B8]"></span>
+                  NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
                 </span>
               )}
             </div>
@@ -2148,10 +2149,10 @@ export default function App() {
                 setAdminTab("PAINEL");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "PAINEL"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Almoxarifados ({branches.length})
@@ -2161,10 +2162,10 @@ export default function App() {
                 setAdminTab("RANKING");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "RANKING"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Ranking Corporativo
@@ -2174,10 +2175,10 @@ export default function App() {
                 setAdminTab("HISTORICO");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "HISTORICO"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Histórico Consolidado
@@ -2187,10 +2188,10 @@ export default function App() {
                 setAdminTab("GARANTIAS");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "GARANTIAS"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Garantias
@@ -2200,10 +2201,10 @@ export default function App() {
                 setAdminTab("SERVICOS");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "SERVICOS"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Serviços
@@ -2213,18 +2214,19 @@ export default function App() {
                 setAdminTab("CONFIGURI");
                 setSelectedBranchId(null);
               }}
-              className={`py-4 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
                 adminTab === "CONFIGURI"
-                  ? "border-[#1B2A4A] text-[#1B2A4A]"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-[#F11E26] text-[#00194C] font-semibold"
+                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
               }`}
             >
               Configurações
             </button>
             <button
               onClick={handleLogout}
-              className="py-4 px-1 text-xs font-bold text-red-500 hover:text-red-700 ml-auto transition shrink-0"
+              className="py-3.5 px-1 text-xs font-semibold text-[#F11E26] hover:text-[#C9181F] hover:underline ml-auto transition shrink-0 flex items-center gap-1 cursor-pointer"
             >
+              <span className="material-symbols-outlined text-[16px]">logout</span>
               Sair do Sistema
             </button>
           </div>

@@ -431,7 +431,7 @@ export default function AdminPanel({
           return (
             <div
               key={branch.id}
-              className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-[#C8A84B]/60 transition-all duration-200 group flex flex-col justify-between shadow-sm hover:shadow-md"
+              className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-[0_2px_8px_rgba(0,25,76,0.08)] hover:shadow-[0_4px_16px_rgba(0,25,76,0.12)] transition-all duration-200 group flex flex-col justify-between"
             >
               <div>
                 <div className="flex justify-between items-start gap-3 mb-3">
@@ -499,10 +499,10 @@ export default function AdminPanel({
                 </span>
                 <button
                   onClick={() => onSelectBranch(branch.id)}
-                  className={`px-3 py-1.5 active:scale-95 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm ${
+                  className={`h-[36px] px-4 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                     isArchived
                       ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                      : "bg-[#1B2A4A] hover:bg-[#121C34] text-white"
+                      : "bg-[#00194C] hover:bg-[#002B7A] text-white"
                   }`}
                 >
                   {isArchived ? "Ver Detalhes" : "Auditar"}

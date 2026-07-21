@@ -233,10 +233,10 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden" id="central-garantias-view">
       {/* Header Banner */}
-      <div className="p-6 bg-radial from-slate-900 via-slate-950/95 to-slate-950 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="p-[24px_28px] bg-[#00194C] text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-[3px] border-[#F11E26]">
         <div>
-          <h2 className="text-lg font-black tracking-tight" id="central-garantias-header-title">Central de Garantias</h2>
-          <p className="text-xs text-slate-300 mt-0.5" id="central-garantias-header-subtitle">
+          <h2 className="text-[18px] font-semibold text-white tracking-tight" id="central-garantias-header-title">Central de Garantias</h2>
+          <p className="text-[13px] text-[#94A3B8] mt-0.5" id="central-garantias-header-subtitle">
             {branch 
               ? `Visão consolidada e controle de todos os registros de garantia para a unidade ${branch.name}`
               : "Visão consolidada e controle de todos os registros de garantia de todos os almoxarifados"}
@@ -247,7 +247,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
           type="button"
           onClick={exportToCSV}
           disabled={filteredWarranties.length === 0}
-          className="bg-[#C8A85B] hover:bg-[#B6964E] text-[#1B2A4A] transition-all disabled:opacity-40 disabled:pointer-events-none px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+          className="border border-white text-white bg-transparent hover:bg-white/10 transition-all disabled:opacity-40 disabled:pointer-events-none px-4 py-2 rounded-lg text-xs font-semibold uppercase flex items-center gap-1.5 active:scale-95 cursor-pointer"
         >
           <span className="material-symbols-outlined text-[16px]">download</span>
           Exportar CSV
