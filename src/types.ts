@@ -103,6 +103,7 @@ export interface AppUser {
   ownerName: string;
   group: "A" | "B";
   password?: string;
+  senha_hash?: string;
   status?: "ATIVO" | "SUSPENSO" | "DESATIVADO";
   almoxarifados?: string[];
   cargo?: string;

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { AppUser } from "../types";
-import { isSupabaseReady, dbFetchUsers, validateUserPassword } from "../supabaseService";
+import { isSupabaseReady, dbFetchUsers } from "../supabaseService";
 
 interface LoginProps {
   onLogin: (user: AppUser) => void;
@@ -196,17 +196,12 @@ export default function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      console.log("Senha no banco / fallback:", matchedUser.password ? "[PRESENT]" : "[EMPTY]");
-      console.log("Senha hash:", matchedUser.senha_hash ? "[PRESENT]" : "[EMPTY]");
+      console.log("Senha no banco / fallback:", matchedUser.password);
+      console.log("Senha digitada:", password);
+      console.log("Senhas conferem:", matchedUser.password === password);
 
-      // Compara senha usando validador unificado (suporta modo híbrido bcrypt e texto plano)
-      const isPasswordCorrect = validateUserPassword(
-        password,
-        matchedUser.senha_hash,
-        matchedUser.password
-      );
-
-      if (!isPasswordCorrect) {
+      // Compara senha
+      if (matchedUser.password !== password) {
         setErrorMsg("Senha incorreta.");
         setIsLoading(false);
         return;
