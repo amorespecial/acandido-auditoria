@@ -1971,7 +1971,7 @@ export default function App() {
         </div>
       )}
       {/* BRAND HEADER & DEMO SWITCHER */}
-      <header className="w-full bg-[#1B2A4A] border-b-4 border-[#C8A84B] sticky top-0 z-30 shadow-md">
+      <header className="w-full bg-[#00194C] border-b-[3px] border-[#F11E26] sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           {/* Main Logo Text */}
           <div className="flex items-center gap-3 select-none">
@@ -1979,11 +1979,11 @@ export default function App() {
               <span className="text-lg sm:text-lg font-black text-white tracking-[0.15em] font-sans">
                 GRUPO A.CÂNDIDO
               </span>
-              <span className="w-2 h-2 bg-[#EF4444] rounded-full self-baseline mb-1 sm:mb-1.5 ml-1 animate-pulse"></span>
+              <span className="w-2 h-2 bg-[#F11E26] rounded-full self-baseline mb-1 sm:mb-1.5 ml-1 animate-pulse"></span>
             </div>
             <div className="h-5 w-px bg-white/20"></div>
             <div>
-              <p className="text-[10px] text-[#C8A85B] font-extrabold tracking-widest uppercase leading-none">
+              <p className="text-[11px] text-red-200 font-extrabold tracking-widest uppercase leading-none">
                 SISTEMA DE AUDITORIA
               </p>
             </div>
@@ -1991,22 +1991,25 @@ export default function App() {
             {/* Global Manual status badge visible to all */}
             <div className="ml-2">
               {cycleState.status === "ABERTO" && (
-                <span className="inline-flex bg-emerald-500/10 border border-emerald-500/35 text-emerald-400 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
-                  ● CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
+                <span className="inline-flex bg-[#FEE8E8] border border-[#F11E26]/40 text-[#F11E26] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                  <span className="w-2 h-2 rounded-full bg-[#F11E26]"></span>
+                  CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
-                <span className="inline-flex bg-amber-500/15 border border-amber-500/30 text-amber-500 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
-                  ● AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
+                <span className="inline-flex bg-[#FEF3C7] border border-[#D97706]/40 text-[#D97706] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                  <span className="w-2 h-2 rounded-full bg-[#D97706]"></span>
+                  AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "FECHADO" && (
-                <span className="inline-flex bg-[#374151]/45 border border-slate-600 text-slate-400 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider items-center gap-1 shadow-inner select-none">
-                  ● FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
+                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  CICLO FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
                 </span>
               )}
               {cycleState.status === "NENHUM" && (
-                <span className="inline-flex bg-[#374151] border border-slate-600 text-slate-300 font-extrabold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] uppercase tracking-wider shadow-inner select-none">
+                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider shadow-sm select-none">
                   🔘 NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
                 </span>
               )}

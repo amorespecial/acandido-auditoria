@@ -99,51 +99,54 @@ export default function AdminPanel({
   return (
     <div className="space-y-6" id="painel-principal">
       {/* ================= CONTROLE MANUAL DE CICLO CARD ================= */}
-      <section className="bg-[#1C2C4E] text-white p-5 rounded-2xl border border-slate-700/40 shadow-md">
+      <section className="bg-[#00194C] text-white p-6 rounded-xl border border-slate-700/50 shadow-md">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#C8A84B] text-[26px]">lock_clock</span>
-              <h3 className="text-base font-black uppercase tracking-wider">Controle Manual do Ciclo de Auditoria</h3>
+              <span className="material-symbols-outlined text-[#F11E26] text-[26px]">lock_clock</span>
+              <h3 className="text-base font-bold uppercase tracking-wider text-white">Controle Manual do Ciclo de Auditoria</h3>
             </div>
-            <p className="text-xs text-indigo-100 max-w-2xl leading-relaxed">
-              O sistema funciona em modo 100% manual. Os prazos automáticos de data foram desativados. Os almoxarifes só podem transmitir evidências enquanto o ciclo estiver aberto.
+            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+              O sistema funciona em modo 100% manual. Os prazos automáticos foram desativados. Os almoxarifes transmitem evidências enquanto o ciclo estiver aberto.
             </p>
 
             {/* Status tags */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               {cycleState.status === "ABERTO" && (
                 <>
-                  <span className="bg-emerald-600/25 border border-emerald-500/40 text-emerald-400 font-extrabold px-3 py-1 rounded text-xs select-none">
-                    ● CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
+                  <span className="bg-[#FEE8E8] border border-[#F11E26]/40 text-[#F11E26] font-bold px-3 py-1 rounded-full text-xs select-none inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#F11E26]"></span>
+                    CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
                   </span>
-                  <span className="text-[10px] text-slate-350">
-                    Iniciado em <strong className="text-white">{cycleState.openedAt}</strong> por <strong className="text-white text-bold">{cycleState.openedBy}</strong>. Almoxarifes podem enviar evidências normalmente.
+                  <span className="text-xs text-slate-300">
+                    Iniciado em <strong className="text-white">{cycleState.openedAt}</strong> por <strong className="text-white font-bold">{cycleState.openedBy}</strong>. Envios liberados.
                   </span>
                 </>
               )}
               {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
                 <>
-                  <span className="bg-amber-500/20 border border-amber-500/40 text-amber-500 font-extrabold px-3 py-1 rounded text-xs select-none">
-                    ● AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
+                  <span className="bg-[#FEF3C7] border border-[#D97706]/40 text-[#D97706] font-bold px-3 py-1 rounded-full text-xs select-none inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#D97706]"></span>
+                    AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
                   </span>
-                  <span className="text-[10px] text-slate-350">
-                    Modo avaliação. Envios bloqueados para os almoxarifes. Aguardando revisão de notas de {cycleState.openedBy || user?.name || "Fernando Silva"}.
+                  <span className="text-xs text-slate-300">
+                    Modo avaliação. Envios bloqueados para os almoxarifes. Aguardando revisão pelo auditor.
                   </span>
                 </>
               )}
               {cycleState.status === "FECHADO" && (
                 <>
-                  <span className="bg-[#374151]/55 border border-slate-600 text-slate-300 font-extrabold px-3 py-1 rounded text-xs select-none">
-                    ● FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
+                  <span className="bg-slate-800 border border-slate-600 text-slate-300 font-bold px-3 py-1 rounded-full text-xs select-none inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
                   </span>
-                  <span className="text-[10px] text-slate-350">
-                    O mês está FECHADO para envios. Os dados estão disponíveis para consulta e avaliação final pelo Auditor Geral.
+                  <span className="text-xs text-slate-300">
+                    O mês está FECHADO para envios. Dados disponíveis para consulta e avaliação final.
                   </span>
                 </>
               )}
               {cycleState.status === "NENHUM" && (
-                <span className="bg-slate-700/45 border border-slate-600 text-slate-400 font-extrabold px-3 py-1 rounded text-xs select-none">
+                <span className="bg-slate-800 border border-slate-600 text-slate-300 font-bold px-3 py-1 rounded-full text-xs select-none">
                   🔘 NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
                 </span>
               )}
@@ -158,9 +161,9 @@ export default function AdminPanel({
                   setOpenForm({ month: "Junho", year: "2026" });
                   setShowOpenModal(true);
                 }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow flex items-center gap-1.5 transition active:scale-95"
+                className="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow flex items-center gap-2 transition active:scale-95"
               >
-                <span className="material-symbols-outlined text-[15px]">power_settings_new</span>
+                <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
                 Abrir Novo Ciclo
               </button>
             )}
@@ -173,7 +176,7 @@ export default function AdminPanel({
                       onUpdateCycleState({ ...cycleState, status: "AGUARDANDO_FECHAMENTO" });
                       alert(`O ciclo de ${cycleState.activeMonth} foi alterado para 'Aguardando Fechamento'! Almoxarifes agora estão trancados em modo de avaliação.`);
                     }}
-                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-[#1B2A4A] rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                    className="h-10 px-4 bg-amber-500 hover:bg-amber-600 text-[#00194C] rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                   >
                     Bloquear Envios (Avaliar)
                   </button>
@@ -183,7 +186,7 @@ export default function AdminPanel({
                       onUpdateCycleState({ ...cycleState, status: "ABERTO" });
                       alert(`O ciclo de ${cycleState.activeMonth} foi reaberto. Almoxarifes já podem reenviar evidências.`);
                     }}
-                    className="px-3.5 py-2 bg-[#C8A84B] hover:bg-[#B3931C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                    className="h-10 px-4 bg-[#F11E26] hover:bg-[#C9181F] text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                   >
                     Reabrir para Ajustes
                   </button>
@@ -193,7 +196,7 @@ export default function AdminPanel({
                     onUpdateCycleState({ ...cycleState, status: "FECHADO" });
                     alert(`O ciclo de ${cycleState.activeMonth} foi alterado para FECHADO! Os dados permanecem legíveis para consulta mas novos envios estão encerrados.`);
                   }}
-                  className="px-3.5 py-2 bg-[#2D3748] hover:bg-[#1A202C] text-white rounded-xl text-xs font-black uppercase tracking-wider shadow border border-slate-700/40 transition"
+                  className="h-10 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow border border-slate-700 transition"
                 >
                   Fechar Mês
                 </button>
@@ -207,7 +210,7 @@ export default function AdminPanel({
                     onUpdateCycleState({ ...cycleState, status: "ABERTO" });
                     alert(`O ciclo de ${cycleState.activeMonth} foi reaberto para ajustes gerais.`);
                   }}
-                  className="px-3.5 py-2 bg-[#C8A84B] hover:bg-[#B3931C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow transition"
+                  className="h-10 px-4 bg-[#00194C] hover:bg-[#002B7A] text-white border border-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                 >
                   Reabrir para Ajustes
                 </button>
@@ -217,9 +220,9 @@ export default function AdminPanel({
                     setCloseStage(1);
                     setShowCloseModal(true);
                   }}
-                  className="px-3.5 py-2 bg-red-650 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow flex items-center gap-1.5 transition"
+                  className="h-10 px-4 bg-[#F11E26] hover:bg-[#C9181F] text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow flex items-center gap-1.5 transition"
                 >
-                  <span className="material-symbols-outlined text-[15px]">lock</span>
+                  <span className="material-symbols-outlined text-[18px]">lock</span>
                   Fechar e Arquivar
                 </button>
               </>
@@ -230,40 +233,40 @@ export default function AdminPanel({
 
       {/* Overview stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total de Unidades</p>
-          <p className="text-2xl font-black text-[#1B2A4A] mt-1">{filteredBranches.length}</p>
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Total de Unidades</p>
+          <p className="text-3xl font-bold text-[#00194C] mt-2">{filteredBranches.length}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Aprovadas (OK)</p>
-          <p className="text-2xl font-black text-emerald-600 mt-1">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Aprovadas (100 pts)</p>
+          <p className="text-3xl font-bold text-emerald-600 mt-2">
             {filteredBranches.filter((b) => {
               const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
               return hasRegistered && b.currentScore >= 100;
             }).length}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Abaixo da Meta</p>
-          <p className="text-2xl font-black text-red-500 mt-1">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Abaixo da Meta</p>
+          <p className="text-3xl font-bold text-[#F11E26] mt-2">
             {filteredBranches.filter((b) => {
               const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
               return hasRegistered && b.currentScore < 100;
             }).length}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-amber-100 bg-amber-50/10">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-amber-600">Aguardando Avaliação</p>
-          <p className="text-2xl font-black text-slate-650 text-slate-600 mt-1">
+        <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-sm bg-amber-50/20">
+          <p className="text-xs uppercase font-bold tracking-wider text-amber-700">Aguardando Avaliação</p>
+          <p className="text-3xl font-bold text-amber-600 mt-2">
             {filteredBranches.filter((b) => {
               const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
               return !hasRegistered;
             }).length}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Média de Desempenho</p>
-          <p className="text-2xl font-black text-[#C8A84B] mt-1 pr-1 font-mono">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Média de Desempenho</p>
+          <p className="text-3xl font-bold text-[#00194C] mt-2 font-mono">
             {(() => {
               const evaluatedBranches = filteredBranches.filter(b => b.criteria.some(c => c.status === "OK" || c.status === "NOK"));
               if (evaluatedBranches.length === 0) return "0 pts";

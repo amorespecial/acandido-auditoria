@@ -203,38 +203,38 @@ export default function AlmoxarifeHome({
   return (
     <div className="space-y-6 max-w-md mx-auto">
       {/* USER PROFILE WELCOME BANNER */}
-      <section className="bg-gradient-to-r from-[#1B2A4A] to-[#253D6D] rounded-2xl p-6 text-white shadow-lg overflow-hidden relative">
+      <section className="bg-[#00194C] rounded-xl p-6 text-white shadow-md overflow-hidden relative border-b-4 border-[#F11E26]">
         {/* Background glow overlay */}
-        <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-15 pointer-events-none">
-          <span className="material-symbols-outlined text-[130px] font-thin text-[#C8A84B]">
+        <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-10 pointer-events-none">
+          <span className="material-symbols-outlined text-[130px] font-thin text-white">
             warehouse
           </span>
         </div>
 
-        <p className="text-[10px] font-bold text-[#C8A84B] uppercase tracking-widest font-mono">
+        <p className="text-xs font-bold text-red-300 uppercase tracking-widest font-mono">
           Painel do Almoxarife • Grupo {branch.group}
         </p>
-        <h2 className="text-2xl font-black mt-1">Olá, {user.name}!</h2>
-        <p className="text-xs text-white/75 mt-0.5 leading-tight">Unidade: {branch.name}</p>
+        <h2 className="text-2xl font-bold mt-1 text-white">Olá, {user.name}!</h2>
+        <p className="text-xs text-slate-300 mt-0.5 leading-tight">Unidade: {branch.name}</p>
 
         {/* Dashboard scoring meter */}
-        <div className="mt-6 flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-xl">
+        <div className="mt-6 flex items-center justify-between bg-white/10 border border-white/15 p-4 rounded-lg">
           <div>
-            <p className="text-[10px] font-bold text-slate-300 uppercase">Pontuação do Mês</p>
-            <p className="text-3xl font-black text-[#C8A84B] mt-1 font-mono">
+            <p className="text-xs font-bold text-slate-300 uppercase">Pontuação do Mês</p>
+            <p className="text-3xl font-bold text-white mt-1 font-mono">
               {score}
-              <span className="text-sm text-white/60 font-medium">/100 pts</span>
+              <span className="text-sm text-slate-300 font-medium">/100 pts</span>
             </p>
           </div>
           <div className="text-right">
             <span
-              className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
-                isApproved ? "bg-emerald-500 text-white" : "bg-amber-500 text-[#1B2A4A]"
+              className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
+                isApproved ? "bg-emerald-600 text-white" : "bg-amber-500 text-[#00194C]"
               }`}
             >
               {isApproved ? "OK (Meta Atingida)" : "Em Alerta"}
             </span>
-            <p className="text-[9px] text-slate-300 font-bold uppercase mt-2">Sua meta é 80 pts</p>
+            <p className="text-[11px] text-slate-300 font-bold uppercase mt-2">Sua meta é 80 pts</p>
           </div>
         </div>
       </section>
