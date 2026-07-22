@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, MaterialOccurrence, AppUser } from "../types";
 import { initialOccurrences } from "../mockData";
-import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady } from "../supabaseService";
+import { dbFetchOccurrences, dbSaveOccurrences, dbFetchSupervisorFieldConfig, isSupabaseReady } from "../supabaseService";
 
 interface SupervisorPanelProps {
   user: AppUser;
@@ -60,7 +60,22 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
   // Watch for changes across tabs or screens
   useEffect(() => {
+    let active = true;
+    const loadRemoteFields = async () => {
+      try {
+        const remoteFields = await dbFetchSupervisorFieldConfig();
+        if (remoteFields && Array.isArray(remoteFields) && remoteFields.length > 0 && active) {
+          setFields(remoteFields);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote supervisor fields config:", e);
+      }
+    };
+
+    loadRemoteFields();
+
     const handleStorageChange = () => {
+      loadRemoteFields();
       const saved = localStorage.getItem("acandido_occurrences");
       if (saved) {
         try {
@@ -82,9 +97,10 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("field-configs-updated", handleStorageChange);
     // Periodically poll local storage in case multiple tabs/components are working together
-    const interval = setInterval(handleStorageChange, 1000);
+    const interval = setInterval(handleStorageChange, 2000);
 
     return () => {
+      active = false;
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("field-configs-updated", handleStorageChange);
       clearInterval(interval);

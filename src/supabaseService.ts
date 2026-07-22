@@ -1761,6 +1761,96 @@ export async function dbFetchAllNonMovingSummaries(ano: number, semestre: number
   }
 }
 
+// ======================= SYSTEM GLOBAL CONFIGURATIONS =======================
+export async function dbSaveSystemConfig(configKey: string, payload: any, requesterRole?: string) {
+  if (!isSupabaseReady()) return;
+  try {
+    const { error } = await supabase
+      .from('top10_config')
+      .upsert({
+        almoxarifado_id: 'sys_config',
+        mes: configKey,
+        ano: 'global',
+        itens: payload,
+        configurado_por: 'Admin',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'almoxarifado_id,mes,ano' });
+
+    if (error) {
+      console.error(`[dbSaveSystemConfig] Error saving ${configKey}:`, error);
+    }
+  } catch (err) {
+    console.error(`[dbSaveSystemConfig] Exception saving ${configKey}:`, err);
+  }
+}
+
+export async function dbFetchSystemConfig(configKey: string): Promise<any | null> {
+  if (!isSupabaseReady()) return null;
+  try {
+    const { data, error } = await supabase
+      .from('top10_config')
+      .select('itens')
+      .eq('almoxarifado_id', 'sys_config')
+      .eq('mes', configKey)
+      .eq('ano', 'global')
+      .single();
+
+    if (error || !data) return null;
+    return data.itens;
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function dbFetchGarantiaFieldConfig() {
+  return await dbFetchSystemConfig('garantia_fields');
+}
+export async function dbSaveGarantiaFieldConfig(config: any, requesterRole?: string) {
+  await dbSaveSystemConfig('garantia_fields', config, requesterRole);
+}
+
+export async function dbFetchTop10FieldConfig() {
+  return await dbFetchSystemConfig('top10_fields');
+}
+export async function dbSaveTop10FieldConfig(config: any, requesterRole?: string) {
+  await dbSaveSystemConfig('top10_fields', config, requesterRole);
+}
+
+export async function dbFetchLayoutFieldConfig() {
+  return await dbFetchSystemConfig('layout_fields');
+}
+export async function dbSaveLayoutFieldConfig(config: any, requesterRole?: string) {
+  await dbSaveSystemConfig('layout_fields', config, requesterRole);
+}
+
+export async function dbFetchUnimobinFieldConfig() {
+  return await dbFetchSystemConfig('unimobin_fields');
+}
+export async function dbSaveUnimobinFieldConfig(config: any, requesterRole?: string) {
+  await dbSaveSystemConfig('unimobin_fields', config, requesterRole);
+}
+
+export async function dbFetchSupervisorFieldConfig() {
+  return await dbFetchSystemConfig('supervisor_fields');
+}
+export async function dbSaveSupervisorFieldConfig(fields: any[], requesterRole?: string) {
+  await dbSaveSystemConfig('supervisor_fields', fields, requesterRole);
+}
+
+export async function dbFetchPresetItems() {
+  return await dbFetchSystemConfig('preset_items');
+}
+export async function dbSavePresetItems(items: any[], requesterRole?: string) {
+  await dbSaveSystemConfig('preset_items', items, requesterRole);
+}
+
+export async function dbFetchPresetManufacturers() {
+  return await dbFetchSystemConfig('preset_manufacturers');
+}
+export async function dbSavePresetManufacturers(mfrs: string[], requesterRole?: string) {
+  await dbSaveSystemConfig('preset_manufacturers', mfrs, requesterRole);
+}
+
 // ======================= TOP 10 CONFIG =======================
 export async function dbSalvarTop10Config(almoxarifado_id: string, mes: string, ano: string, itens: any[], configurado_por: string, requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);

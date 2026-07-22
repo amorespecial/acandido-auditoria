@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
-import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties } from "../supabaseService";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeGarantiaProps {
@@ -146,7 +146,22 @@ export default function AlmoxarifeGarantia({
   } | null>(null);
 
   React.useEffect(() => {
+    let active = true;
+    const loadRemoteConfig = async () => {
+      try {
+        const remoteCfg = await dbFetchGarantiaFieldConfig();
+        if (remoteCfg && typeof remoteCfg === "object" && active) {
+          setGarantiaConfig(remoteCfg);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote garantia config:", e);
+      }
+    };
+
+    loadRemoteConfig();
+
     const handleStorage = () => {
+      loadRemoteConfig();
       try {
         const saved = localStorage.getItem("acandido_garantia_fields_config");
         if (saved) {
@@ -154,8 +169,14 @@ export default function AlmoxarifeGarantia({
         }
       } catch (e) {}
     };
+
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener("field-configs-updated", handleStorage);
+    return () => {
+      active = false;
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("field-configs-updated", handleStorage);
+    };
   }, []);
 
   // Use activeBranch from App-level switcher if provided, otherwise default to first owned branch

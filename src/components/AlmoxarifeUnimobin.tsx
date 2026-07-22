@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
-import { dbBuscarCertificados, dbSalvarCertificado, isSupabaseReady } from "../supabaseService";
+import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, isSupabaseReady } from "../supabaseService";
 import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeUnimobinProps {
@@ -52,15 +52,32 @@ export default function AlmoxarifeUnimobin({
   const [customFormValues, setCustomFormValues] = useState<Record<string, Record<string, string>>>({});
 
   React.useEffect(() => {
+    let active = true;
+    const loadRemoteConfig = async () => {
+      try {
+        const remoteCfg = await dbFetchUnimobinFieldConfig();
+        if (remoteCfg && typeof remoteCfg === "object" && active) {
+          setUnimobinConfig(remoteCfg);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote unimobin field config:", e);
+      }
+    };
+
+    loadRemoteConfig();
+
     const handleStorage = () => {
+      loadRemoteConfig();
       try {
         const saved = localStorage.getItem("acandido_unimobin_fields_config");
         if (saved) setUnimobinConfig(JSON.parse(saved));
       } catch (e) {}
     };
+
     window.addEventListener("storage", handleStorage);
     window.addEventListener("field-configs-updated", handleStorage);
     return () => {
+      active = false;
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("field-configs-updated", handleStorage);
     };

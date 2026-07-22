@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
-import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence } from "../supabaseService";
+import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig } from "../supabaseService";
 
 interface AlmoxarifeNivelServicoProps {
   onBack: () => void;
@@ -83,7 +83,22 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   // Listen to other tab changes, branch switching, or supervisor panel updates
   useEffect(() => {
+    let active = true;
+    const loadRemoteFields = async () => {
+      try {
+        const remoteFields = await dbFetchSupervisorFieldConfig();
+        if (remoteFields && Array.isArray(remoteFields) && remoteFields.length > 0 && active) {
+          setFields(remoteFields);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote supervisor fields in AlmoxarifeNivelServico:", e);
+      }
+    };
+
+    loadRemoteFields();
+
     const handleStorageChange = () => {
+      loadRemoteFields();
       const saved = localStorage.getItem("acandido_occurrences");
       if (saved) {
         try {
@@ -109,6 +124,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("field-configs-updated", handleStorageChange);
     return () => {
+      active = false;
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("field-configs-updated", handleStorageChange);
     };

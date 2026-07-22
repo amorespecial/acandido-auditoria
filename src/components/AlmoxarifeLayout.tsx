@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { CriterionState } from "../types";
-import { dbFetchLayoutConfig, isSupabaseReady } from "../supabaseService";
+import { dbFetchLayoutConfig, dbFetchLayoutFieldConfig, isSupabaseReady } from "../supabaseService";
 import { getOrderedFields, BUILTIN_LAYOUT_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeLayoutProps {
@@ -96,15 +96,32 @@ export default function AlmoxarifeLayout({
   const [customFormValues, setCustomFormValues] = useState<Record<string, string>>({});
 
   React.useEffect(() => {
+    let active = true;
+    const loadRemoteConfig = async () => {
+      try {
+        const remoteCfg = await dbFetchLayoutFieldConfig();
+        if (remoteCfg && typeof remoteCfg === "object" && active) {
+          setLayoutFieldsConfig(remoteCfg);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote layout field config:", e);
+      }
+    };
+
+    loadRemoteConfig();
+
     const handleStorage = () => {
+      loadRemoteConfig();
       try {
         const saved = localStorage.getItem("acandido_layout_fields_config");
         if (saved) setLayoutFieldsConfig(JSON.parse(saved));
       } catch (e) {}
     };
+
     window.addEventListener("storage", handleStorage);
     window.addEventListener("field-configs-updated", handleStorage);
     return () => {
+      active = false;
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("field-configs-updated", handleStorage);
     };

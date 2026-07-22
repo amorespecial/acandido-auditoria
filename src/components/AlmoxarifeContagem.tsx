@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
-import { dbFetchTop10Config, isSupabaseReady } from "../supabaseService";
+import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady } from "../supabaseService";
 import { getOrderedFields, BUILTIN_TOP10_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeContagemProps {
@@ -131,7 +131,22 @@ export default function AlmoxarifeContagem({
   const [customFormValues, setCustomFormValues] = useState<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
+    let active = true;
+    const loadRemoteConfig = async () => {
+      try {
+        const remoteCfg = await dbFetchTop10FieldConfig();
+        if (remoteCfg && typeof remoteCfg === "object" && active) {
+          setTop10Config(remoteCfg);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote top10 field config:", e);
+      }
+    };
+
+    loadRemoteConfig();
+
     const handleStorage = () => {
+      loadRemoteConfig();
       try {
         const saved = localStorage.getItem("acandido_top10_fields_config");
         if (saved) setTop10Config(JSON.parse(saved));
@@ -140,6 +155,7 @@ export default function AlmoxarifeContagem({
     window.addEventListener("storage", handleStorage);
     window.addEventListener("field-configs-updated", handleStorage);
     return () => {
+      active = false;
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("field-configs-updated", handleStorage);
     };

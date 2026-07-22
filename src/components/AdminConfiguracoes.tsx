@@ -1,6 +1,34 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
-import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules, dbFetchOccurrences, dbSaveOccurrences, dbMigrateUsersPasswords, MigrationReport, dbCleanupLegacyPlainPasswords, CleanupReport } from "../supabaseService";
+import {
+  isSupabaseReady,
+  dbFetchUsers,
+  dbSaveUser,
+  dbDeleteUser,
+  dbSaveSchedules,
+  dbDeleteSchedule,
+  dbFetchSchedules,
+  dbFetchOccurrences,
+  dbSaveOccurrences,
+  dbMigrateUsersPasswords,
+  MigrationReport,
+  dbCleanupLegacyPlainPasswords,
+  CleanupReport,
+  dbFetchGarantiaFieldConfig,
+  dbSaveGarantiaFieldConfig,
+  dbFetchTop10FieldConfig,
+  dbSaveTop10FieldConfig,
+  dbFetchLayoutFieldConfig,
+  dbSaveLayoutFieldConfig,
+  dbFetchUnimobinFieldConfig,
+  dbSaveUnimobinFieldConfig,
+  dbFetchSupervisorFieldConfig,
+  dbSaveSupervisorFieldConfig,
+  dbFetchPresetItems,
+  dbSavePresetItems,
+  dbFetchPresetManufacturers,
+  dbSavePresetManufacturers
+} from "../supabaseService";
 import { supabase } from "../supabaseClient";
 import { DraggableFieldList } from "./DraggableFieldList";
 import {
@@ -453,34 +481,94 @@ export default function AdminConfiguracoes({
     }
   };
 
+  // ================= LOAD GLOBAL CONFIGURATIONS FROM SUPABASE ON MOUNT =================
+  useEffect(() => {
+    let isSubscribed = true;
+    const loadGlobalConfigsFromSupabase = async () => {
+      try {
+        const [
+          supFields,
+          garantiaCfg,
+          top10Cfg,
+          layoutCfg,
+          unimobinCfg,
+          presetItemsData,
+          presetMfrsData
+        ] = await Promise.all([
+          dbFetchSupervisorFieldConfig(),
+          dbFetchGarantiaFieldConfig(),
+          dbFetchTop10FieldConfig(),
+          dbFetchLayoutFieldConfig(),
+          dbFetchUnimobinFieldConfig(),
+          dbFetchPresetItems(),
+          dbFetchPresetManufacturers()
+        ]);
+
+        if (!isSubscribed) return;
+
+        if (supFields && Array.isArray(supFields) && supFields.length > 0) {
+          setSupervisorFields(supFields);
+        }
+        if (garantiaCfg && typeof garantiaCfg === "object" && Object.keys(garantiaCfg).length > 0) {
+          setGarantiaConfig(garantiaCfg);
+        }
+        if (top10Cfg && typeof top10Cfg === "object" && Object.keys(top10Cfg).length > 0) {
+          setTop10Config(top10Cfg);
+        }
+        if (layoutCfg && typeof layoutCfg === "object" && Object.keys(layoutCfg).length > 0) {
+          setLayoutConfig(layoutCfg);
+        }
+        if (unimobinCfg && typeof unimobinCfg === "object" && Object.keys(unimobinCfg).length > 0) {
+          setUnimobinConfig(unimobinCfg);
+        }
+        if (presetItemsData && Array.isArray(presetItemsData) && presetItemsData.length > 0) {
+          setGItems(presetItemsData);
+        }
+        if (presetMfrsData && Array.isArray(presetMfrsData) && presetMfrsData.length > 0) {
+          setGManufacturers(presetMfrsData);
+        }
+      } catch (e) {
+        console.warn("[AdminConfiguracoes] Erro ao carregar configurações globais do Supabase:", e);
+      }
+    };
+
+    loadGlobalConfigsFromSupabase();
+    return () => { isSubscribed = false; };
+  }, []);
+
   // Synchronizers
   useEffect(() => {
     localStorage.setItem("acandido_supervisor_form_fields", JSON.stringify(supervisorFields));
     localStorage.setItem("acandido_supervisor_fields", JSON.stringify(supervisorFields));
+    dbSaveSupervisorFieldConfig(supervisorFields).catch(e => console.error("Error saving supervisor fields config:", e));
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [supervisorFields]);
 
   useEffect(() => {
     localStorage.setItem("acandido_garantia_fields_config", JSON.stringify(garantiaConfig));
+    dbSaveGarantiaFieldConfig(garantiaConfig).catch(e => console.error("Error saving garantia config:", e));
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [garantiaConfig]);
 
   useEffect(() => {
     localStorage.setItem("acandido_top10_fields_config", JSON.stringify(top10Config));
+    dbSaveTop10FieldConfig(top10Config).catch(e => console.error("Error saving top10 config:", e));
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [top10Config]);
 
   useEffect(() => {
     localStorage.setItem("acandido_layout_fields_config", JSON.stringify(layoutConfig));
+    dbSaveLayoutFieldConfig(layoutConfig).catch(e => console.error("Error saving layout config:", e));
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [layoutConfig]);
 
   useEffect(() => {
     localStorage.setItem("acandido_unimobin_fields_config", JSON.stringify(unimobinConfig));
+    dbSaveUnimobinFieldConfig(unimobinConfig).catch(e => console.error("Error saving unimobin config:", e));
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [unimobinConfig]);
@@ -823,12 +911,16 @@ export default function AdminConfiguracoes({
 
   useEffect(() => {
     localStorage.setItem("acandido_preset_items", JSON.stringify(gItems));
+    dbSavePresetItems(gItems).catch(e => console.error("Error saving preset items:", e));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [gItems]);
 
   useEffect(() => {
     localStorage.setItem("acandido_preset_manufacturers", JSON.stringify(gManufacturers));
+    dbSavePresetManufacturers(gManufacturers).catch(e => console.error("Error saving preset manufacturers:", e));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [gManufacturers]);
 
   // Modal actions for Warranties
