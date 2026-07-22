@@ -1438,7 +1438,7 @@ export default function AdminConfiguracoes({
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">verified_user</span>
-          Garantias — Itens e Fabricantes
+          Garantia
         </button>
         <button
           onClick={() => setActiveTab("CICLO")}
@@ -1864,6 +1864,79 @@ export default function AdminConfiguracoes({
               </label>
             </div>
           </div>
+
+          {/* Painel do Controle de Garantia (Campos do Formulário e Campos Personalizados) */}
+          <div className="border border-slate-200 p-4 rounded-xl space-y-4 bg-slate-50/50 mt-6">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <div>
+                <span className="text-xs font-black text-[#1B2A4A] uppercase font-sans block">Controle de Garantia</span>
+                <span className="text-[10px] text-slate-400 font-medium font-sans">Configure os campos preenchidos e campos personalizados para o módulo de Garantia</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 bg-white p-3.5 rounded-lg border">
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Item / Descrição da Peça</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
+              </div>
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Garantia até (Vencimento)</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
+              </div>
+
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Fabricante</span>
+                <input
+                  type="checkbox"
+                  checked={garantiaConfig.fabricante}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, fabricante: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded cursor-pointer"
+                />
+              </div>
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Nota Fiscal / Data de Emissão</span>
+                <input
+                  type="checkbox"
+                  checked={garantiaConfig.nfEmissionDate}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, nfEmissionDate: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded cursor-pointer"
+                />
+              </div>
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Referência</span>
+                <input
+                  type="checkbox"
+                  checked={garantiaConfig.reference}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, reference: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded cursor-pointer"
+                />
+              </div>
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Observação da Peça</span>
+                <input
+                  type="checkbox"
+                  checked={garantiaConfig.pieceObservation}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, pieceObservation: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded cursor-pointer"
+                />
+              </div>
+              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
+                <span>Observação da Sucata</span>
+                <input
+                  type="checkbox"
+                  checked={garantiaConfig.scrapObservation}
+                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, scrapObservation: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Custom fields in Garantia */}
+              <AlmoxarifeCriteriaCustomFields
+                config={garantiaConfig}
+                onUpdateConfig={(next) => setGarantiaConfig(next)}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -2189,77 +2262,6 @@ export default function AdminConfiguracoes({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-            {/* Box A: Garantia */}
-            <div className="border border-slate-200 p-4 rounded-xl space-y-4 bg-white shadow-xs">
-              <div className="flex justify-between items-center pb-2 border-b">
-                <span className="text-xs font-black text-[#1B2A4A] uppercase font-sans">Controle de Garantia</span>
-                <span className="text-[10px] text-slate-400 font-bold font-sans animate-pulse">Lançamento na aba própria</span>
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Item / Descrição da Peça</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Garantia até (Vencimento)</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
-                </div>
-
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Fabricante</span>
-                  <input
-                    type="checkbox"
-                    checked={garantiaConfig.fabricante}
-                    onChange={(e) => setGarantiaConfig(prev => ({ ...prev, fabricante: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Nota Fiscal / Data de Emissão</span>
-                  <input
-                    type="checkbox"
-                    checked={garantiaConfig.nfEmissionDate}
-                    onChange={(e) => setGarantiaConfig(prev => ({ ...prev, nfEmissionDate: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Referência</span>
-                  <input
-                    type="checkbox"
-                    checked={garantiaConfig.reference}
-                    onChange={(e) => setGarantiaConfig(prev => ({ ...prev, reference: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Observação da Peça</span>
-                  <input
-                    type="checkbox"
-                    checked={garantiaConfig.pieceObservation}
-                    onChange={(e) => setGarantiaConfig(prev => ({ ...prev, pieceObservation: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Observação da Sucata</span>
-                  <input
-                    type="checkbox"
-                    checked={garantiaConfig.scrapObservation}
-                    onChange={(e) => setGarantiaConfig(prev => ({ ...prev, scrapObservation: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-
-                {/* Custom fields in Garantia */}
-                <AlmoxarifeCriteriaCustomFields
-                  config={garantiaConfig}
-                  onUpdateConfig={(next) => setGarantiaConfig(next)}
-                />
-              </div>
-            </div>
-
             {/* Box B: TOP 10 */}
             <div className="border border-slate-200 p-4 rounded-xl space-y-4 bg-white shadow-xs">
               <div className="flex justify-between items-center pb-2 border-b">
@@ -3204,7 +3206,12 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
         {(config.customFields || []).map((f: any) => (
           <div key={f.id} className="flex justify-between items-center text-[11px] bg-slate-50 p-1.5 rounded">
             <strong>{f.name} <span className="text-slate-405 font-medium">({f.type})</span></strong>
-            <button type="button" onClick={() => handleRemove(f.id)} className="text-[10px] text-red-500 font-bold hover:underline font-sans">
+            <button
+              type="button"
+              onClick={() => handleRemove(f.id)}
+              className="text-[10px] text-red-500 hover:text-red-700 font-bold hover:underline font-sans flex items-center gap-0.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[13px]">delete</span>
               Remover
             </button>
           </div>
