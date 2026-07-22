@@ -245,12 +245,7 @@ export default function AlmoxarifeGarantia({
 
   const handleOpenEdit = (item: WarrantyItem, isAuditOverride = false) => {
     const isOverride = isAuditOverride && canFernandoSilvaEditHistory;
-    if (!isCycleOpen && !isOverride) {
-      alert("Apenas leitura: Não é possível editar registros pois o ciclo está fechado.");
-      return;
-    }
-    const currentMonthYear = `${activeMonth} ${activeYear}`;
-    const isPastMonth = item.monthYear !== currentMonthYear;
+    const isPastMonth = item.monthYear !== activeBranchMonthFilter;
     if (isPastMonth && !isOverride) {
       alert("Apenas leitura: Registros de meses anteriores no histórico não podem ser editados.");
       return;
@@ -362,10 +357,6 @@ export default function AlmoxarifeGarantia({
   };
 
   const handleDeleteItem = (id: string) => {
-    if (!isCycleOpen) {
-      alert("Apenas leitura: Não é possível excluir registros pois o ciclo está fechado.");
-      return;
-    }
     setCustomConfirm({
       isOpen: true,
       title: "Remover Item de Garantia",
@@ -457,121 +448,92 @@ export default function AlmoxarifeGarantia({
           </select>
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-          <span className={`w-3.5 h-3.5 rounded-full inline-block ${isCycleOpen ? "bg-emerald-500" : "bg-amber-500"}`}></span>
-          <span>Ciclo de Envios: {isCycleOpen ? "Permitido (Aberto)" : "Apenas Leitura (Fechado)"}</span>
-        </div>
       </div>
 
-      {/* TABLE VISUALIZATION CONTAINER */}
-      <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm h-fit w-full">
+      {/* TABLE VISUALIZATION CONTAINER (DESKTOP & TABLET) */}
+      <div className="hidden md:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm h-fit w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">
-                <th className="p-5 font-black text-left min-w-[220px] w-[35%]">Item</th>
-                {garantiaConfig.fabricante !== false && <th className="p-5 font-black text-left min-w-[125px] w-[20%]">Fabricante</th>}
-                <th className="p-5 font-black text-left min-w-[110px] w-[15%]">Garantia até</th>
-                <th className="p-5 font-black text-left min-w-[125px] w-[20%]">Almoxarife</th>
-                {garantiaConfig.nfEmissionDate !== false && <th className="p-5 font-black text-left min-w-[100px]">Data NF</th>}
-                {garantiaConfig.reference !== false && <th className="p-5 font-black text-left min-w-[100px]">Referência</th>}
-                <th className="p-5 font-black text-left min-w-[120px]">Última Atualização</th>
-                {garantiaConfig.pieceObservation !== false && <th className="p-5 font-black text-left min-w-[140px]">Obs. Peça</th>}
-                {garantiaConfig.scrapObservation !== false && <th className="p-5 font-black text-left min-w-[140px]">Obs. Sucata</th>}
+              <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200 select-none">
+                <th className="p-4 py-3.5 font-black text-left min-w-[220px]">ITEM / DESCRIÇÃO</th>
+                {garantiaConfig.fabricante !== false && <th className="p-4 py-3.5 font-black text-left min-w-[130px]">FABRICANTE</th>}
+                <th className="p-4 py-3.5 font-black text-left min-w-[120px]">GARANTIA ATÉ</th>
+                {garantiaConfig.nfEmissionDate !== false && <th className="p-4 py-3.5 font-black text-left min-w-[110px]">DATA NF</th>}
+                {garantiaConfig.reference !== false && <th className="p-4 py-3.5 font-black text-left min-w-[120px]">REFERÊNCIA</th>}
+                <th className="p-4 py-3.5 font-black text-left min-w-[200px]">OBSERVAÇÃO</th>
                 {(garantiaConfig.customFields || []).map((cf: any) => (
-                  <th key={cf.id} className="p-5 font-black text-left text-amber-700 min-w-[120px]">{cf.name}</th>
+                  <th key={cf.id} className="p-4 py-3.5 font-black text-left text-amber-700 min-w-[130px]">{cf.name.toUpperCase()}</th>
                 ))}
-                <th className="p-5 font-black text-center min-w-[80px]">Ações</th>
+                <th className="p-4 py-3.5 font-black text-center min-w-[110px]">AÇÕES</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredWarranties.length > 0 ? (
                 filteredWarranties.map((w) => (
-                  <tr key={w.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-5">
-                      <span className="font-bold text-[#1B2A4A] block">{w.itemCode}</span>
-                      <span className="text-slate-400 text-[11px] block">{w.itemDescription}</span>
+                  <tr key={w.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-4 py-3.5">
+                      <span className="font-bold text-[#1B2A4A] text-xs block">{w.itemCode}</span>
+                      <span className="text-slate-500 text-[11px] block mt-0.5 leading-snug">{w.itemDescription || "Sem descrição"}</span>
                     </td>
-                    {garantiaConfig.fabricante !== false && <td className="p-5 text-slate-600 font-bold">{w.manufacturer || "—"}</td>}
-                    <td className="p-5 text-slate-600 font-mono whitespace-nowrap">
+                    {garantiaConfig.fabricante !== false && (
+                      <td className="p-4 py-3.5 text-slate-700 font-bold uppercase">{w.manufacturer || "—"}</td>
+                    )}
+                    <td className="p-4 py-3.5 text-slate-800 font-mono font-bold whitespace-nowrap">
                       {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                     </td>
-                    <td className="p-5 text-slate-500 text-[11px] max-w-[120px] truncate" title={w.almoxarifado}>
-                      {w.almoxarifado ? w.almoxarifado.replace("ALMOXARIFADO ", "") : "—"}
-                    </td>
                     {garantiaConfig.nfEmissionDate !== false && (
-                      <td className="p-5 text-slate-600 font-mono whitespace-nowrap">
+                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">
                         {w.nfEmissionDate ? new Date(w.nfEmissionDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                       </td>
                     )}
-                    {garantiaConfig.reference !== false && <td className="p-5 text-slate-500 font-mono whitespace-nowrap">{w.reference || "—"}</td>}
-                    <td className="p-5 text-slate-500 font-mono whitespace-nowrap">
-                      <div>
-                        {w.lastUpdateDate ? new Date(w.lastUpdateDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
-                      </div>
-                      {w.createdAt && (
-                        <div className="text-[10px] text-indigo-600 font-sans font-bold mt-1" title="Data/Hora real de gravação">
-                          Reg: {w.createdAt}
+                    {garantiaConfig.reference !== false && (
+                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">{w.reference || "—"}</td>
+                    )}
+                    <td className="p-4 py-3.5 text-slate-600 text-xs min-w-[200px]">
+                      {w.pieceObservation || w.scrapObservation ? (
+                        <div className="space-y-1">
+                          {w.pieceObservation && (
+                            <p className="text-slate-700 font-normal leading-relaxed">
+                              <strong className="font-semibold text-slate-500 text-[10px] uppercase">Peça: </strong>
+                              {w.pieceObservation}
+                            </p>
+                          )}
+                          {w.scrapObservation && (
+                            <p className="text-slate-500 italic text-[11px] leading-relaxed">
+                              <strong className="font-semibold text-slate-400 text-[10px] uppercase">Sucata: </strong>
+                              {w.scrapObservation}
+                            </p>
+                          )}
                         </div>
+                      ) : (
+                        <span className="text-slate-400 italic">—</span>
                       )}
                     </td>
-                    {garantiaConfig.pieceObservation !== false && (
-                      <td className="p-5 text-slate-500 italic max-w-[150px] truncate" title={w.pieceObservation}>
-                        {w.pieceObservation}
-                      </td>
-                    )}
-                    {garantiaConfig.scrapObservation !== false && (
-                      <td className="p-5 text-slate-500 max-w-[150px] truncate" title={w.scrapObservation}>
-                        {w.scrapObservation || "—"}
-                      </td>
-                    )}
                     {(garantiaConfig.customFields || []).map((cf: any) => (
-                      <td key={cf.id} className="p-5 text-amber-900 truncate max-w-[120px]" title={(w as any)[cf.id]}>
+                      <td key={cf.id} className="p-4 py-3.5 text-amber-900 text-xs" title={(w as any)[cf.id]}>
                         {(w as any)[cf.id] || "—"}
                       </td>
                     ))}
-                    <td className="p-5 text-center whitespace-nowrap">
+                    <td className="p-4 py-3.5 text-center whitespace-nowrap">
                       {!isPresencial ? (
-                        <div className="flex items-center justify-center gap-1">
-                          {(!isCycleOpen || w.monthYear !== `${activeMonth} ${activeYear}`) ? (
-                            canFernandoSilvaEditHistory ? (
-                              <button
-                                onClick={() => handleOpenEdit(w, true)}
-                                title="Reabrir / Editar"
-                                className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200 active:scale-95 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-3xs transition-all"
-                              >
-                                <span className="material-symbols-outlined text-[13px]">lock_open</span>
-                                Reabrir / Editar
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-405 font-bold uppercase tracking-wider text-slate-400">Histórico Arquivado</span>
-                            )
-                          ) : (
-                            <React.Fragment>
-                              <button
-                                onClick={() => handleOpenEdit(w)}
-                                title="Editar"
-                                className={`p-1.5 rounded transition ${
-                                  isCycleOpen
-                                    ? "text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-                                    : "text-slate-350 cursor-not-allowed"
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteItem(w.id)}
-                                title="Excluir"
-                                className={`p-1.5 rounded transition ${
-                                  isCycleOpen
-                                    ? "text-red-500 hover:bg-red-50 hover:text-red-700"
-                                    : "text-slate-350 cursor-not-allowed"
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                              </button>
-                            </React.Fragment>
-                          )}
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(w)}
+                            title="Editar"
+                            className="p-1.5 px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition flex items-center gap-1 text-xs font-bold active:scale-95 border border-blue-200/60"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">edit</span>
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(w.id)}
+                            title="Excluir"
+                            className="p-1.5 px-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition flex items-center gap-1 text-xs font-bold active:scale-95 border border-red-200/60"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                            <span>Excluir</span>
+                          </button>
                         </div>
                       ) : (
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Auditoria Local</span>
@@ -583,13 +545,96 @@ export default function AlmoxarifeGarantia({
                 <tr>
                   <td colSpan={10 + (garantiaConfig.customFields?.length || 0)} className="p-12 text-center text-slate-400 font-medium whitespace-normal">
                     <span className="material-symbols-outlined text-[42px] block mb-2 text-slate-300">shield_with_heart</span>
-                    Nenhum item registrado para o mês de <strong className="text-slate-650 text-slate-600">{activeBranchMonthFilter}</strong> neste almoxarifado.
+                    Nenhum item registrado para o mês de <strong className="text-slate-600">{activeBranchMonthFilter}</strong> neste almoxarifado.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* CARDS VISUALIZATION FOR MOBILE (CELLPHONE) */}
+      <div className="block md:hidden space-y-3">
+        {filteredWarranties.length > 0 ? (
+          filteredWarranties.map((w) => (
+            <div key={w.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                <div>
+                  <span className="text-sm font-black text-[#1B2A4A] block">{w.itemCode}</span>
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">{w.itemDescription || "Sem descrição"}</p>
+                </div>
+                {garantiaConfig.fabricante !== false && w.manufacturer && (
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[10px] rounded uppercase shrink-0">
+                    {w.manufacturer}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-black block">Garantia Até</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                  </span>
+                </div>
+                {garantiaConfig.nfEmissionDate !== false && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Data NF</span>
+                    <span className="font-mono text-slate-700">
+                      {w.nfEmissionDate ? new Date(w.nfEmissionDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                    </span>
+                  </div>
+                )}
+                {garantiaConfig.reference !== false && (
+                  <div className="col-span-2">
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Referência</span>
+                    <span className="font-mono text-slate-700">{w.reference || "—"}</span>
+                  </div>
+                )}
+                {(w.pieceObservation || w.scrapObservation) && (
+                  <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Observação</span>
+                    {w.pieceObservation && (
+                      <p className="text-xs text-slate-700">
+                        <strong className="text-slate-500 font-semibold">Peça: </strong>{w.pieceObservation}
+                      </p>
+                    )}
+                    {w.scrapObservation && (
+                      <p className="text-xs text-slate-500 italic">
+                        <strong className="text-slate-400 font-semibold">Sucata: </strong>{w.scrapObservation}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!isPresencial && (
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => handleOpenEdit(w)}
+                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold flex items-center gap-1 active:scale-95 border border-blue-200/60"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(w.id)}
+                    className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold flex items-center gap-1 active:scale-95 border border-red-200/60"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                    Excluir
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-slate-400 font-medium">
+            <span className="material-symbols-outlined text-[36px] block mb-2 text-slate-300">shield_with_heart</span>
+            Nenhum item registrado para o mês de <strong className="text-slate-600">{activeBranchMonthFilter}</strong> neste almoxarifado.
+          </div>
+        )}
       </div>
 
       {/* VISUAL SEPARATOR */}

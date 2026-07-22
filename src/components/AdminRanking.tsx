@@ -1152,7 +1152,7 @@ function AdminRankingContent({
     })();
 
     const top3Criteria = criteriaListWithConsistency.filter((c) => c && c.okMonths > 0).slice(0, 3);
-    const bottomCriteria = criteriaListWithConsistency.filter((c) => c && c.okMonths < totalClosedCyclesInSemester).slice(-3);
+    const bottomCriteria = criteriaListWithConsistency.filter((c) => c && c.okMonths < selectedMonths.length).slice(-3);
 
     // Dynamic executive report
     const awaiting_pair = isAwaitingPair(selectedEntry);
@@ -1162,6 +1162,44 @@ function AdminRankingContent({
       }
       if (!hasRealHistory) {
         return `O almoxarifado unificado ${selectedEntry.name} ainda não possui ciclos consolidados neste semestre. Aguardando a finalização da primeira auditoria mensal pelo Auditor Geral Fernando Silva para compor o diagnóstico estratégico.`;
+      }
+      if (rankingMode === "MES") {
+        const monthScore = getUnifiedScoreForMonth(selectedEntry, localRankingMonth, activeYear);
+        const nokCriteria = criteriaListWithConsistency.filter((c) => c.statusInPeriod === "NOK");
+        const okCriteria = criteriaListWithConsistency.filter((c) => c.statusInPeriod === "OK");
+
+        const formatList = (names: string[]) => {
+          if (names.length === 0) return "";
+          if (names.length === 1) return names[0];
+          if (names.length === 2) return `${names[0]} e ${names[1]}`;
+          return `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
+        };
+
+        const baseText = `O almoxarifado ${selectedEntry.name} obteve ${monthScore} de 100 pontos possíveis em ${localRankingMonth}/${activeYear}.`;
+
+        let nokText = "";
+        if (nokCriteria.length > 0) {
+          const nokNames = nokCriteria.map((c) => c.name);
+          if (nokCriteria.length === 1) {
+            nokText = `Seu ponto de atenção foi o critério ${nokNames[0]} (NOK).`;
+          } else {
+            nokText = `Seus pontos de atenção foram os critérios ${formatList(nokNames)} (NOK).`;
+          }
+        } else {
+          nokText = `Não foram registradas inconformidades neste mês.`;
+        }
+
+        let okText = "";
+        if (okCriteria.length > 0) {
+          const okNames = okCriteria.map((c) => c.name);
+          if (okCriteria.length === 1) {
+            okText = `O critério ${okNames[0]} se destacou positivamente.`;
+          } else {
+            okText = `Os critérios ${formatList(okNames)} se destacaram positivamente.`;
+          }
+        }
+
+        return `${baseText} ${nokText} ${okText}`.trim();
       }
       return `O almoxarifado unificado ${selectedEntry.name} acumulou ${selectedEntry.semestralScore} pts no semestre, superando a meta de corte de 300 pts. Seu melhor desempenho foi registrado em ${bestMonth.month} (${bestMonth.val} pts) e o critério com maior consistência ao longo do ciclo foi ${criteriaListWithConsistency[0]?.name || "TOP 10"}, registrando ${criteriaListWithConsistency[0]?.okMonths || 0} acertos em ${totalClosedCyclesInSemester} meses avaliados. O critério ${criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.name || "Nível de Serviço"} apresentou o maior número de ocorrências NOK (${totalClosedCyclesInSemester - (criteriaListWithConsistency[criteriaListWithConsistency.length - 1]?.okMonths || 0)} meses), sendo o principal ponto de atenção estratégica para o próximo semestre.`;
     })();
@@ -1279,36 +1317,16 @@ function AdminRankingContent({
                                        status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
                                        "bg-amber-50 text-amber-700 border border-amber-200";
 
-                        if (isShared) {
-                          const isNok = status1 === "NOK" || status2 === "NOK";
-                          const isBothOk = status1 === "OK" && status2 === "OK";
-                          if (isBothOk) {
-                            unifiedStatusText = `OK (${c1.pointsPossible * 2} pts)`;
-                            unifiedStatusColor = "bg-emerald-500 text-white";
-                          } else if (isNok) {
-                            unifiedStatusText = "NOK (0 pts)";
-                            unifiedStatusColor = "bg-rose-600 text-white";
-                          } else {
-                            unifiedStatusText = "Pendente (0 pts)";
-                            unifiedStatusColor = "bg-amber-400 text-slate-900";
-                          }
+                        const unifiedRes = getCriterionScoreForMonth(selectedEntry, localRankingMonth, c1.id);
+                        if (unifiedRes.status === "OK") {
+                          unifiedStatusText = `OK (${c1.pointsPossible} pts)`;
+                          unifiedStatusColor = "bg-emerald-500 text-white";
+                        } else if (unifiedRes.status === "NOK") {
+                          unifiedStatusText = "NOK (0 pts)";
+                          unifiedStatusColor = "bg-rose-600 text-white";
                         } else {
-                          const totalPtsObtained = pts1 + pts2;
-                          const maxPts = c1.pointsPossible * 2;
-                          
-                          if (status1 === "OK" && status2 === "OK") {
-                            unifiedStatusText = `OK (${totalPtsObtained} pts)`;
-                            unifiedStatusColor = "bg-emerald-500 text-white";
-                          } else if (status1 === "NOK" && status2 === "NOK") {
-                            unifiedStatusText = "NOK (0 pts)";
-                            unifiedStatusColor = "bg-rose-600 text-white";
-                          } else if (status1 === "PENDENTE" && status2 === "PENDENTE") {
-                            unifiedStatusText = "Pendente (0 pts)";
-                            unifiedStatusColor = "bg-amber-400 text-[#1B2A4A] font-bold";
-                          } else {
-                            unifiedStatusText = `Parcial (${totalPtsObtained} / ${maxPts} pts)`;
-                            unifiedStatusColor = "bg-indigo-500 text-white";
-                          }
+                          unifiedStatusText = "Pendente (0 pts)";
+                          unifiedStatusColor = "bg-amber-400 text-slate-900";
                         }
                       } else {
                         // ACUMULADO mode: consolidate across all selected months
@@ -1344,7 +1362,7 @@ function AdminRankingContent({
                         <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                           <td className="py-3">
                             <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible * 2} pts max por mês</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible} pts max por mês</p>
                           </td>
                           <td className="py-3 px-4 text-center">
                             <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${status1Style}`}>
@@ -1443,7 +1461,10 @@ function AdminRankingContent({
                 }
 
                 const gridValues = [0, 20, 40, 60, 80, 100];
-                const activeIdx = chartSelectedIdx !== null ? chartSelectedIdx : visibleData.length - 1;
+                const defaultMonthIdx = visibleData.findIndex(vd => vd.month.toLowerCase().startsWith(s(localRankingMonth).slice(0, 3).toLowerCase()));
+                const activeIdx = chartSelectedIdx !== null
+                  ? chartSelectedIdx
+                  : (rankingMode === "MES" && defaultMonthIdx !== -1 ? defaultMonthIdx : visibleData.length - 1);
                 const currentSelectedMonthData = visibleData[activeIdx] || visibleData[visibleData.length - 1];
 
                 return (
@@ -1747,7 +1768,9 @@ function AdminRankingContent({
                     <span className="text-xl shrink-0">🏆</span>
                     <div>
                       <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                      <p className="text-[10px] text-emerald-600 font-bold mt-1">Conquistou {c.okMonths} de {selectedMonths.length} no período</p>
+                      <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                        {rankingMode === "MES" ? `${c.pointsObtained} pts (${c.statusInPeriod}) em ${localRankingMonth}` : `Conquistou ${c.okMonths} de ${selectedMonths.length} no período`}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -1769,7 +1792,9 @@ function AdminRankingContent({
                         <span className="text-xl shrink-0">⚠️</span>
                         <div>
                           <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                          <p className="text-[10px] text-amber-700 font-bold mt-1">NOK em {selectedMonths.length - c.okMonths} meses</p>
+                          <p className="text-[10px] text-amber-700 font-bold mt-1">
+                            {rankingMode === "MES" ? `Inconformidade em ${localRankingMonth}` : `NOK em ${selectedMonths.length - c.okMonths} meses`}
+                          </p>
                           <p className="text-[9px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
                         </div>
                       </div>
@@ -1784,50 +1809,62 @@ function AdminRankingContent({
             </div>
 
             {/* BLOCO 5 - COMPARATIVO COM A META */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-              <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                <span className="material-symbols-outlined text-slate-500 text-[18px]">adjust</span>
-                Comparativo com a Meta
-              </h3>
+            {(() => {
+              const currentScore = rankingMode === "MES"
+                ? getUnifiedScoreForMonth(selectedEntry, localRankingMonth, activeYear)
+                : totalAccumulatedScore;
+              const targetScore = rankingMode === "MES" ? 80 : selectedMonths.length * 50;
+              const periodLabel = rankingMode === "MES" ? localRankingMonth : "Período";
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-500 font-bold">Nota do Período Unificada</span>
-                  <span className="font-mono text-slate-800 font-black">{totalAccumulatedScore} pts</span>
-                </div>
-                <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-50">
-                  <span className="text-slate-500 font-bold">Meta Mínima no Período</span>
-                  <span className="font-mono text-slate-800 font-black">{selectedMonths.length * 50} pts</span>
-                </div>
+              return (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                  <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                    <span className="material-symbols-outlined text-slate-500 text-[18px]">adjust</span>
+                    Comparativo com a Meta
+                  </h3>
 
-                {totalAccumulatedScore >= selectedMonths.length * 50 ? (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs inline-block w-full font-bold space-y-1">
-                    <p className="flex items-center gap-1.5 text-emerald-800">
-                      <span className="material-symbols-outlined text-[#10B981] text-[16px] font-bold">check_circle</span>
-                      Meta Atingida
-                    </p>
-                    <p className="text-[10.5px] font-normal leading-relaxed text-emerald-950">
-                      ✅ Meta atingida — <strong>{totalAccumulatedScore - (selectedMonths.length * 50)} pts</strong> acima do mínimo.
-                    </p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className="text-slate-500 font-bold">Nota em {periodLabel}</span>
+                      <span className="font-mono text-slate-800 font-black">{currentScore} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-50">
+                      <span className="text-slate-500 font-bold">Meta Mínima em {periodLabel}</span>
+                      <span className="font-mono text-slate-800 font-black">{targetScore} pts</span>
+                    </div>
+
+                    {currentScore >= targetScore ? (
+                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs inline-block w-full font-bold space-y-1">
+                        <p className="flex items-center gap-1.5 text-emerald-800">
+                          <span className="material-symbols-outlined text-[#10B981] text-[16px] font-bold">check_circle</span>
+                          Meta Atingida
+                        </p>
+                        <p className="text-[10.5px] font-normal leading-relaxed text-emerald-950">
+                          ✅ Meta atingida — <strong>{currentScore - targetScore} pts</strong> acima da meta de {targetScore} pts.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs inline-block w-full font-bold space-y-1">
+                        <p className="flex items-center gap-1.5 text-rose-850 font-bold">
+                          <span className="material-symbols-outlined text-[#EF4444] text-[16px] font-bold">cancel</span>
+                          Abaixo da Meta
+                        </p>
+                        <p className="text-[10.5px] font-normal leading-relaxed text-rose-955">
+                          ⚠️ Abaixo da meta — <strong>faltam {targetScore - currentScore} pts</strong> para atingir a qualificação mínima ({targetScore} pts).
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500">
+                      <span className="font-bold text-slate-700">Resultado: </span>
+                      {rankingMode === "MES"
+                        ? `Pontuação do mês de ${localRankingMonth}: ${currentScore} de 100 pts possíveis.`
+                        : `Se manter a média atual, encerrará o período com ${currentScore} pts.`}
+                    </div>
                   </div>
-                ) : (
-                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs inline-block w-full font-bold space-y-1">
-                    <p className="flex items-center gap-1.5 text-rose-850 font-bold">
-                      <span className="material-symbols-outlined text-[#EF4444] text-[16px] font-bold">cancel</span>
-                      Abaixo da Meta
-                    </p>
-                    <p className="text-[10.5px] font-normal leading-relaxed text-rose-955">
-                      ⚠️ Abaixo da meta — <strong>faltam {(selectedMonths.length * 50) - totalAccumulatedScore} pts</strong> para atingir a qualificação do período mínima operacional.
-                    </p>
-                  </div>
-                )}
-
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500">
-                  <span className="font-bold text-slate-700">Projeção: </span>
-                  Se manter a média atual, encerrará o período com <strong>{totalAccumulatedScore} pts</strong>.
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* BLOCO EXTRA - EVOLUÇÃO EM RELAÇÃO AO SEMESTRE ANTERIOR */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">

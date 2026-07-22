@@ -2124,7 +2124,7 @@ export default function App() {
       </header>
 
       {/* PASSIVE SUBTLE CYCLE STATUS BAR FOR ALMOXARIFE */}
-      {user && user.role === "ALMOXARIFE" && (
+      {user && user.role === "ALMOXARIFE" && (almoxarifeTab === "HOME" || almoxarifeTab === "HISTORICO") && !activeSubscreen && (
         <div className="bg-[#1C2C4E] border-b border-[#C8A84B] py-2.5 px-4 text-white shadow-inner select-none pointer-events-none">
           <div className="max-w-md mx-auto flex justify-between items-center text-xs font-bold font-sans">
             <span className="flex items-center gap-1.5 uppercase tracking-wider text-[#C8A85B] text-[9px] font-extrabold">
