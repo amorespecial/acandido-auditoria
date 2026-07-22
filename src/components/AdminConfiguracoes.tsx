@@ -216,6 +216,7 @@ export default function AdminConfiguracoes({
       { id: "solicitante", name: "Solicitante", type: "text", required: true, builtIn: true }
     ];
   });
+  const [supervisorFieldToDelete, setSupervisorFieldToDelete] = useState<any | null>(null);
 
   const [garantiaConfig, setGarantiaConfig] = useState(() => {
     const saved = localStorage.getItem("acandido_garantia_fields_config");
@@ -2210,12 +2211,11 @@ export default function AdminConfiguracoes({
                         {!field.builtIn && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setSupervisorFields(supervisorFields.filter((f: any) => f.id !== field.id));
-                            }}
-                            className="text-[10px] font-black text-red-500 hover:underline hover:scale-105 transition-all font-sans"
+                            onClick={() => setSupervisorFieldToDelete(field)}
+                            className="text-[10px] text-red-500 hover:text-red-700 font-bold hover:underline font-sans flex items-center gap-0.5 cursor-pointer"
                           >
-                            Excluir
+                            <span className="material-symbols-outlined text-[13px]">delete</span>
+                            Remover
                           </button>
                         )}
 
@@ -2250,6 +2250,53 @@ export default function AdminConfiguracoes({
               />
             </div>
           </div>
+
+          {/* Confirmation Dialog for Supervisor Custom Field Removal */}
+          {supervisorFieldToDelete && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 font-sans">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-red-600 text-xl">delete</span>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Remover Campo Personalizado</h3>
+                    <p className="text-xs font-semibold text-slate-500">{supervisorFieldToDelete.name}</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                  <p className="text-xs text-slate-800 font-bold leading-relaxed">
+                    Deseja realmente remover este campo personalizado?
+                  </p>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Essa ação removerá o campo da configuração e ele deixará imediatamente de aparecer para todos os almoxarifes.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSupervisorFieldToDelete(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSupervisorFields(supervisorFields.filter((f: any) => f.id !== supervisorFieldToDelete.id));
+                      setSupervisorFieldToDelete(null);
+                    }}
+                    className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    Remover
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </React.Fragment>
       )}
 
@@ -3174,6 +3221,7 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
   const [name, setName] = useState("");
   const [type, setType] = useState<"text" | "number" | "select">("text");
   const [optionsStr, setOptionsStr] = useState("");
+  const [fieldToDelete, setFieldToDelete] = useState<any | null>(null);
 
   const handleAdd = () => {
     const label = name.trim();
@@ -3192,11 +3240,13 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
     setOptionsStr("");
   };
 
-  const handleRemove = (id: string) => {
+  const confirmRemove = () => {
+    if (!fieldToDelete) return;
     onUpdateConfig({
       ...config,
-      customFields: (config.customFields || []).filter((f: any) => f.id !== id)
+      customFields: (config.customFields || []).filter((f: any) => f.id !== fieldToDelete.id)
     });
+    setFieldToDelete(null);
   };
 
   return (
@@ -3208,7 +3258,7 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
             <strong>{f.name} <span className="text-slate-405 font-medium">({f.type})</span></strong>
             <button
               type="button"
-              onClick={() => handleRemove(f.id)}
+              onClick={() => setFieldToDelete(f)}
               className="text-[10px] text-red-500 hover:text-red-700 font-bold hover:underline font-sans flex items-center gap-0.5 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[13px]">delete</span>
@@ -3256,6 +3306,50 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
           Adicionar ao Almoxarife
         </button>
       </div>
+
+      {/* Confirmation Dialog for Custom Field Removal */}
+      {fieldToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 font-sans">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-red-600 text-xl">delete</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Remover Campo Personalizado</h3>
+                <p className="text-xs font-semibold text-slate-500">{fieldToDelete.name}</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+              <p className="text-xs text-slate-800 font-bold leading-relaxed">
+                Deseja realmente remover este campo personalizado?
+              </p>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Essa ação removerá o campo da configuração e ele deixará imediatamente de aparecer para todos os almoxarifes.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setFieldToDelete(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemove}
+                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+                Remover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
