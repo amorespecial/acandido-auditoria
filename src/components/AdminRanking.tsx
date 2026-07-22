@@ -1910,31 +1910,31 @@ function AdminRankingContent({
 
   // 3. ================= AUDITOR COMPLETE LIST VIEW (TELA PRINCIPAL) =================
   return (
-    <div className="space-y-6">
-      {/* Top title & subtitle */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-250/20 pb-4">
+    <div className="bg-[#F8FAFC] p-[32px] rounded-2xl min-h-screen space-y-[24px] font-sans">
+      {/* Top title & subtitle + Group A/B Buttons */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#E2E8F0] pb-5">
         <div>
-          <h2 className="text-2xl font-black text-[#1B2A4A] flex items-center gap-2 tracking-tight">
+          <h2 className="text-2xl font-black text-[#00194C] flex items-center gap-2 tracking-tight">
             <span className="material-symbols-outlined text-[#C8A84B] text-[28px]">military_tech</span>
             Ranking Semestral de Almoxarifados
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5 font-bold uppercase tracking-wider font-sans">
+          <p className="text-xs text-[#64748B] mt-0.5 font-bold uppercase tracking-wider font-sans">
             Gestão de Conformidade e Auditoria — Grupo A.Cândido
           </p>
         </div>
 
-        {/* Group Tab selectors */}
-        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start md:self-auto shadow-sm">
+        {/* Group Tab selectors (10. BOTÕES GRUPO A / GRUPO B) */}
+        <div className="flex gap-2 self-start md:self-auto">
           <button
             type="button"
             onClick={() => {
               setActiveGroupTab("A");
               setSelectedEntry(null);
             }}
-            className={`px-5 py-2 text-xs font-black rounded-md transition-all uppercase tracking-wider ${
+            className={`h-[40px] px-[20px] text-[13px] font-semibold uppercase tracking-wider transition-all cursor-pointer ${
               activeGroupTab === "A"
-                ? "bg-[#1B2A4A] text-white shadow-sm"
-                : "hover:text-slate-800 text-slate-500 font-bold"
+                ? "bg-[#00194C] text-white rounded-[8px]"
+                : "bg-white text-[#64748B] border-[1.5px] border-[#E2E8F0] rounded-[8px] hover:border-[#00194C] hover:text-[#00194C]"
             }`}
           >
             Grupo A
@@ -1945,10 +1945,10 @@ function AdminRankingContent({
               setActiveGroupTab("B");
               setSelectedEntry(null);
             }}
-            className={`px-5 py-2 text-xs font-black rounded-md transition-all uppercase tracking-wider ${
+            className={`h-[40px] px-[20px] text-[13px] font-semibold uppercase tracking-wider transition-all cursor-pointer ${
               activeGroupTab === "B"
-                ? "bg-[#1B2A4A] text-white shadow-sm"
-                : "hover:text-slate-800 text-slate-500 font-bold"
+                ? "bg-[#00194C] text-white rounded-[8px]"
+                : "bg-white text-[#64748B] border-[1.5px] border-[#E2E8F0] rounded-[8px] hover:border-[#00194C] hover:text-[#00194C]"
             }`}
           >
             Grupo B
@@ -1956,24 +1956,25 @@ function AdminRankingContent({
         </div>
       </div>
 
-      {/* Control panel for ranking selection and toggle mode */}
-      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      {/* Control panel for ranking selection and toggle mode (8. SELETOR DE TIPO + 9. DROPDOWN) */}
+      <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-[24px] flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_2px_8px_rgba(0,25,76,0.06)]">
+        {/* 8. SELETOR DE TIPO */}
         <div className="flex flex-col gap-1.5 shrink-0">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-sans">Tipo de Ranking</label>
-          <div className="flex bg-slate-200/60 p-1 rounded-xl border border-slate-300 self-start">
+          <label className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider font-sans">Tipo de Ranking</label>
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={() => {
                 setRankingMode("MES");
                 setSelectedEntry(null);
               }}
-              className={`px-4 py-2 text-xs font-black rounded-lg uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+              className={`h-[40px] px-[20px] text-[13px] font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 rankingMode === "MES"
-                  ? "bg-[#1B2A4A] text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
+                  ? "bg-[#00194C] text-white rounded-[8px]"
+                  : "bg-transparent text-[#64748B] border border-[#E2E8F0] rounded-[8px] hover:text-[#00194C] hover:border-[#00194C]"
               }`}
             >
-              <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+              <span className="material-symbols-outlined text-[18px]">calendar_today</span>
               Mês Selecionado
             </button>
             <button
@@ -1982,20 +1983,21 @@ function AdminRankingContent({
                 setRankingMode("ACUMULADO");
                 setSelectedEntry(null);
               }}
-              className={`px-4 py-2 text-xs font-black rounded-lg uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+              className={`h-[40px] px-[20px] text-[13px] font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 rankingMode === "ACUMULADO"
-                  ? "bg-[#1B2A4A] text-white shadow-sm"
-                  : "text-[#1B2A4A] hover:text-slate-800"
+                  ? "bg-[#00194C] text-white rounded-[8px]"
+                  : "bg-transparent text-[#64748B] border border-[#E2E8F0] rounded-[8px] hover:text-[#00194C] hover:border-[#00194C]"
               }`}
             >
-              <span className="material-symbols-outlined text-[16px]">query_stats</span>
+              <span className="material-symbols-outlined text-[18px]">query_stats</span>
               Acumulado Anual
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 min-w-[220px]">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-sans">Referência Temporária</label>
+        {/* 9. DROPDOWN "REFERÊNCIA TEMPORÁRIA" */}
+        <div className="flex flex-col gap-1.5 min-w-[240px]">
+          <label className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider font-sans">Referência Temporária</label>
           {rankingMode === "MES" ? (
             <select
               value={localRankingMonth}
@@ -2007,7 +2009,7 @@ function AdminRankingContent({
                 }
                 setSelectedEntry(null);
               }}
-              className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
+              className="h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] font-medium text-[#00194C] w-full focus:outline-none focus:border-[#00194C] cursor-pointer"
             >
               {monthsOfThisSemester.map((m) => (
                 <option key={m} value={m}>
@@ -2022,7 +2024,7 @@ function AdminRankingContent({
                 setLocalAccumulatedFilter(e.target.value as any);
                 setSelectedEntry(null);
               }}
-              className="bg-white border border-slate-250 p-2.5 text-xs font-black rounded-xl w-full text-slate-800 focus:outline-[#1B2A4A]"
+              className="h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] font-medium text-[#00194C] w-full focus:outline-none focus:border-[#00194C] cursor-pointer"
             >
               <option value="1_SEMESTRE">1º Semestre (Janeiro - Junho)</option>
               <option value="2_SEMESTRE">2º Semestre (Julho - Dezembro)</option>
@@ -2032,88 +2034,120 @@ function AdminRankingContent({
         </div>
       </div>
 
-      {/* CLEAN RANKING ENTRIES LIST (NO RIGHT SIDEBAR FOR ENTIRE SYSTEM SCREEN) */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-          <h4 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">
+      {/* 11. CONTAINER DOS CARDS */}
+      <section className="bg-white border border-[#E2E8F0] rounded-[12px] p-[24px] shadow-[0_2px_8px_rgba(0,25,76,0.06)] space-y-[12px]">
+        {/* 7. CABEÇALHO DA SEÇÃO */}
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pt-[24px] pb-[24px] mb-[12px]">
+          <h4 className="text-[13px] font-semibold text-[#475569] uppercase tracking-[0.05em]">
             Posições Consolidadas — Grupo {activeGroupTab}
           </h4>
           {rankingMode === "MES" && (
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Meta do Mês: 100 PTS
+            <span className="text-[12px] text-[#94A3B8] font-medium uppercase">
+              META DO MÊS: 100 PTS
             </span>
           )}
         </div>
 
-        <div className="space-y-3.5">
+        <div className="space-y-[12px]">
           {!hasRealHistory && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center text-xs font-semibold text-slate-500 animate-pulse">
-               O ranking será calculated a partir do primeiro ciclo encerrado pelo auditor
-             </div>
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-3 text-center text-xs font-semibold text-[#64748B] animate-pulse">
+              O ranking será calculado a partir do primeiro ciclo encerrado pelo auditor
+            </div>
           )}
 
           {currentLeaderboard.map((item, index) => {
             const place = index + 1;
             const displayScore = item.displayScore;
             const maxPoints = getEntryDisplayMax(item);
-            const isBelowGoal = displayScore < maxPoints;
+
+            const placeBadgeStyle = !hasRealHistory
+              ? "bg-[#F8FAFC] text-[#64748B] border border-[#E2E8F0]"
+              : place === 1
+              ? "bg-[#FEF9C3] text-[#B8960C] border border-[#FDE68A]"
+              : place === 2
+              ? "bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]"
+              : place === 3
+              ? "bg-[#FEF3C7] text-[#D97706] border border-[#FCD34D]"
+              : "bg-[#F8FAFC] text-[#64748B] border border-[#E2E8F0]";
+
+            const scorePct = maxPoints > 0 ? displayScore / maxPoints : 0;
+            let progressBarColor = "bg-[#F11E26]";
+            if (rankingMode === "ACUMULADO") {
+              if (displayScore >= 300) {
+                progressBarColor = "bg-[#16A34A]";
+              } else {
+                progressBarColor = "bg-[#F11E26]";
+              }
+            } else {
+              if (displayScore >= 80) {
+                progressBarColor = "bg-[#16A34A]";
+              } else if (displayScore >= 60) {
+                progressBarColor = "bg-[#D97706]";
+              } else {
+                progressBarColor = "bg-[#F11E26]";
+              }
+            }
 
             return (
+              /* 1. CARDS DE POSIÇÃO — TAMANHO E RESPIRO */
               <div
                 key={item.id}
                 onClick={() => { setSelectedEntry(item); setChartSelectedIdx(null); }}
-                className="bg-slate-50 hover:bg-white border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between shadow-xs hover:shadow-md transition-all group cursor-pointer hover:border-[#1B2A4A]/40 active:scale-[0.99] gap-3"
+                className="bg-white border border-[#E2E8F0] rounded-[12px] min-h-[72px] p-[16px_24px] flex flex-col sm:flex-row sm:items-center justify-between shadow-[0_2px_8px_rgba(0,25,76,0.06)] hover:shadow-[0_4px_16px_rgba(0,25,76,0.12)] hover:border-[#00194C] transition-all group cursor-pointer active:scale-[0.99] gap-4"
               >
+                {/* Left: Position number + Name + Owner + Location */}
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 flex items-center justify-center font-black text-sm rounded-full shrink-0 ${
-                    hasRealHistory && place === 1
-                      ? "bg-amber-100 text-amber-800 border border-amber-300 shadow-xs"
-                      : "bg-slate-200 text-slate-600"
-                  }`}>
+                  {/* 2. NÚMERO DA POSIÇÃO */}
+                  <div className={`w-[48px] h-[48px] flex items-center justify-center font-bold text-[18px] rounded-full shrink-0 ${placeBadgeStyle}`}>
                     {hasRealHistory ? `${place}º` : "—"}
                   </div>
+
+                  {/* 3. NOME DO ALMOXARIFADO */}
                   <div>
-                    <h5 className="text-sm font-black text-[#1B2A4A] group-hover:text-amber-600 transition-colors">
+                    <h5 className="text-[16px] font-semibold text-[#00194C] transition-colors">
                       {item.name}
                     </h5>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Responsável: <span className="font-extrabold text-slate-700">{item.ownerName}</span> • <span className="italic font-bold">{item.location}</span>
+                    <p className="text-[13px] text-[#64748B] mt-0.5">
+                      Responsável: {item.ownerName} • <span className="italic text-[12px] text-[#94A3B8]">{item.location}</span>
                     </p>
                   </div>
                 </div>
 
+                {/* Right: Badges + Score + Progress Bar */}
                 <div className="flex items-center justify-between sm:justify-start gap-4 shrink-0 border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-200/50">
                   {hasRealHistory && (
                     <>
-                      {/* CORREÇÃO 1 & CORREÇÃO 2: Regras de badges para Mês Selecionado vs Acumulado Anual */}
                       {rankingMode === "ACUMULADO" ? (
                         place === 1 ? (
-                          <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                            👑 LÍDER
+                          /* 5. BADGE LÍDER */
+                          <span className="bg-[#FEF9C3] text-[#B8960C] border border-[#FDE68A] text-[12px] font-bold px-[12px] py-[4px] rounded-[20px] flex items-center gap-1 shrink-0">
+                            <span className="material-symbols-outlined text-[14px]">trophy</span>
+                            LÍDER
                           </span>
-                        ) : (
-                          displayScore < 300 ? (
-                            <span className="bg-rose-600 text-white font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs flex items-center gap-1">
-                              🔴 ABAIXO DA META
-                            </span>
-                          ) : null
-                        )
+                        ) : displayScore < 300 ? (
+                          /* 6. BADGE ABAIXO DA META (Acumulado Anual) */
+                          <span className="bg-[#FEE8E8] text-[#F11E26] border border-[#FECACA] text-[12px] font-semibold px-[12px] py-[4px] rounded-[20px] flex items-center gap-1 shrink-0">
+                            ABAIXO DA META
+                          </span>
+                        ) : null
                       ) : (
-                        // No Mês Selecionado (MES), mantemos apenas o 1º colocado como LÍDER dourado, sem badges de meta de 100 pontos.
                         place === 1 ? (
-                          <span className="bg-[#C8A84B] text-white font-black px-2.5 py-0.5 rounded text-[8px] uppercase tracking-widest shrink-0 shadow-xs">
-                            Líder
+                          /* 5. BADGE LÍDER */
+                          <span className="bg-[#FEF9C3] text-[#B8960C] border border-[#FDE68A] text-[12px] font-bold px-[12px] py-[4px] rounded-[20px] flex items-center gap-1 shrink-0">
+                            <span className="material-symbols-outlined text-[14px]">trophy</span>
+                            LÍDER
                           </span>
                         ) : null
                       )}
                     </>
                   )}
 
-                  <div className="text-right min-w-[130px]">
+                  {/* 4. PONTUAÇÃO */}
+                  <div className="text-right min-w-[140px]">
                     <div className="flex items-center justify-end gap-1.5">
-                      <span className="text-xs font-black text-[#1B2A4A] font-mono leading-none">
+                      <span className="text-[20px] font-bold text-[#00194C] font-mono leading-none">
                         {displayScore}
-                        <span className="text-[10px] font-normal text-slate-400 font-sans">/{maxPoints} pts</span>
+                        <span className="text-[13px] font-normal text-[#94A3B8] font-sans">/{maxPoints} pts</span>
                       </span>
                       {(() => {
                         if (!hasRealHistory) return null;
@@ -2130,13 +2164,13 @@ function AdminRankingContent({
 
                         if (variation > 0) {
                           return (
-                            <span className="text-[10px] font-black text-emerald-600 shrink-0 font-sans">
+                            <span className="text-[13px] font-semibold text-[#16A34A] shrink-0 font-sans">
                               ▲ +{variation}
                             </span>
                           );
                         } else if (variation < 0) {
                           return (
-                            <span className="text-[10px] font-black text-rose-600 shrink-0 font-sans">
+                            <span className="text-[13px] font-semibold text-[#F11E26] shrink-0 font-sans">
                               ▼ {variation}
                             </span>
                           );
@@ -2145,10 +2179,11 @@ function AdminRankingContent({
                         }
                       })()}
                     </div>
-                    <div className="w-24 h-1 bg-slate-200 rounded-full mt-2 overflow-hidden ml-auto">
+                    {/* Barra de progresso */}
+                    <div className="w-28 h-[8px] bg-[#E2E8F0] rounded-[4px] mt-2 overflow-hidden ml-auto">
                       <div
-                        className={`h-full ${displayScore === 0 ? "bg-transparent" : ((rankingMode === "ACUMULADO" ? displayScore < 300 : false) ? "bg-rose-600" : "bg-emerald-500")}`}
-                        style={{ width: `${displayScore === 0 ? 0 : Math.min(100, (displayScore / maxPoints) * 100)}%` }}
+                        className={`h-full transition-all duration-300 ease-in-out ${displayScore === 0 ? "bg-transparent" : progressBarColor}`}
+                        style={{ width: `${displayScore === 0 ? 0 : Math.min(100, scorePct * 100)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -2157,8 +2192,6 @@ function AdminRankingContent({
             );
           })}
         </div>
-
-        {/* Separator removed for Correction 1 */}
       </section>
     </div>
   );

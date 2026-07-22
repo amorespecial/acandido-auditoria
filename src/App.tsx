@@ -2142,17 +2142,17 @@ export default function App() {
 
       {/* ADMIN NAVIGATION BAR */}
       {user.role === "ADMIN" && (
-        <nav className="w-full bg-white border-b border-slate-200 shadow-xs">
-          <div className="max-w-7xl mx-auto px-4 flex gap-4 overflow-x-auto scrollbar-hide">
+        <nav className="w-full bg-white border-b border-[#E2E8F0]">
+          <div className="max-w-7xl mx-auto px-[24px] h-[48px] flex items-center gap-[24px] overflow-x-auto scrollbar-hide">
             <button
               onClick={() => {
                 setAdminTab("PAINEL");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "PAINEL"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Almoxarifados ({branches.length})
@@ -2162,10 +2162,10 @@ export default function App() {
                 setAdminTab("RANKING");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "RANKING"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Ranking Corporativo
@@ -2175,10 +2175,10 @@ export default function App() {
                 setAdminTab("HISTORICO");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "HISTORICO"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Histórico Consolidado
@@ -2188,10 +2188,10 @@ export default function App() {
                 setAdminTab("GARANTIAS");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "GARANTIAS"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Garantias
@@ -2201,10 +2201,10 @@ export default function App() {
                 setAdminTab("SERVICOS");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "SERVICOS"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Serviços
@@ -2214,19 +2214,19 @@ export default function App() {
                 setAdminTab("CONFIGURI");
                 setSelectedBranchId(null);
               }}
-              className={`py-3.5 px-1 text-xs uppercase tracking-wider border-b-2 transition-all shrink-0 ${
+              className={`h-full px-[4px] text-[13px] border-b-2 flex items-center transition-all duration-150 cursor-pointer shrink-0 ${
                 adminTab === "CONFIGURI"
                   ? "border-[#F11E26] text-[#00194C] font-semibold"
-                  : "border-transparent text-[#64748B] hover:text-[#00194C] font-medium"
+                  : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
               Configurações
             </button>
             <button
               onClick={handleLogout}
-              className="py-3.5 px-1 text-xs font-semibold text-[#F11E26] hover:text-[#C9181F] hover:underline ml-auto transition shrink-0 flex items-center gap-1 cursor-pointer"
+              className="h-full px-[4px] text-[13px] font-semibold text-[#F11E26] hover:text-[#C9181F] hover:underline ml-auto transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[16px]">logout</span>
+              <span className="material-symbols-outlined text-[18px]">logout</span>
               Sair do Sistema
             </button>
           </div>
