@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
 import { dbBuscarCertificados, dbSalvarCertificado, isSupabaseReady } from "../supabaseService";
+import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeUnimobinProps {
   onBack: () => void;
@@ -39,6 +40,31 @@ export default function AlmoxarifeUnimobin({
 
   const currentMonth = cycleStateParsed.activeMonth;
   const currentYear = cycleStateParsed.activeYear;
+
+  const [unimobinConfig, setUnimobinConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("acandido_unimobin_fields_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { certificado: true, customFields: [] as any[] };
+  });
+
+  const [customFormValues, setCustomFormValues] = useState<Record<string, Record<string, string>>>({});
+
+  React.useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem("acandido_unimobin_fields_config");
+        if (saved) setUnimobinConfig(JSON.parse(saved));
+      } catch (e) {}
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("field-configs-updated", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("field-configs-updated", handleStorage);
+    };
+  }, []);
 
   const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
     const storageKey = branchId 
@@ -363,80 +389,134 @@ export default function AlmoxarifeUnimobin({
                   </div>
                 </div>
 
-                {hasFile ? (
-                  <div className="flex items-center justify-between bg-emerald-50/50 border border-emerald-150 p-2.5 rounded-lg text-xs font-semibold">
-                    <div className="flex items-center gap-2 text-emerald-900 min-w-0">
-                      <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">description</span>
-                      <span className="truncate font-mono text-[10.5px]" title={c.fileName}>
-                        {c.fileName}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleViewFile(c)}
-                        className="py-1 px-2.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-200 rounded text-[9.5px] font-bold transition-all transition-all"
-                      >
-                        Visualizar
-                      </button>
-                      {!isFinalized && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCerts((prev) =>
-                              prev.map((item) => {
-                                if (item.id === c.id) {
-                                  return {
-                                    ...item,
-                                    status: "Aguardando envio" as const,
-                                    uploadedAt: undefined,
-                                    fileName: undefined,
-                                    fileSize: undefined,
-                                    fileType: undefined,
-                                    fileData: undefined
-                                  };
-                                }
-                                return item;
-                              })
-                            );
-                          }}
-                          className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                          title="Remover arquivo"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">close</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    {!isFinalized ? (
-                      <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-lg p-4 bg-slate-50 transition-all text-center flex flex-col items-center justify-center space-y-1.5">
-                        <span className="material-symbols-outlined text-[20px] text-slate-400">attach_file</span>
-                        <div className="text-[10px] text-slate-500 font-semibold leading-normal">
-                          <p className="font-bold text-[#1B2A4A]">Anexar certificado do colaborador</p>
-                          <p className="text-slate-400 text-[9px]">JPG, PNG ou PDF • máx. 10 MB</p>
-                        </div>
-                        <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-200 text-[#1B2A4A] py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block">
-                          Escolher arquivo
-                          <input
-                            type="file"
-                            accept=".jpg,.jpeg,.png,.pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileChange(c.id, file);
-                            }}
-                          />
+                {/* Dynamic Ordered Fields for Collaborator */}
+                {getOrderedFields(unimobinConfig, BUILTIN_UNIMOBIN_FIELDS).map((field) => {
+                  if (field.id === "certificado") {
+                    if (unimobinConfig.certificado === false) return null;
+                    return (
+                      <React.Fragment key="certificado">
+                        {hasFile ? (
+                          <div className="flex items-center justify-between bg-emerald-50/50 border border-emerald-150 p-2.5 rounded-lg text-xs font-semibold">
+                            <div className="flex items-center gap-2 text-emerald-900 min-w-0">
+                              <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">description</span>
+                              <span className="truncate font-mono text-[10.5px]" title={c.fileName}>
+                                {c.fileName}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleViewFile(c)}
+                                className="py-1 px-2.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-200 rounded text-[9.5px] font-bold transition-all transition-all"
+                              >
+                                Visualizar
+                              </button>
+                              {!isFinalized && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCerts((prev) =>
+                                      prev.map((item) => {
+                                        if (item.id === c.id) {
+                                          return {
+                                            ...item,
+                                            status: "Aguardando envio" as const,
+                                            uploadedAt: undefined,
+                                            fileName: undefined,
+                                            fileSize: undefined,
+                                            fileType: undefined,
+                                            fileData: undefined
+                                          };
+                                        }
+                                        return item;
+                                      })
+                                    );
+                                  }}
+                                  className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                                  title="Remover arquivo"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">close</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {!isFinalized ? (
+                              <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-lg p-4 bg-slate-50 transition-all text-center flex flex-col items-center justify-center space-y-1.5">
+                                <span className="material-symbols-outlined text-[20px] text-slate-400">attach_file</span>
+                                <div className="text-[10px] text-slate-500 font-semibold leading-normal">
+                                  <p className="font-bold text-[#1B2A4A]">Anexar certificado do colaborador</p>
+                                  <p className="text-slate-400 text-[9px]">JPG, PNG ou PDF • máx. 10 MB</p>
+                                </div>
+                                <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-200 text-[#1B2A4A] py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block">
+                                  Escolher arquivo
+                                  <input
+                                    type="file"
+                                    accept=".jpg,.jpeg,.png,.pdf"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleFileChange(c.id, file);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="bg-slate-50 border border-slate-100 p-2.5 rounded text-center text-[10px] text-slate-400 italic">
+                                Item bloqueado para edição (Auditado/Enviado)
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  }
+
+                  if (!field.builtIn) {
+                    return (
+                      <div key={field.id} className="space-y-1 mt-2">
+                        <label className="text-[10px] font-extrabold text-[#1B2A4A] uppercase tracking-wider block">
+                          {field.name} {field.required && "*"}
                         </label>
+                        {field.type === "select" ? (
+                          <select
+                            value={customFormValues[c.id]?.[field.id] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomFormValues(prev => ({
+                                ...prev,
+                                [c.id]: { ...(prev[c.id] || {}), [field.id]: val }
+                              }));
+                            }}
+                            className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                          >
+                            <option value="">— Selecione —</option>
+                            {(field.options || []).map((opt: string) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={field.type === "number" ? "number" : "text"}
+                            value={customFormValues[c.id]?.[field.id] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomFormValues(prev => ({
+                                ...prev,
+                                [c.id]: { ...(prev[c.id] || {}), [field.id]: val }
+                              }));
+                            }}
+                            placeholder={`Digite ${field.name}`}
+                            className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                          />
+                        )}
                       </div>
-                    ) : (
-                      <div className="bg-slate-50 border border-slate-100 p-2.5 rounded text-center text-[10px] text-slate-400 italic">
-                        Item bloqueado para edição (Auditado/Enviado)
-                      </div>
-                    )}
-                  </div>
-                )}
+                    );
+                  }
+
+                  return null;
+                })}
               </div>
             );
           })}

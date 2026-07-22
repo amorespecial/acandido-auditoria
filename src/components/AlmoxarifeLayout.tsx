@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CriterionState } from "../types";
 import { dbFetchLayoutConfig, isSupabaseReady } from "../supabaseService";
+import { getOrderedFields, BUILTIN_LAYOUT_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeLayoutProps {
   onBack: () => void;
@@ -84,11 +85,43 @@ export default function AlmoxarifeLayout({
     setPhotos(prev => [...prev, nextPhoto]);
   };
 
+  const [layoutFieldsConfig, setLayoutFieldsConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("acandido_layout_fields_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { localizacao: true, fotos: true, comentario: true, customFields: [] as any[] };
+  });
+
+  const [customFormValues, setCustomFormValues] = useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem("acandido_layout_fields_config");
+        if (saved) setLayoutFieldsConfig(JSON.parse(saved));
+      } catch (e) {}
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("field-configs-updated", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("field-configs-updated", handleStorage);
+    };
+  }, []);
+
   const handleConfirmSubmission = (e: React.FormEvent) => {
     e.preventDefault();
-    if (photos.length === 0) {
+    if (layoutFieldsConfig.fotos !== false && photos.length === 0) {
       alert("Por favor, adicione pelo menos 1 foto antes de enviar.");
       return;
+    }
+    if (layoutFieldsConfig.customFields && layoutFieldsConfig.customFields.length > 0) {
+      const missingReq = layoutFieldsConfig.customFields.find((cf: any) => cf.required && !customFormValues[cf.id]?.trim());
+      if (missingReq) {
+        alert(`O campo "${missingReq.name}" é obrigatório.`);
+        return;
+      }
     }
     setIsSending(true);
 
@@ -103,7 +136,8 @@ export default function AlmoxarifeLayout({
     }, 1200);
   };
 
-  const isSubmitDisabled = photos.length === 0 || isSending;
+  const isPhotoRequired = layoutFieldsConfig.fotos !== false;
+  const isSubmitDisabled = (isPhotoRequired && photos.length === 0) || isSending;
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -122,107 +156,154 @@ export default function AlmoxarifeLayout({
       </div>
 
       {/* Dynamic Guideline Card */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-[11px] leading-relaxed text-[#1B2A4A] space-y-2 font-sans">
-        <p className="font-extrabold uppercase tracking-wider text-[10px] text-amber-850">
-          Diretrizes Fotográficas de Conformidade
-        </p>
-        
-        <p className="font-semibold text-slate-700">
-          A localização definida pelo auditor para o circuito de <strong className="font-bold">{activeMonth}/{activeYear}</strong> é:
-        </p>
-        
-        <div className="bg-amber-100 border border-amber-200 rounded-lg p-2.5 my-1.5 shadow-3xs">
-          <p className={`font-black text-xs ${isConfigured ? "text-indigo-950" : "text-amber-800 italic"}`}>
-            {locationText}
+      {layoutFieldsConfig.localizacao !== false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-[11px] leading-relaxed text-[#1B2A4A] space-y-2 font-sans">
+          <p className="font-extrabold uppercase tracking-wider text-[10px] text-amber-850">
+            Diretrizes Fotográficas de Conformidade
           </p>
-        </div>
-
-        <p className="text-slate-600 leading-normal font-medium">
-          Tire ou anexe até 5 fotos focando na prateleira inteira e nos itens a serem auditados, mostrando claramente a identificação visual dos códigos que se encontram na área indicada.
-        </p>
-
-        {layoutConfig?.instructions && (
-          <div className="pt-2 border-t border-amber-200/60 text-slate-700 mt-2">
-            <span className="font-bold block text-[10px] uppercase text-amber-900">Observação do auditor:</span>
-            <p className="italic font-medium text-amber-950">"{layoutConfig.instructions}"</p>
+          
+          <p className="font-semibold text-slate-700">
+            A localização definida pelo auditor para o circuito de <strong className="font-bold">{activeMonth}/{activeYear}</strong> é:
+          </p>
+          
+          <div className="bg-amber-100 border border-amber-200 rounded-lg p-2.5 my-1.5 shadow-3xs">
+            <p className={`font-black text-xs ${isConfigured ? "text-indigo-950" : "text-amber-800 italic"}`}>
+              {locationText}
+            </p>
           </div>
-        )}
-      </div>
+
+          <p className="text-slate-600 leading-normal font-medium">
+            Tire ou anexe até 5 fotos focando na prateleira inteira e nos itens a serem auditados, mostrando claramente a identificação visual dos códigos que se encontram na área indicada.
+          </p>
+
+          {layoutConfig?.instructions && (
+            <div className="pt-2 border-t border-amber-200/60 text-slate-700 mt-2">
+              <span className="font-bold block text-[10px] uppercase text-amber-900">Observação do auditor:</span>
+              <p className="italic font-medium text-amber-950">"{layoutConfig.instructions}"</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleConfirmSubmission} className="space-y-6">
-        {/* Photo evidence dashboard */}
-        <div className="space-y-3 font-sans">
-          <div className="flex justify-between items-center text-xs">
-            <span className="font-bold text-slate-500 uppercase tracking-wider">Mídia Enviada</span>
-            <span className="font-black text-[#1B2A4A] bg-slate-100 px-2.5 py-1 rounded-full font-mono text-[10px]">
-              {photos.length} de 5 fotos anexadas
-            </span>
-          </div>
+        {getOrderedFields(layoutFieldsConfig, BUILTIN_LAYOUT_FIELDS).map((field) => {
+          if (field.id === "localizacao") {
+            if (layoutFieldsConfig.localizacao === false) return null;
+            return null; // Localizacao directive card is already rendered above form or can be rendered here
+          }
 
-          <div className="grid grid-cols-2 gap-3">
-            {photos.map((url, idx) => (
-              <div
-                key={idx}
-                className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden aspect-square relative shadow-2xs group"
-              >
-                <img
-                  src={url}
-                  referrerPolicy="no-referrer"
-                  alt={`Evidência ${idx + 1}`}
-                  className="w-full h-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
-                  className="absolute top-1.5 right-1.5 bg-black/75 hover:bg-black text-white w-6 h-6 rounded-full flex items-center justify-center transition-all shadow active:scale-90"
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-                <div className="absolute bottom-1.5 left-1.5 bg-black/60 px-1.5 py-0.5 rounded text-[8.5px] font-bold text-white uppercase tracking-wider">
-                  Foto {idx + 1}
+          if (field.id === "fotos") {
+            if (layoutFieldsConfig.fotos === false) return null;
+            return (
+              <div key="fotos" className="space-y-3 font-sans">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-slate-500 uppercase tracking-wider">Mídia Enviada</span>
+                  <span className="font-black text-[#1B2A4A] bg-slate-100 px-2.5 py-1 rounded-full font-mono text-[10px]">
+                    {photos.length} de 5 fotos anexadas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {photos.map((url, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden aspect-square relative shadow-2xs group"
+                    >
+                      <img
+                        src={url}
+                        referrerPolicy="no-referrer"
+                        alt={`Evidência ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1.5 right-1.5 bg-black/75 hover:bg-black text-white w-6 h-6 rounded-full flex items-center justify-center transition-all shadow active:scale-90"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                      </button>
+                      <div className="absolute bottom-1.5 left-1.5 bg-black/60 px-1.5 py-0.5 rounded text-[8.5px] font-bold text-white uppercase tracking-wider">
+                        Foto {idx + 1}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* "+ Adicionar Foto" button as slot */}
+                  {photos.length < 5 && (
+                    <div className="flex flex-col gap-2">
+                      <label className="bg-white border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#1B2A4A] hover:bg-slate-50/50 transition-all select-none aspect-square p-2 min-h-[140px]">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                        <span className="material-symbols-outlined text-[28px] text-slate-400">add_a_photo</span>
+                        <span className="text-[10px] font-black text-[#1B2A4A] mt-1.5">
+                          + Adicionar Foto
+                        </span>
+                        <span className="text-[8px] text-slate-400 mt-1 uppercase font-bold tracking-wider leading-none">
+                          {photos.length === 0 ? "Nenhuma foto (0/5)" : `${photos.length}/5 fotos`}
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+            );
+          }
 
-            {/* "+ Adicionar Foto" button as slot */}
-            {photos.length < 5 && (
-              <div className="flex flex-col gap-2">
-                <label className="bg-white border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#1B2A4A] hover:bg-slate-50/50 transition-all select-none aspect-square p-2 min-h-[140px]">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <span className="material-symbols-outlined text-[28px] text-slate-400">add_a_photo</span>
-                  <span className="text-[10px] font-black text-[#1B2A4A] mt-1.5">
-                    + Adicionar Foto
-                  </span>
-                  <span className="text-[8px] text-slate-400 mt-1 uppercase font-bold tracking-wider leading-none">
-                    {photos.length === 0 ? "Nenhuma foto (0/5)" : `${photos.length}/5 fotos`}
-                  </span>
+          if (field.id === "comentario") {
+            if (layoutFieldsConfig.comentario === false) return null;
+            return (
+              <div key="comentario" className="space-y-2 font-sans">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                  Comentários do Almoxarife
                 </label>
-
-
+                <textarea
+                  rows={3}
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value)}
+                  placeholder="Descreva o status da sua organização física ou informe caso precise de porta-etiquetas ou fitas demarcadoras..."
+                  className="w-full border border-slate-200 bg-white rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
+                ></textarea>
               </div>
-            )}
-          </div>
-        </div>
+            );
+          }
 
-        {/* Comment field */}
-        <div className="space-y-2 font-sans">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Comentários do Almoxarife
-          </label>
-          <textarea
-            rows={3}
-            value={commentInput}
-            onChange={(e) => setCommentInput(e.target.value)}
-            placeholder="Descreva o status da sua organização física ou informe caso precise de porta-etiquetas ou fitas demarcadoras..."
-            className="w-full border border-slate-200 bg-white rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
-          ></textarea>
-        </div>
+          if (!field.builtIn) {
+            return (
+              <div key={field.id} className="space-y-1 font-sans">
+                <label className="text-xs font-bold text-[#1B2A4A] block">
+                  {field.name} {field.required && "*"}
+                </label>
+                {field.type === "select" ? (
+                  <select
+                    value={customFormValues[field.id] || ""}
+                    onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+                    className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                  >
+                    <option value="">— Selecione —</option>
+                    {(field.options || []).map((opt: string) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field.type === "number" ? "number" : "text"}
+                    value={customFormValues[field.id] || ""}
+                    onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+                    placeholder={`Digite ${field.name}`}
+                    className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                  />
+                )}
+              </div>
+            );
+          }
+
+          return null;
+        })}
 
         <button
           type="submit"

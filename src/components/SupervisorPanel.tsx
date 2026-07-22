@@ -25,7 +25,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
   // Dynamic fields configured by Auditor
   const [fields, setFields] = useState<any[]>(() => {
-    const saved = localStorage.getItem("acandido_supervisor_fields");
+    const saved = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -70,7 +70,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
         }
       }
 
-      const savedFields = localStorage.getItem("acandido_supervisor_fields");
+      const savedFields = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
       if (savedFields) {
         try {
           setFields(JSON.parse(savedFields));
@@ -80,11 +80,13 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
       }
     };
     window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("field-configs-updated", handleStorageChange);
     // Periodically poll local storage in case multiple tabs/components are working together
     const interval = setInterval(handleStorageChange, 1000);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("field-configs-updated", handleStorageChange);
       clearInterval(interval);
     };
   }, []);
@@ -299,6 +301,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
               {/* DYNAMIC FIELDS GENERATION */}
               {fields.map((f: any) => {
                 if (f.id === "solicitante") return null;
+                if (f.enabled === false || f.visible === false) return null;
 
                 return (
                   <div key={f.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 shadow-sm space-y-2">

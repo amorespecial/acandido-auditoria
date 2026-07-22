@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
 import { dbFetchTop10Config, isSupabaseReady } from "../supabaseService";
+import { getOrderedFields, BUILTIN_TOP10_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeContagemProps {
   onBack: () => void;
@@ -119,6 +120,31 @@ export default function AlmoxarifeContagem({
     }
   }, [items, criterionState]);
 
+  const [top10Config, setTop10Config] = useState(() => {
+    try {
+      const saved = localStorage.getItem("acandido_top10_fields_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { quantidade: true, foto: true, customFields: [] as any[] };
+  });
+
+  const [customFormValues, setCustomFormValues] = useState<Record<string, Record<string, string>>>({});
+
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem("acandido_top10_fields_config");
+        if (saved) setTop10Config(JSON.parse(saved));
+      } catch (e) {}
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("field-configs-updated", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("field-configs-updated", handleStorage);
+    };
+  }, []);
+
   const [commentsInput, setCommentsInput] = useState(() => {
     return criterionState?.evidenceNotes || "";
   });
@@ -130,7 +156,17 @@ export default function AlmoxarifeContagem({
 
   const filledPhotosCount = items.filter((it: any) => !!uploadedPhotos[it.code]).length;
   const isSubmitBtnAllowed = totalItemsCount > 0 && 
-    items.every((it: any) => !!uploadedPhotos[it.code] && quantities[it.code] !== undefined && quantities[it.code] !== "");
+    items.every((it: any) => {
+      const photoOk = top10Config.foto === false || !!uploadedPhotos[it.code];
+      const qtyOk = top10Config.quantidade === false || (quantities[it.code] !== undefined && quantities[it.code].trim() !== "");
+      let customOk = true;
+      if (top10Config.customFields && top10Config.customFields.length > 0) {
+        const itemVals = customFormValues[it.code] || {};
+        const missingReq = top10Config.customFields.find((cf: any) => cf.required && !itemVals[cf.id]?.trim());
+        if (missingReq) customOk = false;
+      }
+      return photoOk && qtyOk && customOk;
+    });
 
   // Handle local File conversions to Base64
   const processFile = (itemCode: string, file: File) => {
@@ -452,60 +488,113 @@ export default function AlmoxarifeContagem({
                           </h4>
                         </div>
 
-                        {/* Physical Quantity Field */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                            Qtd Física no Estoque:
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            placeholder="Digite a quantidade encontrada"
-                            value={quantities[item.code] || ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setQuantities((prev) => ({
-                                ...prev,
-                                [item.code]: val
-                              }));
-                            }}
-                            className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs focus:outline-none focus:border-[#1B2A4A] font-bold"
-                          />
-                        </div>
+                        {/* Dynamic Ordered Fields for Item */}
+                        {getOrderedFields(top10Config, BUILTIN_TOP10_FIELDS).map((field) => {
+                          if (field.id === "quantidade") {
+                            if (top10Config.quantidade === false) return null;
+                            return (
+                              <div key="quantidade" className="space-y-1 mt-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                                  Qtd Física no Estoque:
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder="Digite a quantidade encontrada"
+                                  value={quantities[item.code] || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setQuantities((prev) => ({
+                                      ...prev,
+                                      [item.code]: val
+                                    }));
+                                  }}
+                                  className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs focus:outline-none focus:border-[#1B2A4A] font-bold"
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (!field.builtIn) {
+                            return (
+                              <div key={field.id} className="space-y-1 mt-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                  {field.name} {field.required && "*"}
+                                </label>
+                                {field.type === "select" ? (
+                                  <select
+                                    value={customFormValues[item.code]?.[field.id] || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setCustomFormValues(prev => ({
+                                        ...prev,
+                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: val }
+                                      }));
+                                    }}
+                                    className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                                  >
+                                    <option value="">— Selecione —</option>
+                                    {(field.options || []).map((opt: string) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type={field.type === "number" ? "number" : "text"}
+                                    value={customFormValues[item.code]?.[field.id] || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setCustomFormValues(prev => ({
+                                        ...prev,
+                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: val }
+                                      }));
+                                    }}
+                                    placeholder={`Digite ${field.name}`}
+                                    className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                                  />
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })}
                       </div>
 
-                      {/* Right panel - Thumb or Button */}
-                      <div className="shrink-0 pt-1">
-                        {photoData ? (
-                          <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-250 bg-slate-50 group shadow-xs">
-                            <img src={photoData} alt="Thumb" className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => handleRemovePhoto(item.code)}
-                              className="absolute inset-0 bg-red-800/80 hover:bg-red-900/90 text-white flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition duration-150 select-none"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">delete</span>
-                              Remover
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-end gap-1.5">
-                            <label className="h-9 px-3.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 cursor-pointer rounded-lg text-[10.5px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1 relative shadow-3xs active:scale-95 transition-all select-none">
-                              <span className="material-symbols-outlined text-[15px]">add_a_photo</span>
-                              Anexar
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) processFile(item.code, f);
-                                }}
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                        )}
-                      </div>
+                      {/* Right panel - Photo Upload Slot */}
+                      {top10Config.foto !== false && (
+                        <div className="shrink-0 pt-1">
+                          {photoData ? (
+                            <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-250 bg-slate-50 group shadow-xs">
+                              <img src={photoData} alt="Thumb" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhoto(item.code)}
+                                className="absolute inset-0 bg-red-800/80 hover:bg-red-900/90 text-white flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition duration-150 select-none"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">delete</span>
+                                Remover
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-end gap-1.5">
+                              <label className="h-9 px-3.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 cursor-pointer rounded-lg text-[10.5px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1 relative shadow-3xs active:scale-95 transition-all select-none">
+                                <span className="material-symbols-outlined text-[15px]">add_a_photo</span>
+                                Anexar
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) processFile(item.code, f);
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
 import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties } from "../supabaseService";
+import { getOrderedFields, BUILTIN_GARANTIA_FIELDS } from "../utils/fieldOrdering";
 
 interface AlmoxarifeGarantiaProps {
   onBack: () => void;
@@ -742,26 +743,6 @@ export default function AlmoxarifeGarantia({
                 </select>
               </div>
 
-              {/* Manufacturer selection preset */}
-              {garantiaConfig.fabricante !== false && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-[#1B2A4A]">Fabricante *</label>
-                  <select
-                    required
-                    value={selectedManufacturer}
-                    onChange={(e) => setSelectedManufacturer(e.target.value)}
-                    className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
-                  >
-                    <option value="">— Selecione o Fabricante —</option>
-                    {MANUFACTURERS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Expiry warranty calendar date */}
                 <div className="flex flex-col gap-1">
@@ -784,43 +765,146 @@ export default function AlmoxarifeGarantia({
                 </div>
               </div>
 
-              {(garantiaConfig.nfEmissionDate !== false || garantiaConfig.reference !== false) && (
-                <>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block border-b border-slate-100 pb-1 pt-2">
-                    Seção: Mais Informações
-                  </span>
+              {/* Dynamic Ordered Configurable Fields */}
+              {getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS).map((field) => {
+                if (field.id === "fabricante") {
+                  if (garantiaConfig.fabricante === false) return null;
+                  return (
+                    <div key="fabricante" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">Fabricante *</label>
+                      <select
+                        required
+                        value={selectedManufacturer}
+                        onChange={(e) => setSelectedManufacturer(e.target.value)}
+                        className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                      >
+                        <option value="">— Selecione o Fabricante —</option>
+                        {MANUFACTURERS.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* NF emission date */}
-                    {garantiaConfig.nfEmissionDate !== false && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-[#1B2A4A]">Data de Emissão da NF *</label>
+                if (field.id === "nfEmissionDate") {
+                  if (garantiaConfig.nfEmissionDate === false) return null;
+                  return (
+                    <div key="nfEmissionDate" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">Data de Emissão da NF *</label>
+                      <input
+                        type="date"
+                        required
+                        value={nfEmissionDate}
+                        onChange={(e) => setNfEmissionDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
+                      />
+                    </div>
+                  );
+                }
+
+                if (field.id === "reference") {
+                  if (garantiaConfig.reference === false) return null;
+                  return (
+                    <div key="reference" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">Referência do Item</label>
+                      <input
+                        type="text"
+                        placeholder="—"
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                      />
+                    </div>
+                  );
+                }
+
+                if (field.id === "pieceObservation") {
+                  if (garantiaConfig.pieceObservation === false) return null;
+                  return (
+                    <div key="pieceObservation" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">Observação da Peça</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Se vazio, exibirá automaticamente: Nenhuma observação"
+                        value={pieceObservation}
+                        onChange={(e) => setPieceObservation(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
+                      ></textarea>
+                    </div>
+                  );
+                }
+
+                if (field.id === "scrapObservation") {
+                  if (garantiaConfig.scrapObservation === false) return null;
+                  return (
+                    <div key="scrapObservation" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">Observação de Sucata</label>
+                      <input
+                        type="text"
+                        placeholder="Introduza o valor aqui"
+                        value={scrapObservation}
+                        onChange={(e) => setScrapObservation(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                      />
+                    </div>
+                  );
+                }
+
+                // Custom fields
+                if (!field.builtIn) {
+                  return (
+                    <div key={field.id} className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        {field.name} {field.required && " *"}
+                      </label>
+                      {field.type === "select" ? (
+                        <select
+                          required={field.required}
+                          value={customFormValues[field.id] || ""}
+                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                        >
+                          <option value="">— Selecione uma opção —</option>
+                          {(field.options || []).map((opt: string) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : field.type === "date" ? (
                         <input
                           type="date"
-                          required
-                          value={nfEmissionDate}
-                          onChange={(e) => setNfEmissionDate(e.target.value)}
+                          required={field.required}
+                          value={customFormValues[field.id] || ""}
+                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
                           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
                         />
-                      </div>
-                    )}
-
-                    {/* Reference */}
-                    {garantiaConfig.reference !== false && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-[#1B2A4A]">Referência do Item</label>
+                      ) : field.type === "number" ? (
                         <input
-                          type="text"
-                          placeholder="—"
-                          value={reference}
-                          onChange={(e) => setReference(e.target.value)}
+                          type="number"
+                          required={field.required}
+                          placeholder="Digite valor numérico"
+                          value={customFormValues[field.id] || ""}
+                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
                           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
                         />
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                      ) : (
+                        <input
+                          type="text"
+                          required={field.required}
+                          placeholder={`Digite ${field.name.toLowerCase()}`}
+                          value={customFormValues[field.id] || ""}
+                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                        />
+                      )}
+                    </div>
+                  );
+                }
+
+                return null;
+              })}
 
               {/* Last update date - auto todays date editable */}
               <div className="flex flex-col gap-1">
@@ -833,89 +917,6 @@ export default function AlmoxarifeGarantia({
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
                 />
               </div>
-
-              {/* Piece Observation */}
-              {garantiaConfig.pieceObservation !== false && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-[#1B2A4A]">Observação da Peça</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Se vazio, exibirá automaticamente: Nenhuma observação"
-                    value={pieceObservation}
-                    onChange={(e) => setPieceObservation(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
-                  ></textarea>
-                </div>
-              )}
-
-              {/* Scrap Observation */}
-              {garantiaConfig.scrapObservation !== false && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-[#1B2A4A]">Observação de Sucata</label>
-                  <input
-                    type="text"
-                    placeholder="Introduza o valor aqui"
-                    value={scrapObservation}
-                    onChange={(e) => setScrapObservation(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
-                  />
-                </div>
-              )}
-
-              {/* Seção: Campos Customizados do Auditor */}
-              {garantiaConfig.customFields && garantiaConfig.customFields.length > 0 && (
-                <>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block border-b border-slate-100 pb-1 pt-2">
-                    Campos Adicionais (Auditor)
-                  </span>
-                  {garantiaConfig.customFields.map((cf: any) => (
-                    <div key={cf.id} className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">
-                        {cf.name} {cf.required && " *"}
-                      </label>
-                      {cf.type === "select" ? (
-                        <select
-                          required={cf.required}
-                          value={customFormValues[cf.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                          className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
-                        >
-                          <option value="">— Selecione uma opção —</option>
-                          {(cf.options || []).map((opt: string) => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      ) : cf.type === "date" ? (
-                        <input
-                          type="date"
-                          required={cf.required}
-                          value={customFormValues[cf.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
-                        />
-                      ) : cf.type === "number" ? (
-                        <input
-                          type="number"
-                          required={cf.required}
-                          placeholder="Digite valor numérico"
-                          value={customFormValues[cf.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          required={cf.required}
-                          placeholder={`Digite ${cf.name.toLowerCase()}`}
-                          value={customFormValues[cf.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
-                        />
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
 
               {/* Footer action buttons */}
               <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">

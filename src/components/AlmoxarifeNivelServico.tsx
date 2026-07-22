@@ -42,7 +42,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   const [fields, setFields] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem("acandido_supervisor_fields");
+      const saved = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
@@ -93,7 +93,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
         }
       }
 
-      const savedFields = localStorage.getItem("acandido_supervisor_fields");
+      const savedFields = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
       if (savedFields) {
         try {
           setFields(JSON.parse(savedFields));
@@ -107,8 +107,10 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
     handleStorageChange();
 
     window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("field-configs-updated", handleStorageChange);
     return () => {
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("field-configs-updated", handleStorageChange);
     };
   }, [branchId]);
 

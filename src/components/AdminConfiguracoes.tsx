@@ -2,6 +2,14 @@ import React, { useState, useEffect } from "react";
 import { AppUser, Branch, WarrantyItem } from "../types";
 import { isSupabaseReady, dbFetchUsers, dbSaveUser, dbDeleteUser, dbSaveSchedules, dbDeleteSchedule, dbFetchSchedules, dbFetchOccurrences, dbSaveOccurrences, dbMigrateUsersPasswords, MigrationReport, dbCleanupLegacyPlainPasswords, CleanupReport } from "../supabaseService";
 import { supabase } from "../supabaseClient";
+import { DraggableFieldList } from "./DraggableFieldList";
+import {
+  getOrderedFields,
+  BUILTIN_GARANTIA_FIELDS,
+  BUILTIN_TOP10_FIELDS,
+  BUILTIN_LAYOUT_FIELDS,
+  BUILTIN_UNIMOBIN_FIELDS,
+} from "../utils/fieldOrdering";
 
 const ALMOXARIFADOS_LIST = [
   "Santa Maria JPA",
@@ -448,27 +456,33 @@ export default function AdminConfiguracoes({
   // Synchronizers
   useEffect(() => {
     localStorage.setItem("acandido_supervisor_form_fields", JSON.stringify(supervisorFields));
+    localStorage.setItem("acandido_supervisor_fields", JSON.stringify(supervisorFields));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [supervisorFields]);
 
   useEffect(() => {
     localStorage.setItem("acandido_garantia_fields_config", JSON.stringify(garantiaConfig));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [garantiaConfig]);
 
   useEffect(() => {
     localStorage.setItem("acandido_top10_fields_config", JSON.stringify(top10Config));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [top10Config]);
 
   useEffect(() => {
     localStorage.setItem("acandido_layout_fields_config", JSON.stringify(layoutConfig));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [layoutConfig]);
 
   useEffect(() => {
     localStorage.setItem("acandido_unimobin_fields_config", JSON.stringify(unimobinConfig));
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [unimobinConfig]);
 
   // ================= STATE: USERS =================
@@ -1875,7 +1889,7 @@ export default function AdminConfiguracoes({
               </div>
             </div>
 
-            <div className="space-y-2 bg-white p-3.5 rounded-lg border">
+            <div className="space-y-3 bg-white p-3.5 rounded-lg border">
               <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
                 <span>Item / Descrição da Peça</span>
                 <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
@@ -1885,51 +1899,23 @@ export default function AdminConfiguracoes({
                 <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
               </div>
 
-              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
-                <span>Fabricante</span>
-                <input
-                  type="checkbox"
-                  checked={garantiaConfig.fabricante}
-                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, fabricante: e.target.checked }))}
-                  className="h-3.5 w-3.5 rounded cursor-pointer"
-                />
-              </div>
-              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
-                <span>Nota Fiscal / Data de Emissão</span>
-                <input
-                  type="checkbox"
-                  checked={garantiaConfig.nfEmissionDate}
-                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, nfEmissionDate: e.target.checked }))}
-                  className="h-3.5 w-3.5 rounded cursor-pointer"
-                />
-              </div>
-              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
-                <span>Referência</span>
-                <input
-                  type="checkbox"
-                  checked={garantiaConfig.reference}
-                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, reference: e.target.checked }))}
-                  className="h-3.5 w-3.5 rounded cursor-pointer"
-                />
-              </div>
-              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
-                <span>Observação da Peça</span>
-                <input
-                  type="checkbox"
-                  checked={garantiaConfig.pieceObservation}
-                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, pieceObservation: e.target.checked }))}
-                  className="h-3.5 w-3.5 rounded cursor-pointer"
-                />
-              </div>
-              <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-700">
-                <span>Observação da Sucata</span>
-                <input
-                  type="checkbox"
-                  checked={garantiaConfig.scrapObservation}
-                  onChange={(e) => setGarantiaConfig(prev => ({ ...prev, scrapObservation: e.target.checked }))}
-                  className="h-3.5 w-3.5 rounded cursor-pointer"
-                />
-              </div>
+              <DraggableFieldList
+                fields={getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS)}
+                onReorder={(newFields) =>
+                  setGarantiaConfig((prev: any) => ({ ...prev, fieldOrder: newFields.map((f) => f.id) }))
+                }
+                configState={garantiaConfig}
+                onToggleField={(fieldId, checked) =>
+                  setGarantiaConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
+                }
+                onDeleteCustomField={(field) =>
+                  setGarantiaConfig((prev: any) => ({
+                    ...prev,
+                    customFields: (prev.customFields || []).filter((cf: any) => cf.id !== field.id),
+                    fieldOrder: (prev.fieldOrder || []).filter((id: string) => id !== field.id),
+                  }))
+                }
+              />
 
               {/* Custom fields in Garantia */}
               <AlmoxarifeCriteriaCustomFields
@@ -2163,69 +2149,34 @@ export default function AdminConfiguracoes({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
               {/* Left Side: Fields list */}
               <div className="border border-slate-200/80 rounded-2xl bg-slate-50/50 p-4 space-y-4">
-                <span className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider block font-sans">Campos do Formulário</span>
-
-                <div className="space-y-2">
-                  {supervisorFields.map((field: any, idx: number) => (
-                    <div key={field.id} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-xs">
-                      <div className="text-xs">
-                        {field.builtIn ? (
-                          <strong className="text-slate-705 font-bold">{field.name}</strong>
-                        ) : (
-                          <input
-                            type="text"
-                            value={field.name}
-                            onChange={(e) => {
-                              const updated = [...supervisorFields];
-                              updated[idx].name = e.target.value;
-                              setSupervisorFields(updated);
-                            }}
-                            className="bg-slate-50 border border-slate-200 p-1 font-bold text-slate-750 text-xs rounded"
-                          />
-                        )}
-                        <span className="block text-[10px] text-slate-400 mt-0.5 font-medium font-sans">
-                          Tipo: <strong className="font-mono">{field.type}</strong> | {field.required ? "Obrigatório" : "Opcional"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {/* Toggle Required (for custom ones mostly, but allow on any except solicitante) */}
-                        {field.id !== "solicitante" && (
-                          <label className="flex items-center gap-1 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={field.required}
-                              onChange={(e) => {
-                                const updated = supervisorFields.map((f: any) =>
-                                  f.id === field.id ? { ...f, required: e.target.checked } : f
-                                );
-                                setSupervisorFields(updated);
-                              }}
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-[9.5px] font-black text-slate-400 uppercase tracking-wider font-sans">Obrig.</span>
-                          </label>
-                        )}
-
-                        {/* Delete button (except built-in ones) */}
-                        {!field.builtIn && (
-                          <button
-                            type="button"
-                            onClick={() => setSupervisorFieldToDelete(field)}
-                            className="text-[10px] text-red-500 hover:text-red-700 font-bold hover:underline font-sans flex items-center gap-0.5 cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-[13px]">delete</span>
-                            Remover
-                          </button>
-                        )}
-
-                        {field.builtIn && (
-                          <span className="text-[8.5px] px-1.5 py-0.5 bg-slate-100 text-slate-400 font-extrabold rounded uppercase font-sans">Fixo</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <DraggableFieldList
+                  title="Campos do Formulário"
+                  subtitle="Arraste para reordenar os campos exibidos no formulário do Supervisor."
+                  fields={supervisorFields}
+                  onReorder={(newFields) => setSupervisorFields(newFields)}
+                  onToggleField={(fieldId, checked) =>
+                    setSupervisorFields(
+                      supervisorFields.map((f: any) =>
+                        f.id === fieldId ? { ...f, enabled: checked } : f
+                      )
+                    )
+                  }
+                  onToggleRequired={(fieldId, checked) =>
+                    setSupervisorFields(
+                      supervisorFields.map((f: any) =>
+                        f.id === fieldId ? { ...f, required: checked } : f
+                      )
+                    )
+                  }
+                  onNameChange={(fieldId, newName) =>
+                    setSupervisorFields(
+                      supervisorFields.map((f: any) =>
+                        f.id === fieldId ? { ...f, name: newName } : f
+                      )
+                    )
+                  }
+                  onDeleteCustomField={(field) => setSupervisorFieldToDelete(field)}
+                />
               </div>
 
               {/* Right Side: Add custom field form */}
@@ -2316,30 +2267,29 @@ export default function AdminConfiguracoes({
                 <span className="text-[10px] text-slate-400 font-bold font-sans">Contagem Física Rotativa</span>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
                   <span>Código & Nome do Material</span>
                   <span className="text-[10px] font-bold text-slate-400 uppercase font-sans">Obrigatório / Fixo</span>
                 </div>
 
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Quantidade Física Encontrada</span>
-                  <input
-                    type="checkbox"
-                    checked={top10Config.quantidade}
-                    onChange={(e) => setTop10Config(prev => ({ ...prev, quantidade: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-medium font-sans text-slate-705">
-                  <span>Anexar Foto de Evidência</span>
-                  <input
-                    type="checkbox"
-                    checked={top10Config.foto}
-                    onChange={(e) => setTop10Config(prev => ({ ...prev, foto: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
+                <DraggableFieldList
+                  fields={getOrderedFields(top10Config, BUILTIN_TOP10_FIELDS)}
+                  onReorder={(newFields) =>
+                    setTop10Config((prev: any) => ({ ...prev, fieldOrder: newFields.map((f) => f.id) }))
+                  }
+                  configState={top10Config}
+                  onToggleField={(fieldId, checked) =>
+                    setTop10Config((prev: any) => ({ ...prev, [fieldId]: checked }))
+                  }
+                  onDeleteCustomField={(field) =>
+                    setTop10Config((prev: any) => ({
+                      ...prev,
+                      customFields: (prev.customFields || []).filter((cf: any) => cf.id !== field.id),
+                      fieldOrder: (prev.fieldOrder || []).filter((id: string) => id !== field.id),
+                    }))
+                  }
+                />
 
                 {/* Custom fields in TOP 10 */}
                 <AlmoxarifeCriteriaCustomFields
@@ -2356,34 +2306,24 @@ export default function AdminConfiguracoes({
                 <span className="text-[10px] text-slate-400 font-bold font-sans">Organização Estética</span>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-semibold font-sans text-slate-705">
-                  <span>Localização Informada</span>
-                  <input
-                    type="checkbox"
-                    checked={layoutConfig.localizacao}
-                    onChange={(e) => setLayoutConfig(prev => ({ ...prev, localizacao: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-semibold font-sans text-slate-705">
-                  <span>Anexar Fotos Estéticas (até 5)</span>
-                  <input
-                    type="checkbox"
-                    checked={layoutConfig.fotos}
-                    onChange={(e) => setLayoutConfig(prev => ({ ...prev, fotos: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-semibold font-sans text-slate-705">
-                  <span>Comentário / Observações</span>
-                  <input
-                    type="checkbox"
-                    checked={layoutConfig.comentario}
-                    onChange={(e) => setLayoutConfig(prev => ({ ...prev, comentario: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
+              <div className="space-y-3">
+                <DraggableFieldList
+                  fields={getOrderedFields(layoutConfig, BUILTIN_LAYOUT_FIELDS)}
+                  onReorder={(newFields) =>
+                    setLayoutConfig((prev: any) => ({ ...prev, fieldOrder: newFields.map((f) => f.id) }))
+                  }
+                  configState={layoutConfig}
+                  onToggleField={(fieldId, checked) =>
+                    setLayoutConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
+                  }
+                  onDeleteCustomField={(field) =>
+                    setLayoutConfig((prev: any) => ({
+                      ...prev,
+                      customFields: (prev.customFields || []).filter((cf: any) => cf.id !== field.id),
+                      fieldOrder: (prev.fieldOrder || []).filter((id: string) => id !== field.id),
+                    }))
+                  }
+                />
 
                 {/* Custom fields in LayOut */}
                 <AlmoxarifeCriteriaCustomFields
@@ -2400,20 +2340,29 @@ export default function AdminConfiguracoes({
                 <span className="text-[10px] text-slate-400 font-bold font-sans">Certificações Unimobin</span>
               </div>
 
-              <div className="space-y-2 font-medium">
+              <div className="space-y-3 font-medium">
                 <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-semibold font-sans text-slate-705">
                   <span>Lista de Colaboradores</span>
                   <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">Fixo</span>
                 </div>
-                <div className="text-xs flex items-center justify-between p-2 bg-slate-50 rounded font-semibold font-sans text-slate-705">
-                  <span>Anexo de PDF / Imagem de Certificado</span>
-                  <input
-                    type="checkbox"
-                    checked={unimobinConfig.certificado}
-                    onChange={(e) => setUnimobinConfig(prev => ({ ...prev, certificado: e.target.checked }))}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                </div>
+
+                <DraggableFieldList
+                  fields={getOrderedFields(unimobinConfig, BUILTIN_UNIMOBIN_FIELDS)}
+                  onReorder={(newFields) =>
+                    setUnimobinConfig((prev: any) => ({ ...prev, fieldOrder: newFields.map((f) => f.id) }))
+                  }
+                  configState={unimobinConfig}
+                  onToggleField={(fieldId, checked) =>
+                    setUnimobinConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
+                  }
+                  onDeleteCustomField={(field) =>
+                    setUnimobinConfig((prev: any) => ({
+                      ...prev,
+                      customFields: (prev.customFields || []).filter((cf: any) => cf.id !== field.id),
+                      fieldOrder: (prev.fieldOrder || []).filter((id: string) => id !== field.id),
+                    }))
+                  }
+                />
 
                 {/* Custom fields in Unimobin */}
                 <AlmoxarifeCriteriaCustomFields
@@ -3234,7 +3183,8 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
     const newField = { id: safeId, name: label, type, options, required: false };
     onUpdateConfig({
       ...config,
-      customFields: [...(config.customFields || []), newField]
+      customFields: [...(config.customFields || []), newField],
+      fieldOrder: [...(config.fieldOrder || []), safeId]
     });
     setName("");
     setOptionsStr("");
