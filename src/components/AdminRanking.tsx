@@ -1207,46 +1207,46 @@ function AdminRankingContent({
     return (
       <div className="space-y-6">
         {/* Detail Header */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2">
             <button
               onClick={() => setSelectedEntry(null)}
-              className="flex items-center gap-1 text-xs font-black text-[#1B2A4A] hover:text-[#C8A84B] transition-colors"
+              className="flex items-center gap-1.5 text-xs font-black text-[#1B2A4A] hover:text-[#C8A84B] transition-colors"
             >
-              <span className="material-symbols-outlined text-[16px] font-bold">arrow_back</span>
+              <span className="material-symbols-outlined text-[18px] font-bold">arrow_back</span>
               Voltar ao Ranking
             </button>
-            <h2 className="text-2xl font-black text-[#1B2A4A] tracking-tight">{selectedEntry.name}</h2>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-bold">
+            <h2 className="text-2xl lg:text-3xl font-black text-[#1B2A4A] tracking-tight">{selectedEntry.name}</h2>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs lg:text-sm text-slate-500 font-bold">
               <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-slate-400 text-[14px]">person</span>
+                <span className="material-symbols-outlined text-slate-400 text-[16px]">person</span>
                 Responsável: <strong className="text-slate-700">{selectedEntry.ownerName}</strong>
               </span>
               <span className="hidden sm:inline text-slate-300">•</span>
               <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-slate-400 text-[14px]">corporate_fare</span>
+                <span className="material-symbols-outlined text-slate-400 text-[16px]">corporate_fare</span>
                 Grupo: <strong className="text-slate-700">{selectedEntry.group}</strong>
               </span>
               <span className="hidden sm:inline text-slate-300">•</span>
               <span className="flex items-center gap-1 text-[#C8A84B]">
-                <span className="material-symbols-outlined text-[#C8A84B] text-[14px]">military_tech</span>
+                <span className="material-symbols-outlined text-[#C8A84B] text-[16px]">military_tech</span>
                 Ranking do Grupo: <strong className="text-slate-700">{positionInGroup}º Lugar</strong>
               </span>
             </div>
           </div>
 
-          <div className="bg-[#1B2A4A] text-white p-4 rounded-xl flex items-center justify-center border border-white/5 shrink-0 min-w-[140px]">
+          <div className="bg-[#1B2A4A] text-white p-5 lg:p-6 rounded-2xl flex items-center justify-center border border-white/5 shrink-0 min-w-[160px]">
             <div className="text-center">
               {/* CORREÇÃO 3: Mostrar dados do mês filtrado ou acumulado conforme seleção */}
               {rankingMode === "MES" ? (
                 <>
-                  <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontuação de {localRankingMonth}</p>
-                  <p className="text-xl font-mono font-black">{getUnifiedScoreForMonth(selectedEntry, localRankingMonth)} <span className="text-xs font-normal text-slate-400">/ 100</span></p>
+                  <p className="text-[10px] lg:text-xs text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontuação de {localRankingMonth}</p>
+                  <p className="text-2xl lg:text-3xl font-mono font-black mt-1">{getUnifiedScoreForMonth(selectedEntry, localRankingMonth)} <span className="text-sm font-semibold text-slate-400">/ 100</span></p>
                 </>
               ) : (
                 <>
-                  <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontos Semestrais</p>
-                  <p className="text-xl font-mono font-black">{selectedEntry.semestralScore} <span className="text-xs font-normal text-slate-400">/ 600</span></p>
+                  <p className="text-[10px] lg:text-xs text-[#C8A84B] font-black uppercase font-mono tracking-wider">Pontos Semestrais</p>
+                  <p className="text-2xl lg:text-3xl font-mono font-black mt-1">{selectedEntry.semestralScore} <span className="text-sm font-semibold text-slate-400">/ 600</span></p>
                 </>
               )}
             </div>
@@ -1266,26 +1266,26 @@ function AdminRankingContent({
             : "Ano Inteiro";
 
           return (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-4">
               <div className="border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#1B2A4A] text-[18px]">compare</span>
+                <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#1B2A4A] text-[20px]">compare</span>
                   Detalhamento Lado a Lado (Garagem Dupla) — {periodLabel}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs lg:text-sm text-slate-500 mt-1 font-medium">
                   Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
-                  <strong className="text-rose-600"> NOK</strong>, o resultado unificado é <strong className="text-rose-600"> NOK</strong> e nenhum pontuará.
+                  <strong className="text-rose-600 font-bold"> NOK</strong>, o resultado unificado é <strong className="text-rose-600 font-bold"> NOK</strong> e nenhum pontuará.
                 </p>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                      <th className="py-2.5">Critério</th>
-                      <th className="py-2.5 px-4 text-center">{s(b1?.name).replace("ALMOXARIFADO ", "")}</th>
-                      <th className="py-2.5 px-4 text-center">{s(b2?.name).replace("ALMOXARIFADO ", "")}</th>
-                      <th className="py-2.5 text-right font-black">Resultado Unificado</th>
+                    <tr className="border-b border-slate-200 text-xs font-black uppercase text-slate-500 tracking-wider">
+                      <th className="py-3">Critério</th>
+                      <th className="py-3 px-4 text-center">{s(b1?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-3 px-4 text-center">{s(b2?.name).replace("ALMOXARIFADO ", "")}</th>
+                      <th className="py-3 text-right font-black">Resultado Unificado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1359,23 +1359,23 @@ function AdminRankingContent({
                       }
 
                       return (
-                        <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3">
-                            <p className="text-xs font-extrabold text-[#1B2A4A]">{c1.name}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{c1.pointsPossible} pts max por mês</p>
+                        <tr key={c1.id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                          <td className="py-4">
+                            <p className="text-sm font-black text-[#1B2A4A]">{c1.name}</p>
+                            <p className="text-xs text-slate-500 italic font-medium">{c1.pointsPossible} pts max por mês</p>
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${status1Style}`}>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`inline-block px-3 py-1 rounded text-xs font-black ${status1Style}`}>
                               {status1Display}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-black ${status2Style}`}>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`inline-block px-3 py-1 rounded text-xs font-black ${status2Style}`}>
                               {status2Display}
                             </span>
                           </td>
-                          <td className="py-3 text-right">
-                            <span className={`inline-block px-3 py-1 rounded text-xs font-black shadow-xs ${unifiedStatusColor}`}>
+                          <td className="py-4 text-right">
+                            <span className={`inline-block px-3.5 py-1.5 rounded-lg text-xs lg:text-sm font-black shadow-2xs ${unifiedStatusColor}`}>
                               {unifiedStatusText}
                             </span>
                           </td>
@@ -1394,18 +1394,18 @@ function AdminRankingContent({
           {/* LEFT 2 COLUMNS: BLOCO 1 & BLOCO 2 */}
           <div className="lg:col-span-2 space-y-6">
             {/* BLOCO 1 - EVOLUÇÃO MENSAL (GRÁFICO DE LINHA INTERATIVO) */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-slate-500 text-[18px]">trending_up</span>
+                  <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-slate-500 text-[20px]">trending_up</span>
                     Evolução do Semestre — {selectedEntry.name}
                   </h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider font-sans">
+                  <p className="text-xs text-slate-500 font-bold mt-0.5 uppercase tracking-wider font-sans">
                     Acompanhamento de pontuação acumulada do semestre atual
                   </p>
                 </div>
-                <span className="bg-slate-100 text-slate-705 text-slate-700 font-black px-2 py-0.5 rounded text-[8px] uppercase tracking-wider self-start sm:self-auto font-mono">
+                <span className="bg-slate-100 text-slate-700 font-black px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider self-start sm:self-auto font-mono border border-slate-200">
                   Mínimo: 300 pts
                 </span>
               </div>
@@ -1413,11 +1413,11 @@ function AdminRankingContent({
               {/* SVG Cumulative Score Line Chart */}
               {(() => {
                 const width = 500;
-                const height = 240;
+                const height = 290;
                 const paddingLeft = 55;
                 const paddingRight = 25;
-                const paddingTop = 25;
-                const paddingBottom = 35;
+                const paddingTop = 30;
+                const paddingBottom = 40;
 
                 const chartWidth = width - paddingLeft - paddingRight;
                 const chartHeight = height - paddingTop - paddingBottom;
@@ -1468,10 +1468,10 @@ function AdminRankingContent({
                 const currentSelectedMonthData = visibleData[activeIdx] || visibleData[visibleData.length - 1];
 
                 return (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div className="relative overflow-x-auto">
                       <div className="min-w-[480px]">
-                        <svg viewBox="0 0 500 240" className="w-full h-auto overflow-visible select-none">
+                        <svg viewBox="0 0 500 290" className="w-full h-auto overflow-visible select-none">
                           {/* Grid Lines */}
                           {gridValues.map((v) => {
                             const y = paddingTop + (1 - v / 100) * chartHeight;
@@ -1493,7 +1493,7 @@ function AdminRankingContent({
                                   y={y + 3}
                                   textAnchor="end"
                                   fill="#94A3B8"
-                                  fontSize="8"
+                                  fontSize="9"
                                   className="font-mono font-bold"
                                 >
                                   {v}
@@ -1518,17 +1518,17 @@ function AdminRankingContent({
                               y={paddingTop + (1 - 80 / 100) * chartHeight + 3}
                               textAnchor="end"
                               fill="#EF4444"
-                              fontSize="8"
+                              fontSize="9"
                               className="font-mono font-black"
                             >
                               80
                             </text>
                             <text
                               x={width - paddingRight - 10}
-                              y={paddingTop + (1 - 80 / 100) * chartHeight - 5}
+                              y={paddingTop + (1 - 80 / 100) * chartHeight - 6}
                               textAnchor="end"
                               fill="#EF4444"
-                              fontSize="7.5"
+                              fontSize="8.5"
                               className="font-sans font-black uppercase tracking-wider"
                             >
                               Meta de Qualificação
@@ -1538,7 +1538,7 @@ function AdminRankingContent({
                           {/* Gradient definition for fill */}
                           <defs>
                             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.4" />
+                              <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.35" />
                               <stop offset="100%" stopColor="#C8A84B" stopOpacity="0.0" />
                             </linearGradient>
                           </defs>
@@ -1557,7 +1557,7 @@ function AdminRankingContent({
                             <path
                               d={pathD}
                               stroke="#1B2A4A"
-                              strokeWidth="3.5"
+                              strokeWidth="4"
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               fill="none"
@@ -1579,7 +1579,7 @@ function AdminRankingContent({
                                   y={height - 12}
                                   textAnchor="middle"
                                   fill={isCurrentActive ? "#1B2A4A" : "#94A3B8"}
-                                  fontSize="9"
+                                  fontSize="10"
                                   className={`font-mono font-black ${isCurrentActive ? "underline" : ""}`}
                                 >
                                   {d.month}
@@ -1605,7 +1605,7 @@ function AdminRankingContent({
                                 <circle
                                   cx={x}
                                   cy={y}
-                                  r={isCurrentActive ? "11" : "8"}
+                                  r={isCurrentActive ? "14" : "10"}
                                   fill={isCurrentActive ? "#C8A84B" : "#1B2A4A"}
                                   className="opacity-25 hover:opacity-45 transition-all duration-300"
                                 />
@@ -1613,10 +1613,10 @@ function AdminRankingContent({
                                 <circle
                                   cx={x}
                                   cy={y}
-                                  r={isCurrentActive ? "5.5" : "4"}
+                                  r={isCurrentActive ? "6.5" : "4.5"}
                                   fill={isCurrentActive ? "#C8A84B" : "#1B2A4A"}
                                   stroke="#FFFFFF"
-                                  strokeWidth="2"
+                                  strokeWidth="2.5"
                                   className="transition-all duration-300 transform"
                                 />
                                 {/* Dynamic values on top of points */}
@@ -1625,7 +1625,7 @@ function AdminRankingContent({
                                   y={y - 12}
                                   textAnchor="middle"
                                   fill={isCurrentActive ? "#C8A84B" : "#475569"}
-                                  fontSize="9.5"
+                                  fontSize="10.5"
                                   className="font-mono font-black"
                                 >
                                   {d.monthlyVal}
@@ -1639,18 +1639,18 @@ function AdminRankingContent({
 
                     {/* Interactive Click Tooltip Info Box */}
                     {currentSelectedMonthData && (
-                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex items-center justify-between shadow-xs">
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex items-center justify-between shadow-2xs">
                         <div>
-                          <p className="text-[9px] text-slate-400 font-extrabold uppercase font-sans tracking-wide">Mês Selecionado</p>
-                          <p className="text-sm font-black text-[#1B2A4A] mt-0.5">{currentSelectedMonthData.month} / {cycleStateParsed.activeYear}</p>
+                          <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Mês Selecionado</p>
+                          <p className="text-base font-black text-[#1B2A4A] mt-0.5">{currentSelectedMonthData.month} / {cycleStateParsed.activeYear}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-[9px] text-slate-400 font-extrabold uppercase font-sans tracking-wide">Desempenho no Mês</p>
-                          <p className="text-sm font-bold text-emerald-650 text-emerald-600 mt-0.5">+{currentSelectedMonthData.monthlyVal} pts</p>
+                          <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Desempenho no Mês</p>
+                          <p className="text-base lg:text-lg font-black text-emerald-600 mt-0.5">+{currentSelectedMonthData.monthlyVal} pts</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[9px] text-slate-400 font-extrabold uppercase font-sans tracking-wide">Total Acumulado</p>
-                          <p className="text-sm font-black text-[#1B2A4A] font-mono mt-0.5">{currentSelectedMonthData.cumulativeVal} pts</p>
+                          <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Total Acumulado</p>
+                          <p className="text-base lg:text-lg font-black text-[#1B2A4A] font-mono mt-0.5">{currentSelectedMonthData.cumulativeVal} pts</p>
                         </div>
                       </div>
                     )}
@@ -1659,32 +1659,32 @@ function AdminRankingContent({
               })()}
 
               {/* Metric stats columns */}
-              <div className="grid grid-cols-3 gap-3 text-center mt-4 pt-4 border-t border-slate-50">
-                <div className="p-2 bg-slate-50 bg-opacity-70 rounded-lg border border-slate-200/50">
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Total Acumulado</p>
-                  <p className="text-sm font-black text-[#1B2A4A] font-mono mt-0.5">
+              <div className="grid grid-cols-3 gap-3.5 text-center mt-5 pt-5 border-t border-slate-100">
+                <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Total Acumulado</p>
+                  <p className="text-base lg:text-lg font-black text-[#1B2A4A] font-mono mt-1">
                     {awaiting_pair ? (
-                      <span className="text-[9px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-1.5 py-0.5 leading-none">Aguardando par</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
                     ) : (
                       `${totalAccumulatedScore} pts`
                     )}
                   </p>
                 </div>
-                <div className="p-2 bg-slate-50 bg-opacity-70 rounded-lg border border-slate-200/50">
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Melhor Desempenho</p>
-                  <p className="text-sm font-black text-[#C8A84B] font-mono mt-0.5">
+                <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Melhor Desempenho</p>
+                  <p className="text-base lg:text-lg font-black text-[#C8A84B] font-mono mt-1">
                     {awaiting_pair ? (
-                      <span className="text-[9px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-1.5 py-0.5 leading-none">Aguardando par</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
                     ) : (
                       `${bestMonth.month} (${bestMonth.val} pts)`
                     )}
                   </p>
                 </div>
-                <div className="p-2 bg-slate-50 bg-opacity-70 rounded-lg border border-slate-200/50">
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Pior Desempenho</p>
-                  <p className="text-sm font-black text-rose-600 font-mono mt-0.5">
+                <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Pior Desempenho</p>
+                  <p className="text-base lg:text-lg font-black text-rose-600 font-mono mt-1">
                     {awaiting_pair ? (
-                      <span className="text-[9px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-1.5 py-0.5 leading-none">Aguardando par</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
                     ) : (
                       `${worstMonth.month} (${worstMonth.val} pts)`
                     )}
@@ -1694,20 +1694,20 @@ function AdminRankingContent({
             </div>
 
             {/* BLOCO 2 — DESEMPENHO POR CRITÉRIO */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest mb-4 flex items-center gap-1.5 border-b border-slate-50 pb-2">
-                <span className="material-symbols-outlined text-slate-500 text-[18px]">table_rows</span>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
+              <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3 mb-5">
+                <span className="material-symbols-outlined text-slate-500 text-[20px]">table_rows</span>
                 Desempenho por Critério
               </h3>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 text-[9px] font-black uppercase text-slate-400 tracking-wider">
-                      <th className="py-2.5 pb-2">CRITÉRIO</th>
-                      <th className="py-2.5 pb-2 text-center">PONTOS MENSAL</th>
-                      <th className="py-2.5 pb-2 text-center">STATUS NO PERÍODO</th>
-                      <th className="py-2.5 pb-2 text-right">PONTOS OBTIDOS</th>
+                    <tr className="border-b border-slate-200 text-[10.5px] lg:text-xs font-black uppercase text-slate-500 tracking-wider">
+                      <th className="py-3 pb-2.5">CRITÉRIO</th>
+                      <th className="py-3 pb-2.5 text-center">PONTOS MENSAL</th>
+                      <th className="py-3 pb-2.5 text-center">STATUS NO PERÍODO</th>
+                      <th className="py-3 pb-2.5 text-right">PONTOS OBTIDOS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1716,30 +1716,32 @@ function AdminRankingContent({
                       const textStyle = c.accuracy >= 80 ? "text-emerald-700" : c.accuracy >= 60 ? "text-amber-700" : "text-rose-700";
 
                       return (
-                        <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3 pr-2">
-                            <p className="text-xs font-extrabold text-[#1B2A4A]">{c.name}</p>
-                            <p className="text-[10px] text-slate-400 italic font-medium">{c.recurrence}</p>
+                        <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                          <td className="py-4 pr-3">
+                            <p className="text-sm font-black text-[#1B2A4A]">{c.name}</p>
+                            <p className="text-xs text-slate-500 italic mt-0.5 font-medium">{c.recurrence}</p>
                           </td>
-                          <td className="py-3 text-center text-xs font-mono font-bold text-slate-600">
-                            {c.pointsPossible} pts
+                          <td className="py-4 text-center">
+                            <span className="text-xs lg:text-sm font-mono font-black text-slate-700 bg-slate-100/80 px-2.5 py-1 rounded-md inline-block">
+                              {c.pointsPossible} pts
+                            </span>
                           </td>
-                          <td className="py-3 text-center text-xs font-bold text-slate-800">
+                          <td className="py-4 text-center text-xs lg:text-sm font-extrabold text-slate-800">
                             {c.id === "10" && awaiting_pair ? (
-                              <span className="bg-amber-100 text-amber-800 border border-amber-200 font-black px-2 py-0.5 rounded text-[9px] uppercase tracking-wider animate-pulse inline-block">
+                              <span className="bg-amber-100 text-amber-800 border border-amber-200 font-black px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider animate-pulse inline-block">
                                 Aguardando par
                               </span>
                             ) : (
                               <span>{c.statusInPeriod}</span>
                             )}
                           </td>
-                          <td className="py-3 text-right">
+                          <td className="py-4 text-right">
                             {c.id === "10" && awaiting_pair ? (
-                              <span className="text-amber-600 font-black text-[10px] uppercase font-mono tracking-wider">Aguardando</span>
+                              <span className="text-amber-600 font-black text-xs uppercase font-mono tracking-wider">Aguardando</span>
                             ) : (
                               <div className="inline-flex flex-col items-end">
-                                <span className={`text-xs font-black font-mono ${textStyle}`}>{c.pointsObtained} pts</span>
-                                <div className="w-20 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                <span className={`text-sm lg:text-base font-black font-mono ${textStyle}`}>{c.pointsObtained} pts</span>
+                                <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                                   <div className={`h-full ${pctStyle}`} style={{ width: `${c.accuracy}%` }}></div>
                                 </div>
                               </div>
@@ -1757,18 +1759,18 @@ function AdminRankingContent({
           {/* RIGHT SIDEBAR ON DETAIL VIEW: BLOCOS 3, 4, 5 */}
           <div className="space-y-6">
             {/* BLOCO 3 - CRITÉRIOS COM MELHOR DESEMPENHO (Top 3) */}
-            <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1.5 border-b border-emerald-250 pb-2">
-                <span className="material-symbols-outlined text-emerald-600 text-[18px]">verified</span>
+            <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm lg:text-base font-black text-emerald-800 uppercase tracking-wider flex items-center gap-2 border-b border-emerald-200 pb-3">
+                <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
                 Destaques Positivos (Top 3)
               </h3>
               <div className="space-y-3">
                 {top3Criteria.map((c) => (
-                  <div key={c.id} className="bg-white p-3 rounded-xl border border-emerald-100 flex items-start gap-2.5 shadow-xs">
+                  <div key={c.id} className="bg-white p-3.5 rounded-xl border border-emerald-100/80 flex items-start gap-3 shadow-2xs">
                     <span className="text-xl shrink-0">🏆</span>
                     <div>
-                      <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                      <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                      <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
+                      <p className="text-xs text-emerald-600 font-bold mt-1">
                         {rankingMode === "MES" ? `${c.pointsObtained} pts (${c.statusInPeriod}) em ${localRankingMonth}` : `Conquistou ${c.okMonths} de ${selectedMonths.length} no período`}
                       </p>
                     </div>
@@ -1778,9 +1780,9 @@ function AdminRankingContent({
             </div>
 
             {/* BLOCO 4 - CRITÉRIOS COM PIOR DESEMPENHO (Alertas de Atenção) */}
-            <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-1.5 border-b border-amber-250 pb-2">
-                <span className="material-symbols-outlined text-amber-600 text-[18px]">warning</span>
+            <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-6 shadow-xs space-y-4">
+              <h3 className="text-sm lg:text-base font-black text-amber-800 uppercase tracking-wider flex items-center gap-2 border-b border-amber-200 pb-3">
+                <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
                 Pontos de Atenção (Alertas)
               </h3>
               <div className="space-y-3">
@@ -1788,20 +1790,20 @@ function AdminRankingContent({
                   bottomCriteria.map((c) => {
                     const mostRecentNokMonth = (c.pointsObtained < c.pointsPossible * selectedMonths.length) ? "Inconformidade detectada" : "Ok";
                     return (
-                      <div key={c.id} className="bg-white p-3 rounded-xl border border-amber-100 flex items-start gap-2.5 shadow-xs">
+                      <div key={c.id} className="bg-white p-3.5 rounded-xl border border-amber-100/80 flex items-start gap-3 shadow-2xs">
                         <span className="text-xl shrink-0">⚠️</span>
                         <div>
-                          <p className="text-xs font-black text-slate-800 leading-tight">{c.name}</p>
-                          <p className="text-[10px] text-amber-700 font-bold mt-1">
+                          <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
+                          <p className="text-xs text-amber-700 font-bold mt-1">
                             {rankingMode === "MES" ? `Inconformidade em ${localRankingMonth}` : `NOK em ${selectedMonths.length - c.okMonths} meses`}
                           </p>
-                          <p className="text-[9px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="p-3 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-105">
+                  <div className="p-3.5 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-100">
                     Nenhum critério com inconformidade este período!
                   </div>
                 )}
@@ -1817,45 +1819,45 @@ function AdminRankingContent({
               const periodLabel = rankingMode === "MES" ? localRankingMonth : "Período";
 
               return (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                  <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                    <span className="material-symbols-outlined text-slate-500 text-[18px]">adjust</span>
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <span className="material-symbols-outlined text-slate-500 text-[20px]">adjust</span>
                     Comparativo com a Meta
                   </h3>
 
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs font-bold">
+                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
                       <span className="text-slate-500 font-bold">Nota em {periodLabel}</span>
-                      <span className="font-mono text-slate-800 font-black">{currentScore} pts</span>
+                      <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{currentScore} pts</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-50">
+                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
                       <span className="text-slate-500 font-bold">Meta Mínima em {periodLabel}</span>
-                      <span className="font-mono text-slate-800 font-black">{targetScore} pts</span>
+                      <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{targetScore} pts</span>
                     </div>
 
                     {currentScore >= targetScore ? (
-                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs inline-block w-full font-bold space-y-1">
-                        <p className="flex items-center gap-1.5 text-emerald-800">
-                          <span className="material-symbols-outlined text-[#10B981] text-[16px] font-bold">check_circle</span>
+                      <div className="p-3.5 lg:p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                        <p className="flex items-center gap-1.5 text-emerald-800 font-black text-xs lg:text-sm">
+                          <span className="material-symbols-outlined text-[#10B981] text-[18px] font-bold">check_circle</span>
                           Meta Atingida
                         </p>
-                        <p className="text-[10.5px] font-normal leading-relaxed text-emerald-950">
+                        <p className="text-xs lg:text-sm font-normal leading-relaxed text-emerald-950 mt-1">
                           ✅ Meta atingida — <strong>{currentScore - targetScore} pts</strong> acima da meta de {targetScore} pts.
                         </p>
                       </div>
                     ) : (
-                      <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs inline-block w-full font-bold space-y-1">
-                        <p className="flex items-center gap-1.5 text-rose-850 font-bold">
-                          <span className="material-symbols-outlined text-[#EF4444] text-[16px] font-bold">cancel</span>
+                      <div className="p-3.5 lg:p-4 bg-rose-50 rounded-xl border border-rose-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                        <p className="flex items-center gap-1.5 text-rose-800 font-black text-xs lg:text-sm">
+                          <span className="material-symbols-outlined text-[#EF4444] text-[18px] font-bold">cancel</span>
                           Abaixo da Meta
                         </p>
-                        <p className="text-[10.5px] font-normal leading-relaxed text-rose-955">
+                        <p className="text-xs lg:text-sm font-normal leading-relaxed text-rose-950 mt-1">
                           ⚠️ Abaixo da meta — <strong>faltam {targetScore - currentScore} pts</strong> para atingir a qualificação mínima ({targetScore} pts).
                         </p>
                       </div>
                     )}
 
-                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150/60 text-xs text-slate-600 leading-relaxed">
                       <span className="font-bold text-slate-700">Resultado: </span>
                       {rankingMode === "MES"
                         ? `Pontuação do mês de ${localRankingMonth}: ${currentScore} de 100 pts possíveis.`
@@ -1867,43 +1869,43 @@ function AdminRankingContent({
             })()}
 
             {/* BLOCO EXTRA - EVOLUÇÃO EM RELAÇÃO AO SEMESTRE ANTERIOR */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-              <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                <span className="material-symbols-outlined text-[#C8A84B] text-[18px]">analytics</span>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+              <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">analytics</span>
                 Evolução em Relação ao Semestre Anterior
               </h3>
               
               {!has2025Data ? (
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-150/50 text-[10.5px] text-slate-500 italic text-center">
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-150/50 text-xs text-slate-500 italic text-center">
                   Dados consolidados de 2025 indisponíveis para comparação neste almoxarifado.
                 </div>
               ) : (
                 <div className="space-y-3 font-sans">
-                  <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
                     <span className="text-slate-500">{targetSemesterLabel} 2025 (Histórico)</span>
-                    <span className="font-mono text-slate-700 font-extrabold">{scorePrevSem} pts</span>
+                    <span className="font-mono text-slate-700 font-extrabold text-sm lg:text-base">{scorePrevSem} pts</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-slate-100">
+                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
                     <span className="text-slate-500">{targetSemesterLabel} 2026 (Atual)</span>
-                    <span className="font-mono text-slate-800 font-black">{scoreCurrentSem} pts</span>
+                    <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{scoreCurrentSem} pts</span>
                   </div>
 
                   <div className="flex items-center justify-between py-1">
-                    <span className="text-xs text-slate-500 font-bold">Variação Absoluta</span>
-                    <span className={`font-mono text-xs font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Absoluta</span>
+                    <span className={`font-mono text-sm lg:text-base font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                       {diffPoints >= 0 ? `+${diffPoints}` : diffPoints} pts
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500 font-bold">Variação Percentual</span>
-                    <span className={`font-mono text-sm font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                      <span className="material-symbols-outlined text-[16px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
+                    <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Percentual</span>
+                    <span className={`font-mono text-sm lg:text-base font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      <span className="material-symbols-outlined text-[18px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
                       {diffPoints >= 0 ? `+${pctChange}%` : `${pctChange}%`}
                     </span>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150/50 text-[10.5px] text-slate-500 leading-normal">
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-150/60 text-xs lg:text-sm text-slate-600 leading-relaxed font-medium">
                     {diffPoints >= 0 ? (
                       <span>📈 Desempenho com crescimento positivo de <strong>{diffPoints} pontos</strong> em comparação com o mesmo período do ano anterior.</span>
                     ) : (
@@ -1928,16 +1930,16 @@ function AdminRankingContent({
         )}
 
         {/* BLOCO 6 - RESUMO EXECUTIVO */}
-        <section className="bg-gradient-to-br from-[#1B2A4A] to-slate-800 text-white rounded-2xl p-5 lg:p-6 shadow-md border border-white/5 space-y-3.5 relative overflow-hidden font-sans">
-          <div className="absolute right-0 top-0 translate-x-5 -translate-y-5 opacity-5">
-            <span className="material-symbols-outlined text-[140px] font-thin">receipt_long</span>
+        <section className="bg-gradient-to-br from-[#1B2A4A] to-slate-800 text-white rounded-2xl p-6 lg:p-8 shadow-md border border-white/10 space-y-4 relative overflow-hidden font-sans">
+          <div className="absolute right-0 top-0 translate-x-5 -translate-y-5 opacity-5 pointer-events-none">
+            <span className="material-symbols-outlined text-[150px] font-thin">receipt_long</span>
           </div>
 
-          <h3 className="text-xs font-black text-[#C8A84B] uppercase tracking-widest flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[#C8A84B] text-[18px]">gavel</span>
+          <h3 className="text-sm lg:text-base font-black text-[#C8A84B] uppercase tracking-wider flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">gavel</span>
             Resumo Executivo de Auditoria
           </h3>
-          <p className="text-xs lg:text-sm font-medium leading-relaxed text-slate-200 italic">
+          <p className="text-sm lg:text-base font-medium leading-loose text-slate-100 italic">
             "{executiveSummary}"
           </p>
         </section>
