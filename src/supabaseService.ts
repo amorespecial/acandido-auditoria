@@ -2181,9 +2181,8 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   }
 
   // Payload strictly matched to schema of historico_avaliacoes:
-  // id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em
+  // almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em
   const dbEntry = {
-    id: entry.id,
     almoxarifado_id: entry.almoxarifado_id || entry.branchId || entry.branch_id || "",
     mes: mesVal || "",
     ano: anoVal || "",
@@ -2195,7 +2194,7 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   
   const { error } = await supabase
     .from('historico_avaliacoes')
-    .upsert(dbEntry, { onConflict: 'id' });
+    .insert(dbEntry);
     
   if (error) {
     console.error("Error saving to database in dbSalvarHistorico:", error);
