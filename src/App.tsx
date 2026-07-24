@@ -1882,7 +1882,7 @@ export default function App() {
     if (isSupabaseReady()) {
       try {
         await dbSaveCycleState(nextState);
-        await supabase.from('historico_avaliacoes').delete().eq('month_year', `${month} ${year}`);
+        await supabase.from('historico_avaliacoes').delete().eq('mes', month).eq('ano', year);
       } catch (e) {
         console.error("Failed to update cycle or delete history on reopen cycle in Supabase:", e);
         alert("Erro ao reabrir o ciclo no Supabase. Por favor, tente novamente.");

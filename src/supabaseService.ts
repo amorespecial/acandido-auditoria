@@ -2149,17 +2149,29 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   checkPermission(["ADMIN"], requesterRole);
   if (!isSupabaseReady()) return;
   
-  // Create object mapping both camelCase and snake_case properties
+  let mesVal = entry.mes;
+  let anoVal = entry.ano;
+  if ((!mesVal || !anoVal) && entry.monthYear) {
+    const parts = String(entry.monthYear).trim().split(" ");
+    if (parts.length >= 2) {
+      mesVal = mesVal || parts[0];
+      anoVal = anoVal || parts[1];
+    } else if (parts.length === 1) {
+      mesVal = mesVal || parts[0];
+    }
+  }
+
+  // Payload strictly matched to schema of historico_avaliacoes:
+  // id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em
   const dbEntry = {
     id: entry.id,
-    almoxarifado_id: entry.branchId || entry.branch_id || entry.almoxarifado_id || "",
-    month_year: entry.monthYear || entry.month_year || "",
-    score: entry.score !== undefined ? entry.score : 0,
-    score_category: entry.scoreCategory || entry.score_category || "",
-    status: entry.status || "PENDENTE",
-    date_evaluated: entry.dateEvaluated || entry.date_evaluated || "",
-    nok_items: entry.nokItems || entry.nok_items || [],
-    criteria_state: entry.criteriaState || entry.criteria_state || []
+    almoxarifado_id: entry.almoxarifado_id || entry.branchId || entry.branch_id || "",
+    mes: mesVal || "",
+    ano: anoVal || "",
+    pontuacao_total: entry.pontuacao_total !== undefined ? entry.pontuacao_total : (entry.score !== undefined ? entry.score : 0),
+    status_ciclo: entry.status_ciclo || entry.status || "ARQUIVADO",
+    criterios: entry.criterios || entry.criteriaState || entry.criteria_state || entry.nokItems || [],
+    fechado_em: entry.fechado_em || entry.dateEvaluated || entry.date_evaluated || new Date().toISOString()
   };
   
   const { error } = await supabase
@@ -2217,19 +2229,36 @@ export async function dbFetchHistory(): Promise<any[]> {
     console.warn("Failed to sort history in memory:", e);
   }
   
-  return rawData.map(entry => ({
-    id: entry.id,
-    branchId: entry.almoxarifado_id || entry.branch_id || entry.branchId,
-    branchName: entry.branch_name || entry.branchName,
-    monthYear: entry.month_year || entry.monthYear,
-    score: entry.score,
-    scoreCategory: entry.score_category || entry.scoreCategory,
-    status: entry.status,
-    dateEvaluated: entry.date_evaluated || entry.dateEvaluated,
-    auditorName: entry.auditor_name || entry.auditorName,
-    nokItems: entry.nok_items || entry.nokItems || [],
-    criteriaState: entry.criteria_state || entry.criteriaState || []
-  }));
+  return rawData.map(entry => {
+    const mes = entry.mes || (entry.month_year ? entry.month_year.split(" ")[0] : "");
+    const ano = entry.ano || (entry.month_year ? entry.month_year.split(" ")[1] : "");
+    const monthYear = entry.monthYear || entry.month_year || (mes && ano ? `${mes} ${ano}` : mes || ano || "");
+    const scoreVal = entry.pontuacao_total !== undefined ? entry.pontuacao_total : (entry.score !== undefined ? entry.score : 0);
+    const criteriosList = entry.criterios || entry.criteria_state || entry.criteriaState || [];
+
+    return {
+      id: entry.id,
+      almoxarifado_id: entry.almoxarifado_id || entry.branch_id || entry.branchId,
+      branchId: entry.almoxarifado_id || entry.branch_id || entry.branchId,
+      branchName: entry.branchName || entry.branch_name,
+      mes: mes,
+      ano: ano,
+      monthYear: monthYear,
+      pontuacao_total: scoreVal,
+      score: scoreVal,
+      scoreCategory: scoreVal >= 90 ? "EXCELENTE" : (scoreVal >= 80 ? "BOM" : "EM ALERTA"),
+      status_ciclo: entry.status_ciclo || entry.status || "ARQUIVADO",
+      status: entry.status_ciclo || entry.status || "ARQUIVADO",
+      fechado_em: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated,
+      dateEvaluated: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated,
+      auditorName: entry.auditorName || entry.auditor_name || "Fernando Silva",
+      criterios: criteriosList,
+      criteriaState: criteriosList,
+      nokItems: Array.isArray(criteriosList)
+        ? criteriosList.filter((c: any) => typeof c === 'string' ? true : (c && c.status === "NOK")).map((c: any) => typeof c === 'string' ? c : c.name)
+        : (entry.nok_items || entry.nokItems || [])
+    };
+  });
 }
 
 export async function dbFetchYearEvaluations(ano: string | number): Promise<any[]> {
