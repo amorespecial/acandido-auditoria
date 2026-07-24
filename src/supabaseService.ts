@@ -2161,6 +2161,25 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
     }
   }
 
+  let rawDate = entry.fechado_em || entry.dateEvaluated || entry.date_evaluated;
+  let fechadoEmIso = new Date().toISOString();
+  if (rawDate && typeof rawDate === 'string') {
+    const trimmed = rawDate.trim();
+    const ddmmyyyyMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (ddmmyyyyMatch) {
+      const [, day, month, year, hours = "00", minutes = "00", seconds = "00"] = ddmmyyyyMatch;
+      const parsedDate = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}.000Z`);
+      if (!isNaN(parsedDate.getTime())) {
+        fechadoEmIso = parsedDate.toISOString();
+      }
+    } else {
+      const parsedDate = new Date(trimmed);
+      if (!isNaN(parsedDate.getTime())) {
+        fechadoEmIso = parsedDate.toISOString();
+      }
+    }
+  }
+
   // Payload strictly matched to schema of historico_avaliacoes:
   // id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em
   const dbEntry = {
@@ -2171,7 +2190,7 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
     pontuacao_total: entry.pontuacao_total !== undefined ? entry.pontuacao_total : (entry.score !== undefined ? entry.score : 0),
     status_ciclo: entry.status_ciclo || entry.status || "ARQUIVADO",
     criterios: entry.criterios || entry.criteriaState || entry.criteria_state || entry.nokItems || [],
-    fechado_em: entry.fechado_em || entry.dateEvaluated || entry.date_evaluated || new Date().toISOString()
+    fechado_em: fechadoEmIso
   };
   
   const { error } = await supabase
