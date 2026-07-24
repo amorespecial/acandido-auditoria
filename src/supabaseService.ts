@@ -2153,7 +2153,6 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   const dbEntry = {
     id: entry.id,
     almoxarifado_id: entry.branchId || entry.branch_id || entry.almoxarifado_id || "",
-    branch_name: entry.branchName || entry.branch_name || "",
     month_year: entry.monthYear || entry.month_year || "",
     score: entry.score !== undefined ? entry.score : 0,
     score_category: entry.scoreCategory || entry.score_category || "",
