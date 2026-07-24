@@ -173,7 +173,7 @@ export function DraggableFieldList({
                       <span className={isReq ? "text-amber-600 font-black text-xs" : "text-slate-400 font-black text-xs"}>
                         {isReq ? "●" : "○"}
                       </span>
-                      {isReq ? "Obrigatório" : "Opcional"}
+                      Obrigatório
                     </span>
                   </label>
                 )}
