@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { WarrantyItem, Branch } from "../types";
-import { dbFetchWarranties } from "../supabaseService";
+import { dbFetchWarranties, dbDeleteWarranty, dbSalvarGarantia } from "../supabaseService";
 import { getAnosDisponiveis } from "../utils/dateUtils";
 
 interface AdminGarantiasPanelProps {
@@ -12,6 +12,20 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   const [warranties, setWarranties] = useState<WarrantyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Edit Modal State
+  const [editingWarranty, setEditingWarranty] = useState<WarrantyItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    itemCode: "",
+    itemDescription: "",
+    manufacturer: "",
+    expiryDate: "",
+    almoxarifado: "",
+    nfEmissionDate: "",
+    reference: "",
+    pieceObservation: "",
+    scrapObservation: ""
+  });
+
   // Filters
   const [selectedAlmoxarifado, setSelectedAlmoxarifado] = useState<string>(branch ? branch.name : "TODOS");
   const [selectedMonth, setSelectedMonth] = useState<string>("TODOS");
@@ -19,6 +33,73 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   const [selectedManufacturer, setSelectedManufacturer] = useState<string>("TODOS");
   const [selectedStatus, setSelectedStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Delete Handler
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir esta garantia?")) {
+      try {
+        await dbDeleteWarranty(id);
+        setWarranties((prev) => prev.filter((w) => w.id !== id));
+        localStorage.setItem("acandido_warranties", JSON.stringify(warranties.filter((w) => w.id !== id)));
+        window.dispatchEvent(new Event("realtime-garantias-update"));
+      } catch (e) {
+        console.error("Erro ao excluir garantia:", e);
+        alert("Erro ao excluir registro de garantia.");
+      }
+    }
+  };
+
+  // Open Edit Handler
+  const handleOpenEdit = (w: WarrantyItem) => {
+    setEditingWarranty(w);
+    setEditForm({
+      itemCode: w.itemCode || "",
+      itemDescription: w.itemDescription || "",
+      manufacturer: w.manufacturer || "",
+      expiryDate: w.expiryDate || "",
+      almoxarifado: w.almoxarifado || "",
+      nfEmissionDate: w.nfEmissionDate || "",
+      reference: w.reference || "",
+      pieceObservation: w.pieceObservation || "",
+      scrapObservation: w.scrapObservation || ""
+    });
+  };
+
+  // Save Edit Handler
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWarranty) return;
+
+    try {
+      const updatedItem: WarrantyItem = {
+        ...editingWarranty,
+        itemCode: editForm.itemCode,
+        itemDescription: editForm.itemDescription,
+        manufacturer: editForm.manufacturer,
+        expiryDate: editForm.expiryDate,
+        almoxarifado: editForm.almoxarifado,
+        nfEmissionDate: editForm.nfEmissionDate,
+        reference: editForm.reference,
+        pieceObservation: editForm.pieceObservation,
+        scrapObservation: editForm.scrapObservation,
+        lastUpdateDate: new Date().toISOString().split("T")[0]
+      };
+
+      await dbSalvarGarantia(updatedItem);
+
+      setWarranties((prev) => prev.map((w) => (w.id === editingWarranty.id ? updatedItem : w)));
+      localStorage.setItem(
+        "acandido_warranties",
+        JSON.stringify(warranties.map((w) => (w.id === editingWarranty.id ? updatedItem : w)))
+      );
+      window.dispatchEvent(new Event("realtime-garantias-update"));
+      setEditingWarranty(null);
+      alert("Garantia atualizada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao salvar garantia:", err);
+      alert("Erro ao salvar alterações da garantia.");
+    }
+  };
 
   // Fetch warranties
   useEffect(() => {
@@ -351,7 +432,8 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
                   <th className="p-4">Garantia Até</th>
                   <th className="p-4">Registrado Em</th>
                   <th className="p-4">Registrado Por</th>
-                  <th className="p-4 pr-6 text-center">Status</th>
+                  <th className="p-4 text-center">Status</th>
+                  <th className="p-4 pr-6 text-center">AÇÕES</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-semibold bg-white">
@@ -378,12 +460,34 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
                         {w.lastUpdateDate ? new Date(w.lastUpdateDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                       </td>
                       <td className="p-4 text-[11px] text-slate-500 font-normal">
-                        Almoxarife
+                        {w.registeredBy || "Almoxarife"}
                       </td>
-                      <td className="p-4 pr-6 text-center whitespace-nowrap">
+                      <td className="p-4 text-center whitespace-nowrap">
                         <span className={`inline-block px-3 py-1 text-[10px] font-extrabold uppercase rounded-full ${status.colorClass}`}>
                           {status.label}
                         </span>
+                      </td>
+                      <td className="p-4 pr-6 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(w)}
+                            title="Editar"
+                            className="p-1.5 px-2.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] transition flex items-center gap-1 text-xs font-bold active:scale-95 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">edit</span>
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(w.id)}
+                            title="Excluir"
+                            className="p-1.5 px-2.5 rounded-lg bg-transparent border border-[#F11E26] text-[#F11E26] hover:bg-[#FEE8E8] transition flex items-center gap-1 text-xs font-bold active:scale-95 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                            <span>Excluir</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -415,6 +519,105 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
           <span className="text-[10px] font-medium text-slate-400">
             * Dados sincronizados diretamente com o banco de dados principal de auditoria.
           </span>
+        </div>
+      )}
+
+      {/* Edit Warranty Modal for Auditor */}
+      {editingWarranty && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-fade-in">
+            <div className="p-4 px-6 bg-[#00194C] text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">edit</span>
+                Editar Item de Garantia
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingWarranty(null)}
+                className="text-white/70 hover:text-white p-1 transition cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-[11px] font-bold text-[#1B2A4A] mb-1">Código do Item</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.itemCode}
+                  onChange={(e) => setEditForm((p) => ({ ...p, itemCode: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#1B2A4A] mb-1">Descrição do Item</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.itemDescription}
+                  onChange={(e) => setEditForm((p) => ({ ...p, itemDescription: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#1B2A4A] mb-1">Fabricante</label>
+                  <input
+                    type="text"
+                    value={editForm.manufacturer}
+                    onChange={(e) => setEditForm((p) => ({ ...p, manufacturer: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#1B2A4A] mb-1">Data de Vencimento</label>
+                  <input
+                    type="date"
+                    required
+                    value={editForm.expiryDate}
+                    onChange={(e) => setEditForm((p) => ({ ...p, expiryDate: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#1B2A4A] mb-1">Almoxarifado</label>
+                <select
+                  value={editForm.almoxarifado}
+                  onChange={(e) => setEditForm((p) => ({ ...p, almoxarifado: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A] bg-white font-bold"
+                >
+                  {allBranches.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingWarranty(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-[#00194C] hover:bg-[#001033] text-white font-bold text-xs shadow-sm active:scale-95 transition cursor-pointer"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

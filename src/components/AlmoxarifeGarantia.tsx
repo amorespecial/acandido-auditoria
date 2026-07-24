@@ -237,6 +237,48 @@ export default function AlmoxarifeGarantia({
   const [pieceObservation, setPieceObservation] = useState("");
   const [scrapObservation, setScrapObservation] = useState("");
 
+  // Validation and Attachment State
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [attachmentFile, setAttachmentFile] = useState<{
+    name: string;
+    base64: string;
+    size: number;
+  } | null>(null);
+  const [attachmentError, setAttachmentError] = useState("");
+
+  const handleFileSelect = (file: File) => {
+    setAttachmentError("");
+    const allowedExtensions = ["jpg", "jpeg", "png", "pdf"];
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+
+    if (!allowedExtensions.includes(ext)) {
+      setAttachmentError("Formato de arquivo inválido. Permitidos: JPG, PNG ou PDF.");
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024; // 10 MB
+    if (file.size > maxSize) {
+      setAttachmentError("O arquivo excede o tamanho máximo de 10 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Str = reader.result as string;
+      setAttachmentFile({
+        name: file.name,
+        base64: base64Str,
+        size: file.size
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveFile = () => {
+    setAttachmentFile(null);
+    setAttachmentError("");
+  };
+
   const isCycleOpen = (() => {
     try {
       const saved = localStorage.getItem("acandido_cycle_state_manual");
@@ -289,6 +331,9 @@ export default function AlmoxarifeGarantia({
     setNfEmissionDate("");
     setReference("");
     setCustomFormValues({});
+    setFieldErrors({});
+    setAttachmentFile(null);
+    setAttachmentError("");
     
     const mStr = activeMonth.toLowerCase() === "junho" ? "06" : "01";
     setLastUpdateDate(`2026-${mStr}-10`);
@@ -325,6 +370,18 @@ export default function AlmoxarifeGarantia({
     setPieceObservation(item.pieceObservation === "Nenhuma observação" ? "" : item.pieceObservation);
     setScrapObservation(item.scrapObservation);
 
+    setFieldErrors({});
+    setAttachmentError("");
+    if ((item as any).anexo_base64 || (item as any).arquivo_base64) {
+      setAttachmentFile({
+        name: (item as any).anexo_nome || "Arquivo Anexado",
+        base64: (item as any).anexo_base64 || (item as any).arquivo_base64 || "",
+        size: 0
+      });
+    } else {
+      setAttachmentFile(null);
+    }
+
     const cValues: Record<string, string> = {};
     if (garantiaConfig.customFields) {
       garantiaConfig.customFields.forEach((f: any) => {
@@ -338,6 +395,9 @@ export default function AlmoxarifeGarantia({
 
   const handleSaveItem = (e: React.FormEvent) => {
     e.preventDefault();
+    const newErrors: Record<string, string> = {};
+    let hasError = false;
+
     if (!selectedItemCode || !expiryDate || !selectedAlmoxarifado) {
       alert("Por favor, preencha todos os campos obrigatórios.");
       return;
@@ -348,14 +408,40 @@ export default function AlmoxarifeGarantia({
       return;
     }
 
-    if (garantiaConfig.nfEmissionDate && !nfEmissionDate) {
-      alert("Por favor, selecione a Data de Emissão da NF.");
+    // Validate mandatory fields (Nota Fiscal and Localização)
+    const orderedFields = getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS);
+    orderedFields.forEach((f) => {
+      const isNf = f.name?.toLowerCase().includes("nota fiscal") || f.id === "nfEmissionDate";
+      const isLoc = f.name?.toLowerCase().includes("localiza");
+
+      if (isNf) {
+        const val = f.builtIn ? nfEmissionDate : (customFormValues[f.id] || "");
+        if (!val || !val.trim()) {
+          newErrors[f.id] = "Nota Fiscal é obrigatória";
+          hasError = true;
+        }
+      } else if (isLoc) {
+        const val = customFormValues[f.id] || "";
+        if (!val || val === "— Selecione uma opção —" || !val.trim()) {
+          newErrors[f.id] = "Selecione uma Localização";
+          hasError = true;
+        }
+      }
+    });
+
+    if (hasError) {
+      setFieldErrors(newErrors);
       return;
     }
 
-    // Verify custom fields requirement
+    // Verify other custom fields requirement
     if (garantiaConfig.customFields) {
-      const missing = garantiaConfig.customFields.find((f: any) => f.required && !customFormValues[f.id]?.trim());
+      const missing = garantiaConfig.customFields.find((f: any) => {
+        const isNf = f.name?.toLowerCase().includes("nota fiscal");
+        const isLoc = f.name?.toLowerCase().includes("localiza");
+        if (isNf || isLoc) return false;
+        return f.required && !customFormValues[f.id]?.trim();
+      });
       if (missing) {
         alert(`Por favor, preencha o campo obrigatório: ${missing.name}`);
         return;
@@ -371,6 +457,9 @@ export default function AlmoxarifeGarantia({
     const derivedMonthYear = getMonthYearFromDate(finalNfEmissionDate, activeMonth, activeYear);
 
     const autoLastUpdateDate = new Date().toISOString().split('T')[0];
+
+    const base64Anexo = attachmentFile ? attachmentFile.base64 : "";
+    const nomeAnexo = attachmentFile ? attachmentFile.name : "";
 
     if (editingItem) {
       // Edit mode
@@ -390,6 +479,10 @@ export default function AlmoxarifeGarantia({
             scrapObservation: scrapObservation.trim(),
             monthYear: derivedMonthYear,
             createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
+            registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
+            anexo_base64: base64Anexo,
+            arquivo_base64: base64Anexo,
+            anexo_nome: nomeAnexo,
             ...customFormValues
           };
         }
@@ -413,6 +506,10 @@ export default function AlmoxarifeGarantia({
         scrapObservation: scrapObservation.trim(),
         monthYear: derivedMonthYear,
         createdAt: new Date().toLocaleString("pt-BR"),
+        registeredBy: user.name || user.ownerName || "Almoxarife",
+        anexo_base64: base64Anexo,
+        arquivo_base64: base64Anexo,
+        anexo_nome: nomeAnexo,
         ...customFormValues
       };
       persistChange([newItem, ...warranties]);
@@ -595,24 +692,23 @@ export default function AlmoxarifeGarantia({
                     ))}
                     <td className="p-4 py-3.5 text-center whitespace-nowrap">
                       {!isPresencial ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handleOpenEdit(w)}
-                            title="Editar"
-                            className="p-1.5 px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition flex items-center gap-1 text-xs font-bold active:scale-95 border border-blue-200/60"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">edit</span>
-                            <span>Editar</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteItem(w.id)}
-                            title="Excluir"
-                            className="p-1.5 px-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition flex items-center gap-1 text-xs font-bold active:scale-95 border border-red-200/60"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">delete</span>
-                            <span>Excluir</span>
-                          </button>
-                        </div>
+                        (() => {
+                          const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
+                          if (!isOwnRecord) return <span className="text-[11px] text-slate-400 font-medium italic">—</span>;
+                          return (
+                            <div className="flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(w)}
+                                title="Editar"
+                                className="p-1.5 px-2.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] transition flex items-center gap-1 text-xs font-bold active:scale-95 cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">edit</span>
+                                <span>Editar</span>
+                              </button>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Auditoria Local</span>
                       )}
@@ -687,24 +783,22 @@ export default function AlmoxarifeGarantia({
                 )}
               </div>
 
-              {!isPresencial && (
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <button
-                    onClick={() => handleOpenEdit(w)}
-                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold flex items-center gap-1 active:scale-95 border border-blue-200/60"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDeleteItem(w.id)}
-                    className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold flex items-center gap-1 active:scale-95 border border-red-200/60"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                    Excluir
-                  </button>
-                </div>
-              )}
+              {!isPresencial && (() => {
+                const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
+                if (!isOwnRecord) return null;
+                return (
+                  <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(w)}
+                      className="px-3 py-1.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] text-xs font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">edit</span>
+                      Editar
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           ))
         ) : (
@@ -868,16 +962,27 @@ export default function AlmoxarifeGarantia({
 
                 if (field.id === "nfEmissionDate") {
                   if (garantiaConfig.nfEmissionDate === false) return null;
+                  const isNfErr = Boolean(fieldErrors["nfEmissionDate"]);
                   return (
                     <div key="nfEmissionDate" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">Data de Emissão da NF *</label>
                       <input
                         type="date"
-                        required
                         value={nfEmissionDate}
-                        onChange={(e) => setNfEmissionDate(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNfEmissionDate(val);
+                          if (val.trim()) {
+                            setFieldErrors((prev) => ({ ...prev, nfEmissionDate: "" }));
+                          }
+                        }}
+                        className={`w-full border ${isNfErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]`}
                       />
+                      {isNfErr && (
+                        <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">
+                          {fieldErrors["nfEmissionDate"]}
+                        </p>
+                      )}
                     </div>
                   );
                 }
@@ -932,17 +1037,27 @@ export default function AlmoxarifeGarantia({
 
                 // Custom fields
                 if (!field.builtIn) {
+                  const isNf = field.name?.toLowerCase().includes("nota fiscal");
+                  const isLoc = field.name?.toLowerCase().includes("localiza");
+                  const isMandatory = field.required || isNf || isLoc;
+                  const fieldErr = fieldErrors[field.id];
+
                   return (
                     <div key={field.id} className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        {field.name} {field.required && " *"}
+                        {isNf ? "Nota Fiscal *" : isLoc ? "Localização *" : `${field.name}${isMandatory ? " *" : ""}`}
                       </label>
                       {field.type === "select" ? (
                         <select
-                          required={field.required}
                           value={customFormValues[field.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomFormValues(prev => ({ ...prev, [field.id]: val }));
+                            if (val && val !== "— Selecione uma opção —" && val.trim()) {
+                              setFieldErrors(prev => ({ ...prev, [field.id]: "" }));
+                            }
+                          }}
+                          className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                         >
                           <option value="">— Selecione uma opção —</option>
                           {(field.options || []).map((opt: string) => (
@@ -952,29 +1067,47 @@ export default function AlmoxarifeGarantia({
                       ) : field.type === "date" ? (
                         <input
                           type="date"
-                          required={field.required}
                           value={customFormValues[field.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomFormValues(prev => ({ ...prev, [field.id]: val }));
+                            if (val.trim()) {
+                              setFieldErrors(prev => ({ ...prev, [field.id]: "" }));
+                            }
+                          }}
+                          className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]`}
                         />
                       ) : field.type === "number" ? (
                         <input
                           type="number"
-                          required={field.required}
                           placeholder="Digite valor numérico"
                           value={customFormValues[field.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomFormValues(prev => ({ ...prev, [field.id]: val }));
+                            if (val.trim()) {
+                              setFieldErrors(prev => ({ ...prev, [field.id]: "" }));
+                            }
+                          }}
+                          className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                         />
                       ) : (
                         <input
                           type="text"
-                          required={field.required}
                           placeholder={`Digite ${field.name.toLowerCase()}`}
                           value={customFormValues[field.id] || ""}
-                          onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomFormValues(prev => ({ ...prev, [field.id]: val }));
+                            if (val.trim()) {
+                              setFieldErrors(prev => ({ ...prev, [field.id]: "" }));
+                            }
+                          }}
+                          className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                         />
+                      )}
+                      {fieldErr && (
+                        <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>
                       )}
                     </div>
                   );
@@ -982,6 +1115,68 @@ export default function AlmoxarifeGarantia({
 
                 return null;
               })}
+
+              {/* ALTERAÇÃO 2 — ADICIONAR CAMPO DE ANEXO NO FINAL DO FORMULÁRIO */}
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                <label className="text-xs font-bold text-[#1B2A4A]">Anexo (opcional)</label>
+
+                {attachmentFile ? (
+                  <div className="border border-slate-200 rounded-[8px] p-[16px] bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="material-symbols-outlined text-[#16A34A] text-[20px] shrink-0">
+                        description
+                      </span>
+                      <span className="text-xs font-bold text-[#16A34A] truncate">
+                        {attachmentFile.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      className="text-red-500 hover:text-red-700 p-1 transition shrink-0 flex items-center justify-center"
+                      title="Remover arquivo"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    className="border border-dashed border-[#CBD5E1] rounded-[8px] p-[16px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50/80 transition text-center group"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleFileSelect(e.dataTransfer.files[0]);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileSelect(e.target.files[0]);
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                    <span className="material-symbols-outlined text-[#94A3B8] text-[24px] mb-1 group-hover:scale-110 transition">
+                      attach_file
+                    </span>
+                    <span className="text-xs font-medium text-[#94A3B8]">
+                      Clique para anexar ou arraste o arquivo
+                    </span>
+                    <span className="text-[10px] text-[#94A3B8] mt-0.5">
+                      JPG, PNG ou PDF • máx. 10 MB
+                    </span>
+                  </label>
+                )}
+
+                {attachmentError && (
+                  <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{attachmentError}</p>
+                )}
+              </div>
 
 
 

@@ -1505,11 +1505,23 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     registrado_por: garantia.registrado_por || garantia.registeredBy || null
   };
 
+  if (garantia.anexo_base64 || garantia.arquivo_base64) {
+    payload.anexo_base64 = garantia.anexo_base64 || garantia.arquivo_base64;
+    payload.arquivo_base64 = garantia.arquivo_base64 || garantia.anexo_base64;
+  }
+
   if (garantia.id && !garantia.id.startsWith("war-") && !garantia.id.startsWith("tmp")) {
     payload.id = garantia.id;
   }
 
-  const { data, error } = await supabase.from('garantias').upsert(payload).select();
+  let { data, error } = await supabase.from('garantias').upsert(payload).select();
+  if (error && error.message && error.message.toLowerCase().includes("column")) {
+    delete payload.anexo_base64;
+    delete payload.arquivo_base64;
+    const retry = await supabase.from('garantias').upsert(payload).select();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error) throw error;
   return data?.[0];
 }
