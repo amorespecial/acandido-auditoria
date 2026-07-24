@@ -2238,13 +2238,15 @@ export async function dbFetchHistory(): Promise<any[]> {
   let result = await supabase
     .from('historico_avaliacoes')
     .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em')
-    .order('fechado_em', { ascending: false });
+    .order('fechado_em', { ascending: false })
+    .limit(100);
     
   if (result.error) {
     console.warn("Could not order by fechado_em in dbFetchHistory, retrying without order:", result.error);
     result = await supabase
       .from('historico_avaliacoes')
-      .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em');
+      .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em')
+      .limit(100);
   }
   
   if (result.error) {
