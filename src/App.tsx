@@ -24,6 +24,12 @@ import AlmoxarifeGarantia from "./components/AlmoxarifeGarantia";
 import AlmoxarifeHistorico from "./components/AlmoxarifeHistorico";
 import SupervisorPanel from "./components/SupervisorPanel";
 
+const toast = {
+  error: (message: string) => {
+    alert(message);
+  }
+};
+
 const safeStr = (val: any): string => {
   if (val === null || val === undefined) return "";
   return String(val);
@@ -1603,6 +1609,7 @@ export default function App() {
                 );
               } catch (err) {
                 console.error("Error batch saving evaluations:", err);
+                toast.error("Erro ao salvar as avaliações do ciclo. Tente novamente.");
               } finally {
                 realtimeFlags.activeLocalUpdatesCount = Math.max(0, realtimeFlags.activeLocalUpdatesCount - finalCriteria.length);
                 // Force a single, clean database fetch once all writes have completed on Supabase
@@ -1649,6 +1656,7 @@ export default function App() {
               return signedUrl;
             } catch (err) {
               console.error("Failed to upload submission photo:", err);
+              toast.error("Não foi possível enviar a imagem de evidência.");
               return photo;
             }
           }
@@ -1829,6 +1837,7 @@ export default function App() {
         await dbSaveCycleState(nextState);
       } catch (err) {
         console.error("Failed to post archive logs or save cycle state to database:", err);
+        toast.error("Falha ao arquivar e consolidar o histórico do ciclo.");
         alert("Erro ao arquivar e fechar o período no Supabase. Por favor, tente novamente.");
         return; // Halt if DB save fails
       }
@@ -1885,6 +1894,7 @@ export default function App() {
         await supabase.from('historico_avaliacoes').delete().eq('mes', month).eq('ano', year);
       } catch (e) {
         console.error("Failed to update cycle or delete history on reopen cycle in Supabase:", e);
+        toast.error("Erro ao reabrir o ciclo de avaliação.");
         alert("Erro ao reabrir o ciclo no Supabase. Por favor, tente novamente.");
         return; // Halt if DB operation fails
       }
