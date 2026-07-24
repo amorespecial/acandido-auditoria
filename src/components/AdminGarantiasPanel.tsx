@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { WarrantyItem, Branch } from "../types";
 import { dbFetchWarranties, dbDeleteWarranty, dbSalvarGarantia } from "../supabaseService";
 import { getAnosDisponiveis } from "../utils/dateUtils";
+import { getWarrantyFieldValue, handleOpenAnexo } from "./AlmoxarifeGarantia";
 
 interface AdminGarantiasPanelProps {
   branch?: Branch; // If provided, locks down to this specific branch!
@@ -423,43 +424,78 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
       ) : (
         <div className="overflow-x-auto">
           {filteredWarranties.length > 0 ? (
-            <table className="w-full border-collapse text-left">
+            <table className="w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">
-                  {!branch && <th className="p-4 pl-6">Almoxarifado</th>}
-                  <th className="p-4">Item (Código / Nome)</th>
-                  <th className="p-4">Fabricante</th>
-                  <th className="p-4">Garantia Até</th>
-                  <th className="p-4">Registrado Em</th>
-                  <th className="p-4">Registrado Por</th>
-                  <th className="p-4 text-center">Status</th>
-                  <th className="p-4 pr-6 text-center">AÇÕES</th>
+                  {!branch && <th className="p-4 pl-6 min-w-[130px]">Almoxarifado</th>}
+                  <th className="p-4 min-w-[170px]">Item (Código / Nome)</th>
+                  <th className="p-4 min-w-[120px]">Fabricante</th>
+                  <th className="p-4 min-w-[110px]">Garantia Até</th>
+                  <th className="p-4 min-w-[100px]">Data NF</th>
+                  <th className="p-4 min-w-[110px]">Nota Fiscal</th>
+                  <th className="p-4 min-w-[110px]">Referência</th>
+                  <th className="p-4 min-w-[100px]">Veículo</th>
+                  <th className="p-4 min-w-[120px]">Localização</th>
+                  <th className="p-4 min-w-[160px]">Observação</th>
+                  <th className="p-4 text-center min-w-[80px]">Anexo</th>
+                  <th className="p-4 min-w-[110px]">Registrado Em</th>
+                  <th className="p-4 min-w-[120px]">Registrado Por</th>
+                  <th className="p-4 text-center min-w-[100px]">Status</th>
+                  <th className="p-4 pr-6 text-center min-w-[140px]">AÇÕES</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-semibold bg-white">
                 {filteredWarranties.map((w) => {
                   const status = getWarrantyStatus(w.expiryDate);
+                  const dataNf = getWarrantyFieldValue(w, "dataNf");
+                  const notaFiscal = getWarrantyFieldValue(w, "notaFiscal");
+                  const referencia = getWarrantyFieldValue(w, "referencia");
+                  const veiculo = getWarrantyFieldValue(w, "veiculo");
+                  const localizacao = getWarrantyFieldValue(w, "localizacao");
+                  const observacao = getWarrantyFieldValue(w, "observacao");
+                  const hasAnexo = Boolean((w as any).anexo_base64 || (w as any).arquivo_base64);
+
                   return (
                     <tr key={w.id} className="hover:bg-slate-50/40 transition-colors">
                       {!branch && (
-                        <td className="p-4 pl-6 font-bold text-[#1B2A4A]">
+                        <td className="p-4 pl-6 font-bold text-[#1B2A4A] whitespace-nowrap">
                           {w.almoxarifado ? w.almoxarifado.replace("ALMOXARIFADO ", "") : "—"}
                         </td>
                       )}
                       <td className="p-4">
-                        <div className="font-bold text-slate-900">{w.itemCode}</div>
+                        <div className="font-bold text-slate-900">{w.itemCode || "—"}</div>
                         <div className="text-[10px] text-slate-400 font-medium limit-lines-1" title={w.itemDescription}>
                           {w.itemDescription || "Sem descrição"}
                         </div>
                       </td>
-                      <td className="p-4 text-slate-600 font-bold uppercase">{w.manufacturer || "—"}</td>
-                      <td className="p-4 font-mono font-bold text-slate-800">
+                      <td className="p-4 text-slate-600 font-bold uppercase whitespace-nowrap">{w.manufacturer || "—"}</td>
+                      <td className="p-4 font-mono font-bold text-slate-800 whitespace-nowrap">
                         {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                       </td>
-                      <td className="p-4 font-mono text-slate-550">
+                      <td className="p-4 font-mono text-slate-600 whitespace-nowrap">{dataNf}</td>
+                      <td className="p-4 font-mono font-bold text-slate-700 whitespace-nowrap">{notaFiscal}</td>
+                      <td className="p-4 font-mono text-slate-600 whitespace-nowrap">{referencia}</td>
+                      <td className="p-4 text-slate-700 font-bold uppercase whitespace-nowrap">{veiculo}</td>
+                      <td className="p-4 text-slate-700 font-bold whitespace-nowrap">{localizacao}</td>
+                      <td className="p-4 text-slate-600 text-xs min-w-[160px]">{observacao}</td>
+                      <td className="p-4 text-center whitespace-nowrap">
+                        {hasAnexo ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAnexo((w as any).anexo_base64 || (w as any).arquivo_base64, (w as any).anexo_nome)}
+                            title="Visualizar / Baixar Anexo"
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[#00194C] transition inline-flex items-center justify-center cursor-pointer active:scale-95 border border-slate-200"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">attach_file</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="p-4 font-mono text-slate-500 whitespace-nowrap">
                         {w.lastUpdateDate ? new Date(w.lastUpdateDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                       </td>
-                      <td className="p-4 text-[11px] text-slate-500 font-normal">
+                      <td className="p-4 text-[11px] text-slate-600 font-medium whitespace-nowrap">
                         {w.registeredBy || "Almoxarife"}
                       </td>
                       <td className="p-4 text-center whitespace-nowrap">

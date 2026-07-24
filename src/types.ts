@@ -75,6 +75,14 @@ export interface WarrantyItem {
   scrapObservation: string;
   monthYear: string;
   createdAt?: string;
+  registeredBy?: string;
+  anexo_base64?: string;
+  arquivo_base64?: string;
+  anexo_nome?: string;
+  notaFiscal?: string;
+  veiculo?: string;
+  localizacao?: string;
+  [key: string]: any;
 }
 
 export interface CollaboratorCertificate {

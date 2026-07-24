@@ -70,6 +70,148 @@ const getMonthYearFromDate = (dateStr: string, fallbackMonth: string, fallbackYe
   return `${fallbackMonth} ${fallbackYear}`;
 };
 
+export const getWarrantyStatus = (expiryDateStr?: string) => {
+  if (!expiryDateStr) return { label: "SEM DATA", colorClass: "bg-slate-100 text-slate-600 border border-slate-200" };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(expiryDateStr + 'T00:00:00');
+  const diffTime = exp.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return { label: "VENCIDA", colorClass: "bg-red-50 text-red-700 border border-red-200" };
+  } else if (diffDays <= 30) {
+    return { label: "A VENCER", colorClass: "bg-amber-50 text-amber-700 border border-amber-200" };
+  } else {
+    return { label: "VIGENTE", colorClass: "bg-emerald-50 text-emerald-700 border border-emerald-200" };
+  }
+};
+
+export const handleOpenAnexo = (base64OrUrl?: string, filename?: string) => {
+  if (!base64OrUrl) return;
+  if (base64OrUrl.startsWith("http://") || base64OrUrl.startsWith("https://")) {
+    window.open(base64OrUrl, "_blank");
+    return;
+  }
+  const win = window.open("");
+  if (win) {
+    if (base64OrUrl.startsWith("data:image") || base64OrUrl.startsWith("data:application/pdf")) {
+      win.document.write(
+        `<!DOCTYPE html><html><head><title>${filename || 'Anexo'}</title><style>html,body{margin:0;height:100%;overflow:hidden;}</style></head><body><iframe src="${base64OrUrl}" width="100%" height="100%" style="border:none;"></iframe></body></html>`
+      );
+    } else {
+      win.document.write(
+        `<!DOCTYPE html><html><head><title>${filename || 'Anexo'}</title></head><body style="font-family:sans-serif;padding:30px;"><a href="${base64OrUrl}" download="${filename || 'anexo'}" style="font-size:16px;font-weight:bold;color:#00194C;">Clique aqui para baixar ${filename || 'o arquivo'}</a></body></html>`
+      );
+    }
+  }
+};
+
+export const getWarrantyFieldValue = (
+  w: WarrantyItem,
+  fieldType: "dataNf" | "notaFiscal" | "referencia" | "veiculo" | "localizacao" | "observacao",
+  customFields?: any[]
+): string => {
+  const wAny = w as any;
+  if (!wAny) return "—";
+
+  if (fieldType === "dataNf") {
+    const val = w.nfEmissionDate || wAny.data_nf || wAny.dataNf;
+    if (val && val !== "—") {
+      try {
+        return new Date(val + 'T00:00:00').toLocaleDateString("pt-BR");
+      } catch {
+        return val;
+      }
+    }
+    if (customFields) {
+      const found = customFields.find((f: any) =>
+        f.name?.toLowerCase().includes("emissão") || f.name?.toLowerCase().includes("data")
+      );
+      if (found && wAny[found.id]) {
+        try {
+          return new Date(wAny[found.id] + 'T00:00:00').toLocaleDateString("pt-BR");
+        } catch {
+          return wAny[found.id];
+        }
+      }
+    }
+    return "—";
+  }
+
+  if (fieldType === "notaFiscal") {
+    if (wAny.notaFiscal && wAny.notaFiscal !== "—") return String(wAny.notaFiscal);
+    if (wAny.nota_fiscal && wAny.nota_fiscal !== "—") return String(wAny.nota_fiscal);
+    if (wAny.nfNumber && wAny.nfNumber !== "—") return String(wAny.nfNumber);
+    if (customFields) {
+      const found = customFields.find((f: any) => f.name?.toLowerCase().includes("nota fiscal") || f.name?.toLowerCase().includes("nota"));
+      if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    for (const k of Object.keys(wAny)) {
+      if (k.toLowerCase().includes("nota") || k.toLowerCase().includes("fiscal")) {
+        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+      }
+    }
+    return "—";
+  }
+
+  if (fieldType === "referencia") {
+    if (w.reference && w.reference !== "—") return w.reference;
+    if (wAny.referencia && wAny.referencia !== "—") return wAny.referencia;
+    if (customFields) {
+      const found = customFields.find((f: any) => f.name?.toLowerCase().includes("referência") || f.name?.toLowerCase().includes("referencia"));
+      if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    return "—";
+  }
+
+  if (fieldType === "veiculo") {
+    if (wAny.veiculo && wAny.veiculo !== "—") return String(wAny.veiculo);
+    if (customFields) {
+      const found = customFields.find((f: any) => f.name?.toLowerCase().includes("veículo") || f.name?.toLowerCase().includes("veiculo"));
+      if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    for (const k of Object.keys(wAny)) {
+      if (k.toLowerCase().includes("veiculo") || k.toLowerCase().includes("veículo")) {
+        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+      }
+    }
+    return "—";
+  }
+
+  if (fieldType === "localizacao") {
+    if (wAny.localizacao && wAny.localizacao !== "—") return String(wAny.localizacao);
+    if (wAny.localizacao_id && wAny.localizacao_id !== "—") return String(wAny.localizacao_id);
+    if (customFields) {
+      const found = customFields.find((f: any) => f.name?.toLowerCase().includes("localiza"));
+      if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    for (const k of Object.keys(wAny)) {
+      if (k.toLowerCase().includes("localiza")) {
+        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+      }
+    }
+    return "—";
+  }
+
+  if (fieldType === "observacao") {
+    if (w.pieceObservation || w.scrapObservation) {
+      const parts = [];
+      if (w.pieceObservation) parts.push(w.pieceObservation);
+      if (w.scrapObservation) parts.push(`Sucata: ${w.scrapObservation}`);
+      return parts.join(" | ");
+    }
+    if (wAny.observacao) return wAny.observacao;
+    if (customFields) {
+      const found = customFields.find((f: any) => f.name?.toLowerCase().includes("observa"));
+      if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    return "—";
+  }
+
+  return "—";
+};
+
 export default function AlmoxarifeGarantia({
   onBack,
   user,
@@ -631,93 +773,96 @@ export default function AlmoxarifeGarantia({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200 select-none">
-                <th className="p-4 py-3.5 font-black text-left min-w-[220px]">ITEM / DESCRIÇÃO</th>
-                {garantiaConfig.fabricante !== false && <th className="p-4 py-3.5 font-black text-left min-w-[130px]">FABRICANTE</th>}
-                <th className="p-4 py-3.5 font-black text-left min-w-[120px]">GARANTIA ATÉ</th>
-                {garantiaConfig.nfEmissionDate !== false && <th className="p-4 py-3.5 font-black text-left min-w-[110px]">DATA NF</th>}
-                {garantiaConfig.reference !== false && <th className="p-4 py-3.5 font-black text-left min-w-[120px]">REFERÊNCIA</th>}
-                <th className="p-4 py-3.5 font-black text-left min-w-[200px]">OBSERVAÇÃO</th>
-                {(garantiaConfig.customFields || []).map((cf: any) => (
-                  <th key={cf.id} className="p-4 py-3.5 font-black text-left text-amber-700 min-w-[130px]">{cf.name.toUpperCase()}</th>
-                ))}
-                <th className="p-4 py-3.5 font-black text-center min-w-[110px]">AÇÕES</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[180px]">ITEM</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[120px]">FABRICANTE</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[110px]">GARANTIA ATÉ</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[100px]">DATA NF</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[110px]">NOTA FISCAL</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[110px]">REFERÊNCIA</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[100px]">VEÍCULO</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[120px]">LOCALIZAÇÃO</th>
+                <th className="p-4 py-3.5 font-black text-left min-w-[160px]">OBSERVAÇÃO</th>
+                <th className="p-4 py-3.5 font-black text-center min-w-[80px]">ANEXO</th>
+                <th className="p-4 py-3.5 font-black text-center min-w-[100px]">STATUS</th>
+                <th className="p-4 py-3.5 font-black text-center min-w-[90px]">AÇÕES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredWarranties.length > 0 ? (
-                filteredWarranties.map((w) => (
-                  <tr key={w.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="p-4 py-3.5">
-                      <span className="font-bold text-[#1B2A4A] text-xs block">{w.itemCode}</span>
-                      <span className="text-slate-500 text-[11px] block mt-0.5 leading-snug">{w.itemDescription || "Sem descrição"}</span>
-                    </td>
-                    {garantiaConfig.fabricante !== false && (
-                      <td className="p-4 py-3.5 text-slate-700 font-bold uppercase">{w.manufacturer || "—"}</td>
-                    )}
-                    <td className="p-4 py-3.5 text-slate-800 font-mono font-bold whitespace-nowrap">
-                      {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
-                    </td>
-                    {garantiaConfig.nfEmissionDate !== false && (
-                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">
-                        {w.nfEmissionDate ? new Date(w.nfEmissionDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                filteredWarranties.map((w) => {
+                  const status = getWarrantyStatus(w.expiryDate);
+                  const dataNf = getWarrantyFieldValue(w, "dataNf", garantiaConfig?.customFields);
+                  const notaFiscal = getWarrantyFieldValue(w, "notaFiscal", garantiaConfig?.customFields);
+                  const referencia = getWarrantyFieldValue(w, "referencia", garantiaConfig?.customFields);
+                  const veiculo = getWarrantyFieldValue(w, "veiculo", garantiaConfig?.customFields);
+                  const localizacao = getWarrantyFieldValue(w, "localizacao", garantiaConfig?.customFields);
+                  const observacao = getWarrantyFieldValue(w, "observacao", garantiaConfig?.customFields);
+                  const hasAnexo = Boolean((w as any).anexo_base64 || (w as any).arquivo_base64);
+
+                  return (
+                    <tr key={w.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="p-4 py-3.5">
+                        <span className="font-bold text-[#1B2A4A] text-xs block">{w.itemCode || "—"}</span>
+                        <span className="text-slate-500 text-[11px] block mt-0.5 leading-snug">{w.itemDescription || "Sem descrição"}</span>
                       </td>
-                    )}
-                    {garantiaConfig.reference !== false && (
-                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">{w.reference || "—"}</td>
-                    )}
-                    <td className="p-4 py-3.5 text-slate-600 text-xs min-w-[200px]">
-                      {w.pieceObservation || w.scrapObservation ? (
-                        <div className="space-y-1">
-                          {w.pieceObservation && (
-                            <p className="text-slate-700 font-normal leading-relaxed">
-                              <strong className="font-semibold text-slate-500 text-[10px] uppercase">Peça: </strong>
-                              {w.pieceObservation}
-                            </p>
-                          )}
-                          {w.scrapObservation && (
-                            <p className="text-slate-500 italic text-[11px] leading-relaxed">
-                              <strong className="font-semibold text-slate-400 text-[10px] uppercase">Sucata: </strong>
-                              {w.scrapObservation}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">—</span>
-                      )}
-                    </td>
-                    {(garantiaConfig.customFields || []).map((cf: any) => (
-                      <td key={cf.id} className="p-4 py-3.5 text-amber-900 text-xs" title={(w as any)[cf.id]}>
-                        {(w as any)[cf.id] || "—"}
+                      <td className="p-4 py-3.5 text-slate-700 font-bold uppercase whitespace-nowrap">{w.manufacturer || "—"}</td>
+                      <td className="p-4 py-3.5 text-slate-800 font-mono font-bold whitespace-nowrap">
+                        {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                       </td>
-                    ))}
-                    <td className="p-4 py-3.5 text-center whitespace-nowrap">
-                      {!isPresencial ? (
-                        (() => {
-                          const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
-                          if (!isOwnRecord) return <span className="text-[11px] text-slate-400 font-medium italic">—</span>;
-                          return (
-                            <div className="flex items-center justify-center">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEdit(w)}
-                                title="Editar"
-                                className="p-1.5 px-2.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] transition flex items-center gap-1 text-xs font-bold active:scale-95 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">edit</span>
-                                <span>Editar</span>
-                              </button>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Auditoria Local</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">{dataNf}</td>
+                      <td className="p-4 py-3.5 text-slate-700 font-mono font-bold whitespace-nowrap">{notaFiscal}</td>
+                      <td className="p-4 py-3.5 text-slate-600 font-mono whitespace-nowrap">{referencia}</td>
+                      <td className="p-4 py-3.5 text-slate-700 font-bold uppercase whitespace-nowrap">{veiculo}</td>
+                      <td className="p-4 py-3.5 text-slate-700 font-bold whitespace-nowrap">{localizacao}</td>
+                      <td className="p-4 py-3.5 text-slate-600 text-xs min-w-[160px]">{observacao}</td>
+                      <td className="p-4 py-3.5 text-center whitespace-nowrap">
+                        {hasAnexo ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAnexo((w as any).anexo_base64 || (w as any).arquivo_base64, (w as any).anexo_nome)}
+                            title="Visualizar / Baixar Anexo"
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[#00194C] transition inline-flex items-center justify-center cursor-pointer active:scale-95 border border-slate-200"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">attach_file</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="p-4 py-3.5 text-center whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-full ${status.colorClass}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="p-4 py-3.5 text-center whitespace-nowrap">
+                        {!isPresencial ? (
+                          (() => {
+                            const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
+                            if (!isOwnRecord) return <span className="text-[11px] text-slate-400 font-medium italic">—</span>;
+                            return (
+                              <div className="flex items-center justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(w)}
+                                  title="Editar"
+                                  className="p-1.5 px-2.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] transition flex items-center gap-1 text-xs font-bold active:scale-95 cursor-pointer"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">edit</span>
+                                  <span>Editar</span>
+                                </button>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Auditoria Local</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={10 + (garantiaConfig.customFields?.length || 0)} className="p-12 text-center text-slate-400 font-medium whitespace-normal">
+                  <td colSpan={12} className="p-12 text-center text-slate-400 font-medium whitespace-normal">
                     <span className="material-symbols-outlined text-[42px] block mb-2 text-slate-300">shield_with_heart</span>
                     Nenhum item registrado para o mês de <strong className="text-slate-600">{activeBranchMonthFilter}</strong> neste almoxarifado.
                   </td>
@@ -731,76 +876,101 @@ export default function AlmoxarifeGarantia({
       {/* CARDS VISUALIZATION FOR MOBILE (CELLPHONE) */}
       <div className="block md:hidden space-y-3">
         {filteredWarranties.length > 0 ? (
-          filteredWarranties.map((w) => (
-            <div key={w.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
-              <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
-                <div>
-                  <span className="text-sm font-black text-[#1B2A4A] block">{w.itemCode}</span>
-                  <p className="text-xs text-slate-600 font-medium mt-0.5">{w.itemDescription || "Sem descrição"}</p>
-                </div>
-                {garantiaConfig.fabricante !== false && w.manufacturer && (
-                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[10px] rounded uppercase shrink-0">
-                    {w.manufacturer}
-                  </span>
-                )}
-              </div>
+          filteredWarranties.map((w) => {
+            const status = getWarrantyStatus(w.expiryDate);
+            const dataNf = getWarrantyFieldValue(w, "dataNf", garantiaConfig?.customFields);
+            const notaFiscal = getWarrantyFieldValue(w, "notaFiscal", garantiaConfig?.customFields);
+            const referencia = getWarrantyFieldValue(w, "referencia", garantiaConfig?.customFields);
+            const veiculo = getWarrantyFieldValue(w, "veiculo", garantiaConfig?.customFields);
+            const localizacao = getWarrantyFieldValue(w, "localizacao", garantiaConfig?.customFields);
+            const observacao = getWarrantyFieldValue(w, "observacao", garantiaConfig?.customFields);
+            const hasAnexo = Boolean((w as any).anexo_base64 || (w as any).arquivo_base64);
 
-              <div className="grid grid-cols-2 gap-2.5 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-black block">Garantia Até</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+            return (
+              <div key={w.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                  <div>
+                    <span className="text-sm font-black text-[#1B2A4A] block">{w.itemCode || "—"}</span>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">{w.itemDescription || "Sem descrição"}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 font-bold text-[10px] rounded uppercase shrink-0 ${status.colorClass}`}>
+                    {status.label}
                   </span>
                 </div>
-                {garantiaConfig.nfEmissionDate !== false && (
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  {w.manufacturer && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-black block">Fabricante</span>
+                      <span className="font-bold text-slate-700 uppercase">{w.manufacturer}</span>
+                    </div>
+                  )}
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-black block">Data NF</span>
-                    <span className="font-mono text-slate-700">
-                      {w.nfEmissionDate ? new Date(w.nfEmissionDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Garantia Até</span>
+                    <span className="font-mono font-bold text-slate-800">
+                      {w.expiryDate ? new Date(w.expiryDate + 'T00:00:00').toLocaleDateString("pt-BR") : "—"}
                     </span>
                   </div>
-                )}
-                {garantiaConfig.reference !== false && (
-                  <div className="col-span-2">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Data NF</span>
+                    <span className="font-mono text-slate-700">{dataNf}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Nota Fiscal</span>
+                    <span className="font-mono font-bold text-slate-800">{notaFiscal}</span>
+                  </div>
+                  <div>
                     <span className="text-[10px] text-slate-400 uppercase font-black block">Referência</span>
-                    <span className="font-mono text-slate-700">{w.reference || "—"}</span>
+                    <span className="font-mono text-slate-700">{referencia}</span>
                   </div>
-                )}
-                {(w.pieceObservation || w.scrapObservation) && (
-                  <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 space-y-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-black block">Observação</span>
-                    {w.pieceObservation && (
-                      <p className="text-xs text-slate-700">
-                        <strong className="text-slate-500 font-semibold">Peça: </strong>{w.pieceObservation}
-                      </p>
-                    )}
-                    {w.scrapObservation && (
-                      <p className="text-xs text-slate-500 italic">
-                        <strong className="text-slate-400 font-semibold">Sucata: </strong>{w.scrapObservation}
-                      </p>
-                    )}
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Veículo</span>
+                    <span className="font-bold text-slate-700 uppercase">{veiculo}</span>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-black block">Localização</span>
+                    <span className="font-bold text-slate-700">{localizacao}</span>
+                  </div>
+                  {hasAnexo && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-black block">Anexo</span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAnexo((w as any).anexo_base64 || (w as any).arquivo_base64, (w as any).anexo_nome)}
+                        className="mt-1 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[#00194C] font-bold text-xs flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">attach_file</span>
+                        Ver Anexo
+                      </button>
+                    </div>
+                  )}
+                  {observacao !== "—" && (
+                    <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-black block">Observação</span>
+                      <p className="text-xs text-slate-700">{observacao}</p>
+                    </div>
+                  )}
+                </div>
 
-              {!isPresencial && (() => {
-                const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
-                if (!isOwnRecord) return null;
-                return (
-                  <div className="flex items-center justify-end pt-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEdit(w)}
-                      className="px-3 py-1.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] text-xs font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">edit</span>
-                      Editar
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
-          ))
+                {!isPresencial && (() => {
+                  const isOwnRecord = !w.registeredBy || w.registeredBy.toLowerCase() === (user.name || "").toLowerCase() || w.registeredBy.toLowerCase() === (user.ownerName || "").toLowerCase();
+                  if (!isOwnRecord) return null;
+                  return (
+                    <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(w)}
+                        className="px-3 py-1.5 rounded-lg bg-transparent border border-[#00194C] text-[#00194C] hover:bg-[#E8EDF5] text-xs font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">edit</span>
+                        Editar
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })
         ) : (
           <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-slate-400 font-medium">
             <span className="material-symbols-outlined text-[36px] block mb-2 text-slate-300">shield_with_heart</span>
