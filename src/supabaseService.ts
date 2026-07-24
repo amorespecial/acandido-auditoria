@@ -2152,7 +2152,7 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
   // Create object mapping both camelCase and snake_case properties
   const dbEntry = {
     id: entry.id,
-    branch_id: entry.branchId || entry.branch_id || "",
+    almoxarifado_id: entry.branchId || entry.branch_id || entry.almoxarifado_id || "",
     branch_name: entry.branchName || entry.branch_name || "",
     month_year: entry.monthYear || entry.month_year || "",
     score: entry.score !== undefined ? entry.score : 0,
@@ -2220,7 +2220,7 @@ export async function dbFetchHistory(): Promise<any[]> {
   
   return rawData.map(entry => ({
     id: entry.id,
-    branchId: entry.branch_id || entry.branchId,
+    branchId: entry.almoxarifado_id || entry.branch_id || entry.branchId,
     branchName: entry.branch_name || entry.branchName,
     monthYear: entry.month_year || entry.monthYear,
     score: entry.score,
