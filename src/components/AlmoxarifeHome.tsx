@@ -400,7 +400,7 @@ export default function AlmoxarifeHome({
                                 </span>
                               </div>
 
-                              {itemStatus === "NOK" && item.nokEvidenceLink && (
+                              {itemStatus === "NOK" && item.nokEvidenceLink && typeof item.nokEvidenceLink === "string" && !item.nokEvidenceLink.includes("mock-nok-folder") && item.nokEvidenceLink.trim() !== "" && (
                                 <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1 select-text">
                                   <div className="flex items-center gap-1 font-extrabold text-[8px] uppercase tracking-wider text-rose-700 leading-none">
                                     <span className="material-symbols-outlined text-[11px] leading-none text-rose-600">link</span>

@@ -1541,7 +1541,7 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
   const { data, error } = await supabase
     .from('garantias')
-    .select('*')
+    .select('id, item_code, item_description, manufacturer, warranty_expiry, almoxarifado, status, reference, piece_observation, scrap_observation, nf_emission_date, custom_fields')
     .order('registrado_em', { ascending: false });
 
   if (error || !data) {
@@ -1668,6 +1668,15 @@ export const dbDeleteOccurrence = async (id: string, requesterRole?: string): Pr
     realtimeFlags.isLocalUpdate = false;
   }
 };
+
+export async function dbFetchNivelServicioEntries() {
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase
+    .from('nivel_servico')
+    .select('id, almoxarifado, mes, ano, ns_porcentagem, ocorrencias, observacao');
+  if (error) return [];
+  return data || [];
+}
 
 export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
   if (!isSupabaseReady()) return [];
@@ -1836,6 +1845,15 @@ export async function dbFetchAllNonMovingSummaries(ano: number, semestre: number
     console.warn("[Supabase] dbFetchAllNonMovingSummaries falhou:", err);
     return [];
   }
+}
+
+export async function dbFetchNonMovingSummaries() {
+  if (!isSupabaseReady()) return [];
+  const { data, error } = await supabase
+    .from('materiais_parados')
+    .select('id, almoxarifado_id, mes, ano, quantidade_itens, valor_total, porcentagem_sem_giro');
+  if (error) return [];
+  return data || [];
 }
 
 // ======================= SYSTEM GLOBAL CONFIGURATIONS =======================
@@ -2219,14 +2237,14 @@ export async function dbFetchHistory(): Promise<any[]> {
   if (!isSupabaseReady()) return [];
   let result = await supabase
     .from('historico_avaliacoes')
-    .select('*')
+    .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em')
     .order('fechado_em', { ascending: false });
     
   if (result.error) {
     console.warn("Could not order by fechado_em in dbFetchHistory, retrying without order:", result.error);
     result = await supabase
       .from('historico_avaliacoes')
-      .select('*');
+      .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em');
   }
   
   if (result.error) {

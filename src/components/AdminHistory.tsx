@@ -501,7 +501,8 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           status: c.status === "OK" ? ("OK" as const) : ("NOK" as const),
           pointsObtained: c.pointsObtained !== undefined ? c.pointsObtained : (c.score !== undefined ? c.score : (c.status === "OK" ? (c.pointsPossible ?? 10) : 0)),
           notes: c.notes || c.evidenceNotes || "Avaliado pelo auditor.",
-          nokEvidenceLink: c.nokEvidenceLink ?? (isNok ? `https://drive.google.com/drive/folders/mock-nok-folder-${c.id}` : undefined),
+          nokEvidenceLink: (c.nokEvidenceLink && typeof c.nokEvidenceLink === "string" && !c.nokEvidenceLink.includes("mock-nok-folder") && c.nokEvidenceLink.trim() !== "") ? c.nokEvidenceLink : undefined,
+          nokEvidenceLinks: Array.isArray(c.nokEvidenceLinks) ? c.nokEvidenceLinks.filter((l: any) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder")) : undefined,
           nokEvidenceDescription: c.nokEvidenceDescription ?? (isNok ? `Inconformidade histórica registrada e validada no escopo do critério de ${c.name}.` : undefined),
           nokEvidenceFileName: c.nokEvidenceFileName,
           nokEvidenceFileType: c.nokEvidenceFileType,
@@ -534,7 +535,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
       const status = isNok ? ("NOK" as const) : ("OK" as const);
       const pointsObtained = status === "OK" ? c.pointsPossible : 0;
 
-      const nokEvidenceLink = isNok ? `https://drive.google.com/drive/folders/mock-nok-folder-${c.id}` : undefined;
+      const nokEvidenceLink = undefined;
       const nokEvidenceDescription = isNok ? `Inconformidade histórica registrada e validada no escopo do critério de ${c.name}.` : undefined;
 
       return {
@@ -919,9 +920,13 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             const desvioText = cAny.nokEvidenceDescription ? `Desvio: ${cAny.nokEvidenceDescription}` : `Desvio: ${evidence.reasonNok}`;
             doc.text(doc.splitTextToSize(desvioText, 172)[0] || "", 18, y + 9);
             
-            const linksStr = cAny.nokEvidenceLinks && cAny.nokEvidenceLinks.length > 0 
-              ? `Evidências: ${cAny.nokEvidenceLinks.join(" | ")}` 
-              : `Nota: "${evidence.obsNok}"`;
+            const validPdfLinks = Array.isArray(cAny.nokEvidenceLinks)
+              ? cAny.nokEvidenceLinks.filter((l: any) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder"))
+              : [];
+            const singlePdfLink = cAny.nokEvidenceLink && typeof cAny.nokEvidenceLink === "string" && !cAny.nokEvidenceLink.includes("mock-nok-folder") && cAny.nokEvidenceLink.trim() !== "" ? cAny.nokEvidenceLink : null;
+            const linksStr = validPdfLinks.length > 0 
+              ? `Evidências: ${validPdfLinks.join(" | ")}` 
+              : (singlePdfLink ? `Evidência: ${singlePdfLink}` : `Nota: "${evidence.obsNok}"`);
             doc.text(doc.splitTextToSize(linksStr, 172)[0] || "", 18, y + 13);
 
             doc.setFillColor(255, 255, 255);
@@ -1734,7 +1739,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                                                   </span>
                                                 </div>
 
-                                                {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                                {itemStatus === "NOK" && item.nokEvidenceLink && typeof item.nokEvidenceLink === "string" && !item.nokEvidenceLink.includes("mock-nok-folder") && item.nokEvidenceLink.trim() !== "" && (
                                                   <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1">
                                                     <span className="font-extrabold uppercase tracking-wider text-rose-700 flex items-center gap-1 leading-none">
                                                       <span className="material-symbols-outlined text-[11px] leading-none text-rose-600 font-bold">link</span>

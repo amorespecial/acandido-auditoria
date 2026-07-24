@@ -683,7 +683,7 @@ export default function AlmoxarifeHistorico({
                                         </span>
                                       </div>
 
-                                      {itemStatus === "NOK" && item.nokEvidenceLink && (
+                                      {itemStatus === "NOK" && item.nokEvidenceLink && typeof item.nokEvidenceLink === "string" && !item.nokEvidenceLink.includes("mock-nok-folder") && item.nokEvidenceLink.trim() !== "" && (
                                         <div className="bg-white border border-rose-100 p-1 text-[8px] text-rose-800 flex flex-col gap-0.5">
                                           <div className="flex items-center gap-1 font-extrabold text-[7px] uppercase text-rose-700 leading-none">
                                             <span className="material-symbols-outlined text-[9px] leading-none text-rose-600 font-bold">link</span>
