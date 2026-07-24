@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
 import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
-import { getOrderedFields, BUILTIN_GARANTIA_FIELDS } from "../utils/fieldOrdering";
+import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 import { getMesesDisponiveis } from "../utils/dateUtils";
 
 interface AlmoxarifeGarantiaProps {
@@ -540,54 +540,59 @@ export default function AlmoxarifeGarantia({
     const newErrors: Record<string, string> = {};
     let hasError = false;
 
-    if (!selectedItemCode || !expiryDate || !selectedAlmoxarifado) {
-      alert("Por favor, preencha todos os campos obrigatórios.");
+    if (!selectedItemCode) {
+      alert("O campo Item / Descrição da Peça é obrigatório.");
+      return;
+    }
+    if (!expiryDate) {
+      alert("O campo Garantia até é obrigatório.");
+      return;
+    }
+    if (!selectedAlmoxarifado) {
+      alert("O campo Almoxarifado é obrigatório.");
       return;
     }
 
-    if (garantiaConfig.fabricante && !selectedManufacturer) {
-      alert("Por favor, selecione o Fabricante.");
-      return;
-    }
-
-    // Validate mandatory fields (Nota Fiscal and Localização)
+    // Validate configured active fields based on isFieldRequired
     const orderedFields = getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS);
     orderedFields.forEach((f) => {
-      const isNf = f.name?.toLowerCase().includes("nota fiscal") || f.id === "nfEmissionDate";
-      const isLoc = f.name?.toLowerCase().includes("localiza");
+      // Skip disabled fields
+      if (garantiaConfig && f.id in garantiaConfig && garantiaConfig[f.id] === false) {
+        return;
+      }
 
-      if (isNf) {
-        const val = f.builtIn ? nfEmissionDate : (customFormValues[f.id] || "");
-        if (!val || !val.trim()) {
-          newErrors[f.id] = "Nota Fiscal é obrigatória";
-          hasError = true;
-        }
-      } else if (isLoc) {
-        const val = customFormValues[f.id] || "";
-        if (!val || val === "— Selecione uma opção —" || !val.trim()) {
-          newErrors[f.id] = "Selecione uma Localização";
-          hasError = true;
-        }
+      const isReq = isFieldRequired(f, garantiaConfig);
+      if (!isReq) return;
+
+      let val = "";
+      if (f.id === "fabricante") {
+        val = selectedManufacturer;
+      } else if (f.id === "nfEmissionDate") {
+        val = nfEmissionDate;
+      } else if (f.id === "reference") {
+        val = reference;
+      } else if (f.id === "pieceObservation") {
+        val = pieceObservation;
+      } else if (f.id === "scrapObservation") {
+        val = scrapObservation;
+      } else {
+        val = customFormValues[f.id] || "";
+      }
+
+      if (!val || !val.trim() || val === "— Selecione uma opção —") {
+        const fieldName = f.name || "campo";
+        newErrors[f.id] = `O campo ${fieldName} é obrigatório`;
+        hasError = true;
       }
     });
 
     if (hasError) {
       setFieldErrors(newErrors);
-      return;
-    }
-
-    // Verify other custom fields requirement
-    if (garantiaConfig.customFields) {
-      const missing = garantiaConfig.customFields.find((f: any) => {
-        const isNf = f.name?.toLowerCase().includes("nota fiscal");
-        const isLoc = f.name?.toLowerCase().includes("localiza");
-        if (isNf || isLoc) return false;
-        return f.required && !customFormValues[f.id]?.trim();
-      });
-      if (missing) {
-        alert(`Por favor, preencha o campo obrigatório: ${missing.name}`);
-        return;
+      const firstError = Object.values(newErrors)[0];
+      if (firstError) {
+        alert(firstError);
       }
+      return;
     }
 
     const matchedPreset = presetItems.find((pi) => pi.code === selectedItemCode);
@@ -1108,16 +1113,24 @@ export default function AlmoxarifeGarantia({
 
               {/* Dynamic Ordered Configurable Fields */}
               {getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS).map((field) => {
+                const isReq = isFieldRequired(field, garantiaConfig);
+                const fieldErr = fieldErrors[field.id];
+
                 if (field.id === "fabricante") {
                   if (garantiaConfig.fabricante === false) return null;
                   return (
                     <div key="fabricante" className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">Fabricante *</label>
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Fabricante{isReq ? " *" : ""}
+                      </label>
                       <select
-                        required
                         value={selectedManufacturer}
-                        onChange={(e) => setSelectedManufacturer(e.target.value)}
-                        className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedManufacturer(val);
+                          if (val) setFieldErrors((prev) => ({ ...prev, fabricante: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                       >
                         <option value="">— Selecione o Fabricante —</option>
                         {presetManufacturers.map((f) => (
@@ -1126,16 +1139,18 @@ export default function AlmoxarifeGarantia({
                           </option>
                         ))}
                       </select>
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
                     </div>
                   );
                 }
 
                 if (field.id === "nfEmissionDate") {
                   if (garantiaConfig.nfEmissionDate === false) return null;
-                  const isNfErr = Boolean(fieldErrors["nfEmissionDate"]);
                   return (
                     <div key="nfEmissionDate" className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">Data de Emissão da NF *</label>
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Data de Emissão da NF{isReq ? " *" : ""}
+                      </label>
                       <input
                         type="date"
                         value={nfEmissionDate}
@@ -1146,11 +1161,11 @@ export default function AlmoxarifeGarantia({
                             setFieldErrors((prev) => ({ ...prev, nfEmissionDate: "" }));
                           }
                         }}
-                        className={`w-full border ${isNfErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]`}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]`}
                       />
-                      {isNfErr && (
+                      {fieldErr && (
                         <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">
-                          {fieldErrors["nfEmissionDate"]}
+                          {fieldErr}
                         </p>
                       )}
                     </div>
@@ -1161,14 +1176,20 @@ export default function AlmoxarifeGarantia({
                   if (garantiaConfig.reference === false) return null;
                   return (
                     <div key="reference" className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">Referência do Item</label>
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Referência do Item{isReq ? " *" : ""}
+                      </label>
                       <input
                         type="text"
                         placeholder="—"
                         value={reference}
-                        onChange={(e) => setReference(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                        onChange={(e) => {
+                          setReference(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, reference: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                       />
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
                     </div>
                   );
                 }
@@ -1177,14 +1198,20 @@ export default function AlmoxarifeGarantia({
                   if (garantiaConfig.pieceObservation === false) return null;
                   return (
                     <div key="pieceObservation" className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">Observação da Peça</label>
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Observação da Peça{isReq ? " *" : ""}
+                      </label>
                       <textarea
                         rows={2}
                         placeholder="Se vazio, exibirá automaticamente: Nenhuma observação"
                         value={pieceObservation}
-                        onChange={(e) => setPieceObservation(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
+                        onChange={(e) => {
+                          setPieceObservation(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, pieceObservation: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700`}
                       ></textarea>
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
                     </div>
                   );
                 }
@@ -1193,29 +1220,30 @@ export default function AlmoxarifeGarantia({
                   if (garantiaConfig.scrapObservation === false) return null;
                   return (
                     <div key="scrapObservation" className="flex flex-col gap-1">
-                      <label className="text-xs font-bold text-[#1B2A4A]">Observação de Sucata</label>
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Observação de Sucata{isReq ? " *" : ""}
+                      </label>
                       <input
                         type="text"
                         placeholder="Introduza o valor aqui"
                         value={scrapObservation}
-                        onChange={(e) => setScrapObservation(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                        onChange={(e) => {
+                          setScrapObservation(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, scrapObservation: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                       />
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
                     </div>
                   );
                 }
 
                 // Custom fields
                 if (!field.builtIn) {
-                  const isNf = field.name?.toLowerCase().includes("nota fiscal");
-                  const isLoc = field.name?.toLowerCase().includes("localiza");
-                  const isMandatory = field.required || isNf || isLoc;
-                  const fieldErr = fieldErrors[field.id];
-
                   return (
                     <div key={field.id} className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        {isNf ? "Nota Fiscal *" : isLoc ? "Localização *" : `${field.name}${isMandatory ? " *" : ""}`}
+                        {field.name}{isReq ? " *" : ""}
                       </label>
                       {field.type === "select" ? (
                         <select

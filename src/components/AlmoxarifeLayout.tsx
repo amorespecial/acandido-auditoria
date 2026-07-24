@@ -50,6 +50,17 @@ export default function AlmoxarifeLayout({
       }
     };
     loadLayout();
+
+    const handleRealtime = () => {
+      loadLayout();
+    };
+
+    window.addEventListener("realtime-layout-config-update", handleRealtime);
+    window.addEventListener("realtime-avaliacoes-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-layout-config-update", handleRealtime);
+      window.removeEventListener("realtime-avaliacoes-update", handleRealtime);
+    };
   }, [branchId, activeMonth, activeYear]);
 
   const isConfigured = !!layoutConfig?.location;

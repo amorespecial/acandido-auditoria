@@ -2015,6 +2015,22 @@ export default function AdminConfiguracoes({
                 onToggleField={(fieldId, checked) =>
                   setGarantiaConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
                 }
+                onToggleRequired={(fieldId, checked) =>
+                  setGarantiaConfig((prev: any) => {
+                    const nextRequired = { ...(prev.requiredFields || {}), [fieldId]: checked };
+                    const nextCustom = (prev.customFields || []).map((cf: any) => {
+                      if (cf.id === fieldId) {
+                        return { ...cf, required: checked, obrigatorio: checked };
+                      }
+                      return cf;
+                    });
+                    return {
+                      ...prev,
+                      requiredFields: nextRequired,
+                      customFields: nextCustom,
+                    };
+                  })
+                }
                 onDeleteCustomField={(field) =>
                   setGarantiaConfig((prev: any) => ({
                     ...prev,

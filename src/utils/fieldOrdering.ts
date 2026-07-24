@@ -4,8 +4,24 @@ export interface ConfigFieldItem {
   builtIn?: boolean;
   type?: string;
   required?: boolean;
+  obrigatorio?: boolean;
   enabled?: boolean;
   options?: string[];
+}
+
+export function isFieldRequired(field: ConfigFieldItem, configState?: any): boolean {
+  if (configState) {
+    if (configState.requiredFields && typeof configState.requiredFields[field.id] === "boolean") {
+      return configState.requiredFields[field.id];
+    }
+    if (typeof configState[`${field.id}_required`] === "boolean") {
+      return configState[`${field.id}_required`];
+    }
+  }
+  if (typeof field.obrigatorio === "boolean") return field.obrigatorio;
+  if (typeof field.required === "boolean") return field.required;
+  if (field.id === "nfEmissionDate") return true;
+  return false;
 }
 
 export const BUILTIN_GARANTIA_FIELDS: ConfigFieldItem[] = [

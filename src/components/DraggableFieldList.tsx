@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ConfigFieldItem } from "../utils/fieldOrdering";
+import { ConfigFieldItem, isFieldRequired } from "../utils/fieldOrdering";
 
 interface DraggableFieldListProps {
   fields: ConfigFieldItem[];
@@ -89,6 +89,8 @@ export function DraggableFieldList({
             isEnabled = field.enabled !== false;
           }
 
+          const isReq = isFieldRequired(field, configState);
+
           return (
             <div
               key={field.id}
@@ -155,16 +157,23 @@ export function DraggableFieldList({
                 )}
 
                 {/* Required toggle checkbox */}
-                {onToggleRequired && !field.builtIn && (
-                  <label className="flex items-center gap-1 cursor-pointer select-none bg-slate-50 px-2 py-1 rounded border border-slate-150 hover:bg-slate-100">
+                {onToggleRequired && (
+                  <label className={`flex items-center gap-1.5 cursor-pointer select-none px-2 py-1 rounded border transition-colors ${
+                    isReq
+                      ? "bg-amber-50 border-amber-200 text-amber-900"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}>
                     <input
                       type="checkbox"
-                      checked={!!field.required}
+                      checked={isReq}
                       onChange={(e) => onToggleRequired(field.id, e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                     />
-                    <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider font-sans">
-                      Obrig.
+                    <span className="text-[9.5px] font-extrabold uppercase tracking-wider font-sans flex items-center gap-1">
+                      <span className={isReq ? "text-amber-600 font-black text-xs" : "text-slate-400 font-black text-xs"}>
+                        {isReq ? "●" : "○"}
+                      </span>
+                      {isReq ? "Obrigatório" : "Opcional"}
                     </span>
                   </label>
                 )}

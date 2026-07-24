@@ -34,6 +34,7 @@ export function useRealtimeSync(
       "nivel_servico",
       "top10_config",
       "top10_envios",
+      "layout_config",
       "envios_almoxarife",
       "usuarios"
     ];
@@ -64,6 +65,7 @@ export function useRealtimeSync(
             nivel_servico: "realtime-nivel-servico-update",
             top10_config: "realtime-top10-config-update",
             top10_envios: "realtime-top10-envios-update",
+            layout_config: "realtime-layout-config-update",
             envios_almoxarife: "realtime-envios-almoxarife-update",
             usuarios: "realtime-usuarios-update"
           };

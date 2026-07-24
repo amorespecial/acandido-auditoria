@@ -581,7 +581,7 @@ export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string,
   checkPermission(["ADMIN"], requesterRole);
   const { data, error } = await supabase
     .from('ciclos')
-    .upsert({ mes, ano, status: 'ABERTO', aberto_por, aberto_em: new Date().toISOString() })
+    .upsert({ mes, ano, status: 'ABERTO', iniciado_por: aberto_por, iniciado_em: new Date().toISOString() })
     .select().single();
   if (error) throw error;
   return data;
@@ -703,8 +703,6 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
       mes: dbMes,
       ano: dbAno,
       status: cycle.status === "NENHUM" ? "ABERTO" : cycle.status,
-      aberto_por: cycle.openedBy || "Fernando Silva",
-      aberto_em: cycle.openedAt || new Date().toISOString(),
       iniciado_por: cycle.openedBy || "Fernando Silva",
       iniciado_em: cycle.openedAt || new Date().toISOString(),
       fechado_em: cycle.status === "FECHADO" || cycle.status === "ARQUIVADO" ? new Date().toISOString() : null
@@ -2161,7 +2159,6 @@ export async function dbSalvarHistorico(entry: any, requesterRole?: string) {
     score_category: entry.scoreCategory || entry.score_category || "",
     status: entry.status || "PENDENTE",
     date_evaluated: entry.dateEvaluated || entry.date_evaluated || "",
-    auditor_name: entry.auditorName || entry.auditor_name || "",
     nok_items: entry.nokItems || entry.nok_items || [],
     criteria_state: entry.criteriaState || entry.criteria_state || []
   };
@@ -2194,10 +2191,10 @@ export async function dbFetchHistory(): Promise<any[]> {
   let result = await supabase
     .from('historico_avaliacoes')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('fechado_em', { ascending: false });
     
   if (result.error) {
-    console.warn("Could not order by created_at in dbFetchHistory, retrying without order:", result.error);
+    console.warn("Could not order by fechado_em in dbFetchHistory, retrying without order:", result.error);
     result = await supabase
       .from('historico_avaliacoes')
       .select('*');
@@ -2213,8 +2210,8 @@ export async function dbFetchHistory(): Promise<any[]> {
   // Sort in memory safely
   try {
     rawData.sort((a: any, b: any) => {
-      const valA = a.created_at || a.date_evaluated || a.id || "";
-      const valB = b.created_at || b.date_evaluated || b.id || "";
+      const valA = a.fechado_em || a.date_evaluated || a.id || "";
+      const valB = b.fechado_em || b.date_evaluated || b.id || "";
       return String(valB).localeCompare(String(valA));
     });
   } catch (e) {
