@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Branch, MaterialOccurrence, AppUser } from "../types";
 import { initialOccurrences } from "../mockData";
-import { dbFetchOccurrences, dbSaveOccurrences, dbFetchSupervisorFieldConfig, isSupabaseReady } from "../supabaseService";
+import { dbFetchOccurrences, dbSaveOccurrences, dbFetchSupervisorFieldConfig, isSupabaseReady, getBranchIdByName } from "../supabaseService";
 
 interface SupervisorPanelProps {
   user: AppUser;
@@ -150,13 +150,21 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
       }
     }
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new Event("realtime-nivel-servico-update"));
   };
 
   const handleSendForm = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Verify all active required fields
-    const missing = fields.filter(f => f.required && f.id !== "solicitante" && !formValues[f.id]?.trim());
+    // Verify all active required fields (excluding solicitante and codigoMaterial which is filled later by Almoxarife)
+    const missing = fields.filter(f => 
+      f.required && 
+      f.id !== "solicitante" && 
+      f.id !== "codigoMaterial" && 
+      f.id !== "codigo" && 
+      f.id !== "codigo_material" && 
+      !formValues[f.id]?.trim()
+    );
     if (missing.length > 0) {
       alert(`Por favor, preencha o campo obrigatório: ${missing[0].name}`);
       return;
@@ -170,7 +178,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
     const dynamicData: Record<string, string> = {};
     fields.forEach(f => {
-      if (f.id !== "solicitante") {
+      if (f.id !== "solicitante" && f.id !== "codigoMaterial" && f.id !== "codigo" && f.id !== "codigo_material") {
         dynamicData[f.id] = formValues[f.id] || "";
       }
     });
@@ -200,10 +208,11 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
   // Filter historic records belonging to Jaboatão or logged user
   const personalRecords = occurrences.filter((occ) => {
-    // Only show records originating from Fretamento Jaboatão or submitted by the user
-    const isFretamentoJaboatao = occ.branchId === "fretamento-jaboatao";
+    // Only show records originating from Jaboatão garages or submitted by the user
+    const bId = getBranchIdByName(occ.branchId || occ.branchName || occ.filial || "");
+    const isJaboataoBranch = bId === "fretamento-jaboatao" || bId === "rodoviario-jaboatao";
     const isOwner = occ.solicitante === user.name;
-    return isFretamentoJaboatao || isOwner;
+    return isJaboataoBranch || isOwner;
   });
 
   // Apply temporal filters
@@ -233,38 +242,50 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
   const getStatusColor = (status: string) => {
     switch (status) {
       case "RESOLVIDO":
-        return "bg-emerald-100 text-emerald-800 border-emerald-200";
+        return "bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]";
       case "MATERIAL NO ALMOXARIFADO":
-        return "bg-indigo-100 text-indigo-800 border-indigo-200";
+        return "bg-[#E8EDF5] text-[#00194C] border-[#CBD5E1]";
       case "Sem Estoque Mín/Máx":
-        return "bg-rose-100 text-rose-800 border-rose-200";
+        return "bg-[#FEE8E8] text-[#F11E26] border-[#FECDD3]";
       default:
-        return "bg-slate-100 text-slate-700 border-slate-200";
+        return "bg-[#F1F5F9] text-[#475569] border-[#E2E8F0]";
     }
   };
 
+  const resolvedCount = personalRecords.filter(r => r.status === "RESOLVIDO" || r.status === "MATERIAL NO ALMOXARIFADO").length;
+  const totalRecordsCount = personalRecords.length;
+  const progressPercent = totalRecordsCount > 0 ? Math.round((resolvedCount / totalRecordsCount) * 100) : 100;
+
+  let progressBarColor = "bg-[#16A34A]";
+  if (progressPercent < 60) {
+    progressBarColor = "bg-[#F11E26]";
+  } else if (progressPercent < 80) {
+    progressBarColor = "bg-[#D97706]";
+  }
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6" id="supervisor-panel-root">
+    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6 text-[#334155]" id="supervisor-panel-root">
+      <div className="max-w-6xl mx-auto space-y-6">
       
-      {/* HEADER SECTION */}
-      <header className="bg-[#1B2A4A] text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
+      {/* 1. HEADER DO SUPERVISOR & BANNER */}
+      <header className="bg-[#00194C] text-white px-[28px] py-[24px] rounded-[12px] border-b-[3px] border-[#F11E26] shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
         {/* Background ambient detail */}
-        <div className="absolute right-0 top-0 bottom-0 w-32 bg-[#C8A84B] opacity-10 skew-x-12 pointer-events-none"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-white/5 skew-x-12 pointer-events-none"></div>
 
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] bg-[#C8A84B] text-slate-950 font-black px-2.5 py-1 rounded uppercase tracking-wider">
+            <span className="bg-[#F11E26] text-white rounded-[6px] text-[11px] font-semibold px-[10px] py-[3px] uppercase tracking-wider">
               Painel do Supervisor
             </span>
-            <span className="text-[9px] bg-[#C8A84B]/20 text-indigo-200 font-extrabold px-2.5 py-1 rounded uppercase tracking-wider">
+            <span className="bg-[#E8EDF5] text-[#00194C] rounded-[6px] text-[11px] font-semibold px-[10px] py-[3px] uppercase tracking-wider">
               Filial: JABOATÃO
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1 select-none">
+          <h2 className="text-[22px] font-bold text-white mt-1 select-none">
             Supervisor {user.name}
           </h2>
-          <p className="text-xs text-indigo-200 font-medium opacity-80 mt-1 flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[14px]">mail</span>
+          <p className="text-[#94A3B8] text-[13px] font-medium mt-1 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[15px]">mail</span>
             {user.email} • Cadastro Integrado de Desabastecimento
           </p>
         </div>
@@ -272,9 +293,9 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
         <button
           onClick={onLogout}
           type="button"
-          className="px-4 py-2 bg-[#C8A84B] hover:bg-[#B7973B] active:scale-95 text-[#1B2A4A] text-xs font-black rounded-lg transition-all shadow flex items-center gap-1.5"
+          className="border border-white text-white hover:bg-white hover:text-[#00194C] transition-all px-4 py-2 rounded-[8px] text-[13px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[15px]">logout</span>
+          <span className="material-symbols-outlined text-[16px]">logout</span>
           Sair do Portal
         </button>
       </header>
@@ -282,48 +303,59 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
       {/* TWO COLUMN GRID WORKFLOW */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         
-        {/* VIEW A: TELA DE PREENCHIMENTO (GOOGLE FORMS WEB STYLE) */}
+        {/* VIEW A: TELA DE PREENCHIMENTO */}
         <section className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-150 p-6 audit-card-shadow space-y-6">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-base font-black text-[#1B2A4A] flex items-center gap-1.5 uppercase tracking-wide">
-                <span className="material-symbols-outlined text-indigo-600">assignment</span>
+          <div className="bg-white rounded-[12px] border border-[#E2E8F0] px-[24px] py-[20px] shadow-[0_2px_8px_rgba(0,25,76,0.06)] space-y-5">
+            <div className="border-b border-[#E2E8F0] pb-3">
+              <h3 className="text-[14px] font-semibold text-[#00194C] flex items-center gap-2 uppercase tracking-wide">
+                <span className="material-symbols-outlined text-[#00194C] text-[18px]">assignment</span>
                 Falta de Material
               </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Formulário de preenchimento obrigatório para tratamento de frota</p>
+              <p className="text-[12px] text-[#64748B] mt-0.5">Formulário de preenchimento obrigatório para tratamento de frota</p>
             </div>
 
-            {/* Simulated google forms purple header design accent */}
-            <div className="h-2 bg-indigo-700 rounded-lg -mt-3"></div>
+            {/* 3. BARRA DE PROGRESSO DO PAINEL */}
+            <div className="space-y-1.5 bg-[#F8FAFC] p-3 rounded-[8px] border border-[#E2E8F0]">
+              <div className="flex justify-between items-center text-[12px] font-semibold text-[#475569]">
+                <span className="uppercase tracking-[0.05em] text-[11px]">Tratamento do Estoque</span>
+                <span className="font-bold text-[#00194C]">{progressPercent}% ({resolvedCount}/{totalRecordsCount})</span>
+              </div>
+              <div className="w-full bg-[#E2E8F0] h-[8px] rounded-[4px] overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 rounded-[4px] ${progressBarColor}`}
+                  style={{ width: `${progressPercent}%` }}
+                ></div>
+              </div>
+            </div>
 
             <form onSubmit={handleSendForm} className="space-y-4">
-              {/* GOOGLE FORMS DESIGNS: FIELD - ALMOXARIFADO */}
-              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 shadow-sm space-y-2">
-                <label className="text-xs font-black text-slate-700 tracking-wide uppercase flex items-center gap-1.5 font-sans">
+              {/* 7. DROPDOWN ALMOXARIFADO DE DESTINO */}
+              <div className="bg-white p-4 rounded-[12px] border border-[#E2E8F0] shadow-[0_2px_8px_rgba(0,25,76,0.06)] space-y-2">
+                <label className="text-[12px] font-semibold text-[#475569] tracking-[0.05em] uppercase flex items-center gap-1.5 font-sans">
                   Almoxarifado de Destino *
-                  <span className="text-[8px] bg-indigo-100 text-indigo-700 px-1 rounded font-black font-sans">Estoque</span>
+                  <span className="bg-[#E8EDF5] text-[#00194C] text-[10px] font-semibold rounded-[4px] px-[6px] py-[2px]">ESTOQUE</span>
                 </label>
                 <select
                   value={targetBranchId}
                   onChange={(e) => setTargetBranchId(e.target.value)}
-                  className="w-full bg-white border border-slate-350 rounded-lg px-3 py-2.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#1B2A4A] focus:ring-1 focus:ring-[#1B2A4A]"
+                  className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#00194C] font-medium focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                 >
                   <option value="fretamento-jaboatao">FRETAMENTO JABOATÃO</option>
                   <option value="rodoviario-jaboatao">RODOVIÁRIO JABOATÃO</option>
                 </select>
-                <p className="text-[10px] text-slate-400 italic">Selecione para qual almoxarifado sob sua gestão este chamado será enviado.</p>
+                <p className="text-[12px] text-[#64748B] italic">Selecione para qual almoxarifado sob sua gestão este chamado será enviado.</p>
               </div>
 
               {/* DYNAMIC FIELDS GENERATION */}
               {fields.map((f: any) => {
-                if (f.id === "solicitante") return null;
+                if (f.id === "solicitante" || f.id === "codigoMaterial" || f.id === "codigo" || f.id === "codigo_material" || f.name?.toLowerCase().includes("código do material")) return null;
                 if (f.enabled === false || f.visible === false) return null;
 
                 return (
-                  <div key={f.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 shadow-sm space-y-2">
-                    <label className="text-xs font-black text-slate-700 tracking-wide uppercase flex items-center gap-1.5 font-sans">
+                  <div key={f.id} className="bg-white p-4 rounded-[12px] border border-[#E2E8F0] shadow-[0_2px_8px_rgba(0,25,76,0.06)] space-y-2">
+                    <label className="text-[12px] font-semibold text-[#475569] tracking-[0.05em] uppercase flex items-center gap-1.5 font-sans">
                       {f.name} {f.required && " *"}
-                      {f.builtIn && <span className="text-[8px] bg-indigo-50 text-indigo-800 px-1 rounded font-black font-sans">Obrigatório</span>}
+                      {f.required && <span className="bg-[#FEE8E8] text-[#F11E26] text-[10px] font-semibold rounded-[4px] px-[6px] py-[2px]">OBRIGATÓRIO</span>}
                     </label>
 
                     {f.type === "select" ? (
@@ -331,7 +363,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                         required={f.required}
                         value={formValues[f.id] || ""}
                         onChange={(e) => setFormValues(prev => ({ ...prev, [f.id]: e.target.value }))}
-                        className="w-full bg-white border border-slate-350 rounded-lg px-3 py-2.5 text-xs text-slate-800 font-bold focus:border-[#1B2A4A] focus:outline-none"
+                        className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#334155] focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                       >
                         <option value="">-- Selecione uma opção --</option>
                         {(f.options || []).map((opt: string) => (
@@ -344,7 +376,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                         required={f.required}
                         value={formValues[f.id] || ""}
                         onChange={(e) => setFormValues(prev => ({ ...prev, [f.id]: e.target.value }))}
-                        className="w-full bg-white border border-slate-350 rounded-lg px-3 py-2.5 text-xs text-slate-800 font-bold focus:border-[#1B2A4A] focus:outline-none"
+                        className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#334155] focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                       />
                     ) : f.type === "number" ? (
                       <input
@@ -353,7 +385,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                         placeholder="Digite um valor numérico"
                         value={formValues[f.id] || ""}
                         onChange={(e) => setFormValues(prev => ({ ...prev, [f.id]: e.target.value }))}
-                        className="w-full bg-white border border-slate-350 rounded-lg px-3 py-2.5 text-xs text-slate-800 font-bold focus:border-[#1B2A4A] focus:outline-none"
+                        className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#334155] placeholder-[#94A3B8] focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                       />
                     ) : (
                       <input
@@ -362,37 +394,37 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                         placeholder={`Digite ${f.name.toLowerCase()}`}
                         value={formValues[f.id] || ""}
                         onChange={(e) => setFormValues(prev => ({ ...prev, [f.id]: e.target.value }))}
-                        className="w-full bg-white border border-slate-350 rounded-lg px-3 py-2.5 text-xs text-slate-800 font-bold focus:border-[#1B2A4A] focus:outline-none"
+                        className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#334155] placeholder-[#94A3B8] focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                       />
                     )}
                   </div>
                 );
               })}
 
-              {/* AUTOMATIC INVIOLABLE BACKGROUND DATA (INFORMATIONAL FOR REASSURANCE) */}
-              <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 text-[11px] space-y-2 text-slate-500 font-medium">
-                <span className="text-[10px] uppercase font-black tracking-wider text-slate-450 block font-sans">Propriedades Salvas Automaticamente:</span>
+              {/* AUTOMATIC INVIOLABLE BACKGROUND DATA */}
+              <div className="bg-[#F8FAFC] p-4 rounded-[12px] border border-[#E2E8F0] text-[13px] space-y-2 text-[#475569] font-medium">
+                <span className="text-[11px] uppercase font-semibold tracking-[0.05em] text-[#64748B] block font-sans">Propriedades Salvas Automaticamente:</span>
                 
-                <div className="flex justify-between border-b border-slate-200/50 pb-1">
+                <div className="flex justify-between border-b border-[#E2E8F0] pb-1">
                   <span>Solicitante Responsável:</span>
-                  <strong className="text-slate-800 font-sans">{user.name}</strong>
+                  <strong className="text-[#00194C] font-semibold font-sans">{user.name}</strong>
                 </div>
 
-                <div className="flex justify-between border-b border-slate-200/50 pb-1">
+                <div className="flex justify-between border-b border-[#E2E8F0] pb-1">
                   <span>Unidade Vinculada:</span>
-                  <strong className="text-indigo-700 font-sans">JABOATÃO</strong>
+                  <strong className="text-[#00194C] font-semibold font-sans">JABOATÃO</strong>
                 </div>
 
                 <div className="flex justify-between">
                   <span>Data / Hora Cadastro:</span>
-                  <strong className="text-slate-800 font-sans">Assinatura de Servidor (Ao Enviar)</strong>
+                  <strong className="text-[#00194C] font-semibold font-sans">Assinatura de Servidor (Ao Enviar)</strong>
                 </div>
               </div>
 
               {/* SUBMIT FORM ACTION BUTTON */}
               <button
                 type="submit"
-                className="w-full bg-[#1B2A4A] hover:bg-[#0C1527] active:scale-[0.98] text-white font-black py-3 rounded-xl tracking-wide text-xs shadow-lg transition-all uppercase flex items-center justify-center gap-2 font-sans"
+                className="w-full h-[44px] bg-[#00194C] hover:bg-[#001238] active:scale-[0.98] text-white font-semibold rounded-[8px] text-[13px] shadow-md transition-all uppercase flex items-center justify-center gap-2 font-sans cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">send</span>
                 Enviar Registro ao Estoque
@@ -402,32 +434,32 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
           </div>
         </section>
 
-        {/* VIEW B: TELA DE VISUALIZAÇÃO HISTÓRICA (TEMPORAL FILTERS, NO FIELDS CAN BE EDITED!) */}
+        {/* 8. CARD HISTÓRICO E ACOMPANHAMENTO */}
         <section className="lg:col-span-3 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-150 p-6 audit-card-shadow flex flex-col space-y-4">
+          <div className="bg-white rounded-[12px] border border-[#E2E8F0] px-[24px] py-[20px] shadow-[0_2px_8px_rgba(0,25,76,0.06)] flex flex-col space-y-4">
             
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#E2E8F0] pb-3">
               <div>
-                <h3 className="text-base font-black text-[#1B2A4A] flex items-center gap-1.5 uppercase tracking-wide">
-                  <span className="material-symbols-outlined text-indigo-600">wysiwyg</span>
+                <h3 className="text-[14px] font-semibold text-[#00194C] flex items-center gap-2 uppercase tracking-wide">
+                  <span className="material-symbols-outlined text-[#00194C] text-[18px]">wysiwyg</span>
                   Histórico e Acompanhamento
                 </h3>
-                <p className="text-[11px] text-slate-400">Total de {personalRecords.length} lançamentos efetuados</p>
+                <p className="text-[12px] text-[#64748B] mt-0.5">Total de {personalRecords.length} lançamentos efetuados</p>
               </div>
 
-              <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded border border-slate-200">
+              <span className="bg-[#E8EDF5] text-[#00194C] text-[11px] font-semibold rounded-[6px] px-[10px] py-[4px]">
                 Apenas Leitura Sincronizado
               </span>
             </div>
 
             {/* TEMPORAL SEARCH FILTERS */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] font-black uppercase text-slate-400">Filtrar por Mês</span>
+            <div className="bg-[#F8FAFC] p-3 rounded-[12px] border border-[#E2E8F0] grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#475569]">Filtrar por Mês</span>
                 <select
                   value={temporalMonth}
                   onChange={(e) => setTemporalMonth(e.target.value)}
-                  className="text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 font-bold"
+                  className="h-[40px] text-[14px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[#334155] font-medium focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15"
                 >
                   <option value="TODOS">Todos os Meses</option>
                   {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"].map((m) => (
@@ -436,39 +468,39 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                 </select>
               </div>
 
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] font-black uppercase text-slate-400">Filtrar por Data Específica</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#475569]">Filtrar por Data Específica</span>
                 <input
                   type="date"
                   value={temporalSearchDate}
                   onChange={(e) => setTemporalSearchDate(e.target.value)}
-                  className="text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 font-bold"
+                  className="h-[40px] text-[14px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[#334155] font-medium focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15"
                 />
               </div>
             </div>
 
-            {/* HISTORY GRID LIST (NO FORM ELEMENTS ARE EDITABLE) */}
+            {/* HISTORY GRID LIST */}
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
               {filteredPersonalRecords.length > 0 ? (
                 filteredPersonalRecords.map((occ) => (
                   <div
                     key={occ.id}
-                    className="bg-white border border-slate-150 rounded-xl p-4 hover:border-slate-300 transition-all space-y-3 relative"
+                    className="bg-white border border-[#E2E8F0] rounded-[12px] p-4 hover:border-[#CBD5E1] transition-all space-y-3 relative shadow-xs"
                   >
                     {/* Header line */}
                     <div className="flex justify-between items-start gap-3">
                       <div>
-                        <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-150">
+                        <span className="text-[11px] font-semibold text-[#00194C] bg-[#E8EDF5] px-2.5 py-0.5 rounded-[6px]">
                           {occ.filial || "JABOATÃO"}
                         </span>
-                        <h4 className="text-xs font-black text-[#1B2A4A] mt-1.5 leading-tight">
-                          Veículo: <span className="font-mono text-indigo-600 font-black">{occ.veiculo || "—"}</span> • {occ.material}
+                        <h4 className="text-[13px] font-bold text-[#00194C] mt-1.5 leading-tight">
+                          Veículo: <span className="font-mono text-[#00194C] font-bold">{occ.veiculo || "—"}</span> • {occ.material}
                         </h4>
                       </div>
 
                       {occ.status !== "Sem Estoque Mín/Máx" && (
                         <span
-                          className={`px-2.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider border rounded-full ${getStatusColor(
+                          className={`px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider border rounded-full ${getStatusColor(
                             occ.status
                           )}`}
                         >
@@ -479,37 +511,37 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
                     {/* Operational Details updated by Almoxarife */}
                     {(occ.codigoMaterial || occ.obs) ? (
-                      <div className="bg-slate-50 border border-slate-150 rounded-lg p-3 text-xs space-y-1.5">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">
+                      <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-3 text-[13px] space-y-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#64748B] block leading-none">
                           Retorno do Almoxarifado Jaboatão
                         </span>
                         
                         {occ.codigoMaterial && (
-                          <p className="text-slate-700 font-medium font-sans">
-                            Código Cadastrado: <strong className="font-mono text-[#1B2A4A] font-black">{occ.codigoMaterial}</strong>
+                          <p className="text-[#334155] font-medium font-sans">
+                            Código Cadastrado: <strong className="font-mono text-[#00194C] font-bold">{occ.codigoMaterial}</strong>
                           </p>
                         )}
                         {occ.obs && (
-                          <p className="text-slate-600 font-medium italic">
+                          <p className="text-[#475569] font-medium italic">
                             Observação técnica: "{occ.obs}"
                           </p>
                         )}
                       </div>
                     ) : (
-                      <div className="text-[10px] text-slate-400 bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-amber-500 text-sm">schedule</span>
+                      <div className="text-[12px] text-[#64748B] bg-[#FEF3C7]/40 border border-[#FDE68A] rounded-[8px] p-2.5 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[#D97706] text-[16px]">schedule</span>
                         <span>Aguardando tratamento pela Central de Almoxarifado Jaboatão.</span>
                       </div>
                     )}
 
                     {/* Timestamp & metadata info */}
-                    <div className="flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-100 pt-2.5">
+                    <div className="flex justify-between items-center text-[12px] text-[#64748B] border-t border-[#E2E8F0] pt-2.5">
                       <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">person</span>
-                        Solicitado por: <strong className="text-slate-600">{occ.solicitante || "Manutenção"}</strong>
+                        <span className="material-symbols-outlined text-[14px]">person</span>
+                        Solicitado por: <strong className="text-[#334155]">{occ.solicitante || "Manutenção"}</strong>
                       </span>
                       <span className="flex items-center gap-1 font-mono">
-                        <span className="material-symbols-outlined text-xs">event</span>
+                        <span className="material-symbols-outlined text-[14px]">event</span>
                         {occ.date}
                       </span>
                     </div>
@@ -517,10 +549,10 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                   </div>
                 ))
               ) : (
-                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 select-none">
-                  <span className="material-symbols-outlined text-[32px] text-slate-350">receipt_long</span>
-                  <p className="text-xs font-black mt-1">Nenhum registro encontrado para este filtro temporal.</p>
-                  <p className="text-[10px]">As ocorrências técnicas enviadas aparecerão listadas de forma inviolável aqui.</p>
+                <div className="bg-[#F8FAFC] border-2 border-dashed border-[#E2E8F0] rounded-[12px] p-8 text-center text-[#94A3B8] select-none">
+                  <span className="material-symbols-outlined text-[36px] text-[#CBD5E1]">receipt_long</span>
+                  <p className="text-[13px] font-semibold text-[#94A3B8] mt-1">Nenhum registro encontrado para este filtro temporal.</p>
+                  <p className="text-[12px] text-[#94A3B8]">As ocorrências técnicas enviadas aparecerão listadas de forma inviolável aqui.</p>
                 </div>
               )}
             </div>
@@ -529,7 +561,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
         </section>
 
       </div>
-
+    </div>
     </div>
   );
 }

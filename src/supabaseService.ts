@@ -1464,57 +1464,109 @@ export const dbDeleteSchedule = async (id: string, requesterRole?: string) => {
 };
 
 // ======================= WARRANTIES (garantias) =======================
-export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
-  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
-  const { error } = await supabase
-    .from('garantias')
-    .upsert({
-      id: garantia.id && !garantia.id.startsWith("tmp") ? garantia.id : undefined,
-      almoxarifado_id: garantia.almoxarifado_id || garantia.almoxarifado || "",
-      mes: garantia.mes || "Janeiro",
-      ano: garantia.ano || "2026",
-      item_code: garantia.item_code || garantia.itemCode || "",
-      item_description: garantia.item_description || garantia.itemDescription || "",
-      fabricante: garantia.fabricante || "",
-      garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
-      data_nf: garantia.data_nf || garantia.nfEmissionDate || null,
-      referencia_item: garantia.referencia_item || garantia.reference || "",
-      observacao_peca: garantia.observacao_peca || garantia.pieceObservation || "Nenhuma observação",
-      observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || "",
-      updated_at: new Date().toISOString()
-    });
-  if (error) throw error;
+const GARANTIA_MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+function garantiaMonthToNum(monthStr: string): number {
+  if (!monthStr) return 1;
+  const cleaned = monthStr.split(' ')[0].trim();
+  const idx = GARANTIA_MONTH_NAMES.findIndex(m => m.toLowerCase() === cleaned.toLowerCase());
+  if (idx !== -1) return idx + 1;
+  const parsed = parseInt(cleaned, 10);
+  return isNaN(parsed) || parsed < 1 || parsed > 12 ? 1 : parsed;
 }
 
-export async function dbBuscarGarantias(almoxarifado_id: string, mes: string, ano: string) {
-  const { data, error } = await supabase
-    .from('garantias')
-    .select('*')
-    .eq('almoxarifado_id', almoxarifado_id)
-    .eq('mes', mes)
-    .eq('ano', ano);
+function garantiaNumToMonth(num: number): string {
+  if (num >= 1 && num <= 12) return GARANTIA_MONTH_NAMES[num - 1];
+  return "Janeiro";
+}
+
+export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
+  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+  
+  const spaceParts = (garantia.monthYear || `${garantia.mes} ${garantia.ano}`).split(' ');
+  const mesName = spaceParts[0] || "Janeiro";
+  const anoNum = parseInt(spaceParts[1] || "2026", 10) || 2026;
+  const mesNum = garantiaMonthToNum(mesName);
+
+  const fullItem = (garantia.itemCode || garantia.item_code)
+    ? `${garantia.itemCode || garantia.item_code} - ${garantia.itemDescription || garantia.item_description || ''}`
+    : (garantia.itemDescription || garantia.item_description || garantia.item || '');
+
+  const payload: any = {
+    almoxarifado: garantia.almoxarifado || garantia.almoxarifado_id || "",
+    mes: mesNum,
+    ano: anoNum,
+    item: fullItem,
+    fabricante: garantia.fabricante || garantia.manufacturer || "",
+    garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
+    registrado_por: garantia.registrado_por || garantia.registeredBy || null
+  };
+
+  if (garantia.id && !garantia.id.startsWith("war-") && !garantia.id.startsWith("tmp")) {
+    payload.id = garantia.id;
+  }
+
+  const { data, error } = await supabase.from('garantias').upsert(payload).select();
+  if (error) throw error;
+  return data?.[0];
+}
+
+export async function dbBuscarGarantias(almoxarifado: string, mes: string | number, ano: string | number) {
+  const mesNum = typeof mes === "number" ? mes : garantiaMonthToNum(mes);
+  const anoNum = typeof ano === "number" ? ano : (parseInt(String(ano), 10) || 2026);
+
+  let query = supabase.from('garantias').select('*').eq('mes', mesNum).eq('ano', anoNum);
+  if (almoxarifado && almoxarifado !== "TODOS") {
+    query = query.ilike('almoxarifado', `%${almoxarifado.replace("ALMOXARIFADO ", "").trim()}%`);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
 export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase.from('garantias').select('*').order('created_at', { ascending: false });
-  if (error || !data) return [];
-  return data.map(item => ({
-    id: item.id,
-    itemCode: item.item_code,
-    itemDescription: item.item_description || "",
-    manufacturer: item.fabricante || "",
-    expiryDate: item.garantia_ate || "",
-    almoxarifado: item.almoxarifado_id,
-    nfEmissionDate: item.data_nf || "",
-    reference: item.referencia_item || "",
-    lastUpdateDate: item.updated_at,
-    pieceObservation: item.observacao_peca || "",
-    scrapObservation: item.observacao_sucata || "",
-    monthYear: `${item.mes} ${item.ano}`
-  }));
+  const { data, error } = await supabase
+    .from('garantias')
+    .select('*')
+    .order('registrado_em', { ascending: false });
+
+  if (error || !data) {
+    console.error("Error fetching warranties from Supabase:", error);
+    return [];
+  }
+
+  return data.map((item) => {
+    let itemCode = "";
+    let itemDescription = item.item || "";
+    if (item.item && item.item.includes(" - ")) {
+      const parts = item.item.split(" - ");
+      itemCode = parts[0].trim();
+      itemDescription = parts.slice(1).join(" - ").trim();
+    }
+
+    const monthName = garantiaNumToMonth(item.mes);
+    const monthYear = `${monthName} ${item.ano || 2026}`;
+
+    return {
+      id: item.id,
+      itemCode,
+      itemDescription,
+      manufacturer: item.fabricante || "",
+      expiryDate: item.garantia_ate || "",
+      almoxarifado: item.almoxarifado || "",
+      nfEmissionDate: "",
+      reference: "",
+      lastUpdateDate: item.registrado_em ? item.registrado_em.split("T")[0] : "",
+      pieceObservation: "",
+      scrapObservation: "",
+      monthYear,
+      createdAt: item.registrado_em ? new Date(item.registrado_em).toLocaleString("pt-BR") : ""
+    };
+  });
 };
 
 export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole?: string) => {
@@ -1524,38 +1576,45 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
   try {
     realtimeFlags.isLocalUpdate = true;
     for (const item of warranties) {
-      const spaceParts = item.monthYear ? item.monthYear.split(' ') : [];
-      const mesStr = spaceParts[0] || "Maio";
-      const anoStr = spaceParts[1] || "2026";
-
       await dbSalvarGarantia({
         id: item.id,
-        almoxarifado_id: item.almoxarifado,
-        mes: mesStr,
-        ano: anoStr,
-        item_code: item.itemCode,
-        item_description: item.itemDescription,
-        fabricante: item.manufacturer,
-        garantia_ate: item.expiryDate || null,
-        data_nf: item.nfEmissionDate || null,
-        referencia_item: item.reference,
-        observacao_peca: item.pieceObservation,
-        observacao_sucata: item.scrapObservation
+        almoxarifado: item.almoxarifado,
+        monthYear: item.monthYear,
+        itemCode: item.itemCode,
+        itemDescription: item.itemDescription,
+        manufacturer: item.manufacturer,
+        expiryDate: item.expiryDate
       });
     }
+  } catch (err) {
+    console.error("Error in dbSaveWarranties:", err);
+    throw err;
   } finally {
     realtimeFlags.isLocalUpdate = false;
+  }
+};
+
+export const dbDeleteWarranty = async (id: string) => {
+  if (!isSupabaseReady() || !id) return;
+  if (id.startsWith("war-") || id.startsWith("tmp")) return;
+  const { error } = await supabase.from('garantias').delete().eq('id', id);
+  if (error) {
+    console.error("Error deleting warranty from Supabase:", error);
+    throw error;
   }
 };
 
 // ======================= LEVEL OF SERVICE OCCURRENCES =======================
 export async function dbSalvarNivelServico(registro: any, requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
+  const rawBranch = registro.almoxarifado_id || registro.branchId || registro.branchName || registro.filial || "";
+  const canonicalBranchId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
+
   const { error } = await supabase
     .from('nivel_servico')
     .upsert({
       id: registro.id && !registro.id.startsWith("tmp") ? registro.id : undefined,
-      almoxarifado_id: registro.almoxarifado_id || registro.branchName || registro.filial || "",
+      almoxarifado_id: canonicalBranchId,
       veiculo: registro.veiculo || "",
       codigo_material: registro.codigo_material || registro.codigoMaterial || "",
       material_falta: registro.material_falta || registro.material || "",
@@ -1604,21 +1663,26 @@ export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
   if (!isSupabaseReady()) return [];
   const { data, error } = await supabase.from('nivel_servico').select('*').order('created_at', { ascending: false });
   if (error || !data) return [];
-  return data.map(o => ({
-    id: o.id,
-    material: o.material_falta,
-    date: o.data_ocorrencia || "",
-    status: o.status as any,
-    branchId: o.almoxarifado_id,
-    branchName: o.almoxarifado_id,
-    veiculo: o.veiculo || "",
-    solicitante: o.solicitante || "",
-    codigoMaterial: o.codigo_material || "",
-    filial: o.almoxarifado_id,
-    obs: o.observacao || "",
-    dias_aberto: o.dias_aberto || 0,
-    resolvedAt: o.data_resolucao || ""
-  }));
+  return data.map(o => {
+    const rawBranch = o.almoxarifado_id || "";
+    const bId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
+    const bName = getBranchNameById(bId) || rawBranch;
+    return {
+      id: o.id,
+      material: o.material_falta,
+      date: o.data_ocorrencia || "",
+      status: o.status as any,
+      branchId: bId,
+      branchName: bName,
+      veiculo: o.veiculo || "",
+      solicitante: o.solicitante || "",
+      codigoMaterial: o.codigo_material || "",
+      filial: bName,
+      obs: o.observacao || "",
+      dias_aberto: o.dias_aberto || 0,
+      resolvedAt: o.data_resolucao || ""
+    };
+  });
 };
 
 export const dbSaveOccurrences = async (occs: MaterialOccurrence[], requesterRole?: string) => {
@@ -1628,9 +1692,12 @@ export const dbSaveOccurrences = async (occs: MaterialOccurrence[], requesterRol
   try {
     realtimeFlags.isLocalUpdate = true;
     for (const item of occs) {
+      const rawBranch = item.branchId || item.branchName || item.filial || "";
+      const canonicalBranchId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
+
       await dbSalvarNivelServico({
         id: item.id,
-        almoxarifado_id: item.branchName || item.filial || "",
+        almoxarifado_id: canonicalBranchId,
         veiculo: item.veiculo,
         codigo_material: item.codigoMaterial,
         material_falta: item.material,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
-import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig } from "../supabaseService";
+import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig, getBranchIdByName } from "../supabaseService";
 
 interface AlmoxarifeNivelServicoProps {
   onBack: () => void;
@@ -175,15 +175,17 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
         console.error("Failed to save occurrences in Supabase:", err);
       }
     }
-    // Trigger storage event for other components listening (like Supervisor panel)
+    // Trigger storage and realtime update event for other components listening (like Supervisor panel or Auditor)
     window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new Event("realtime-nivel-servico-update"));
   };
 
   // Dynamic filter logic
   const filteredOccurrences = occurrences.filter((occ) => {
-    if (["Fevereiro", "Julho", "Agosto"].includes(selectedMonth)) return false;
-    // Filter specifically by active branchId
-    if (occ.branchId && occ.branchId !== branchId) return false;
+    // Filter specifically by active branchId using normalized branch mapping
+    const occBranchId = getBranchIdByName(occ.branchId || occ.branchName || occ.filial || "");
+    const targetBranchId = getBranchIdByName(branchId);
+    if (occBranchId && targetBranchId && occBranchId !== targetBranchId) return false;
 
     // 2. Month-specific filtration
     // If occurrence has a date, verify it matches selected month (e.g. "Junho" corresponds to month 06)
@@ -303,9 +305,6 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
           <div>
             <h2 className="text-xl font-black text-[#1B2A4A] leading-tight flex items-center gap-1.5">
               Nível de Serviço
-              <span className="text-[10px] bg-[#C8A84B]/20 text-[#9C7F32] px-2 py-0.5 rounded font-black uppercase">
-                Tela 3
-              </span>
             </h2>
             <div className="flex items-center gap-1.5 mt-0.5">
               <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wide">

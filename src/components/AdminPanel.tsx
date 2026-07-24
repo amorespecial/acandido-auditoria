@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Branch } from "../types";
 import { useRealtimeSync } from "../useRealtimeSync";
+import { getAnosDisponiveis } from "../utils/dateUtils";
 
 interface AdminPanelProps {
   branches: Branch[];
@@ -42,7 +43,7 @@ export default function AdminPanel({
 
   // Modals state
   const [showOpenModal, setShowOpenModal] = useState(false);
-  const [openForm, setOpenForm] = useState({ month: "Fevereiro", year: "2026" });
+  const [openForm, setOpenForm] = useState({ month: "Fevereiro", year: String(new Date().getFullYear()) });
 
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [challengeNameInput, setChallengeNameInput] = useState("");
@@ -53,7 +54,7 @@ export default function AdminPanel({
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
 
-  const years = ["2026"];
+  const years = getAnosDisponiveis().map(String);
 
   const filteredBranches = branches.filter((b) => {
     if (selectedGroup !== "TODOS" && b.group !== selectedGroup) return false;

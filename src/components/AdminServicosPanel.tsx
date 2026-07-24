@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, Branch } from "../types";
-import { dbFetchOccurrences } from "../supabaseService";
+import { dbFetchOccurrences, getBranchIdByName } from "../supabaseService";
+import { getAnosDisponiveis } from "../utils/dateUtils";
 
 interface AdminServicosPanelProps {
   branch?: Branch; // If provided, locks down to this specific branch!
@@ -14,7 +15,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
   // Filters
   const [selectedAlmoxarifado, setSelectedAlmoxarifado] = useState<string>("TODOS");
   const [selectedMonth, setSelectedMonth] = useState<string>("TODOS");
-  const [selectedYear, setSelectedYear] = useState<string>("2026");
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
   const [selectedServiceType, setSelectedServiceType] = useState<string>("TODOS");
   const [selectedStatus, setSelectedStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -86,7 +87,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
 
   // Helper functions
   const getServiceMonthAndYear = (dateStr: string) => {
-    if (!dateStr) return { month: "Outro", year: "2026" };
+    if (!dateStr) return { month: "Outro", year: String(new Date().getFullYear()) };
     const parts = dateStr.split("-");
     if (parts.length === 3) {
       const year = parts[0];
@@ -94,7 +95,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
       const month = monthsList[monthNum - 1] || "Junho";
       return { month, year };
     }
-    return { month: "Outro", year: "2026" };
+    return { month: "Outro", year: String(new Date().getFullYear()) };
   };
 
   const formatDateBR = (dateStr: string) => {
@@ -132,30 +133,28 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
   ).sort();
 
   const availableYears = Array.from(
-    new Set(
-      occurrences.map((o) => {
+    new Set<string>([
+      ...getAnosDisponiveis().map(String),
+      ...occurrences.map((o) => {
         const { year } = getServiceMonthAndYear(o.date);
         return year;
       }).filter(Boolean)
-    )
+    ])
   ).sort((a: string, b: string) => b.localeCompare(a));
-
-  if (!availableYears.includes("2026")) availableYears.push("2026");
-  if (!availableYears.includes("2025")) availableYears.push("2025");
-  availableYears.sort((a: string, b: string) => b.localeCompare(a));
 
   // Filter Occurrences
   const filteredOccurrences = occurrences.filter((occ) => {
     // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.id)
     const targetAlmox = branch ? branch.id : selectedAlmoxarifado;
     if (targetAlmox !== "TODOS") {
-      if (occ.branchId !== targetAlmox) {
+      const occBranchId = getBranchIdByName(occ.branchId || occ.branchName || occ.filial || "");
+      const targetBranchId = getBranchIdByName(targetAlmox);
+      if (occBranchId && targetBranchId && occBranchId !== targetBranchId) {
         return false;
       }
     }
 
     const { month, year } = getServiceMonthAndYear(occ.date);
-    if (month && ["fevereiro", "julho", "agosto"].includes(month.toLowerCase())) return false;
 
     // 2. Month-year Filter
     if (selectedMonth !== "TODOS" && month.toLowerCase() !== selectedMonth.toLowerCase()) {

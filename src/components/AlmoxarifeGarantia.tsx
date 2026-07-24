@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
-import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS } from "../utils/fieldOrdering";
+import { getMesesDisponiveis } from "../utils/dateUtils";
 
 interface AlmoxarifeGarantiaProps {
   onBack: () => void;
@@ -82,7 +83,8 @@ export default function AlmoxarifeGarantia({
     (b) => b.ownerName.toLowerCase() === user.ownerName.toLowerCase()
   );
 
-  // State
+  const [presetItems, setPresetItems] = useState<Array<{ code: string; description: string }>>(() => getPresetItems());
+  const [presetManufacturers, setPresetManufacturers] = useState<string[]>(() => getManufacturers());
   const [warranties, setWarranties] = useState<WarrantyItem[]>(() => {
     const saved = localStorage.getItem("acandido_warranties");
     return saved ? JSON.parse(saved) : initialWarranties;
@@ -158,15 +160,47 @@ export default function AlmoxarifeGarantia({
       }
     };
 
+    const loadRemotePresets = async () => {
+      try {
+        const [pItems, pMfrs] = await Promise.all([
+          dbFetchPresetItems(),
+          dbFetchPresetManufacturers()
+        ]);
+        if (pItems && Array.isArray(pItems) && pItems.length > 0 && active) {
+          const normItems = pItems.map((item: any, idx: number) => {
+            if (typeof item === "string") return { code: `108${idx + 1}`, description: item };
+            if (item && typeof item === "object") {
+              return {
+                code: item.code || item.codigo || `108${idx + 1}`,
+                description: item.description || item.descricao || item.name || ""
+              };
+            }
+            return null;
+          }).filter((i): i is { code: string; description: string } => i !== null && Boolean(i.description.trim()));
+          if (normItems.length > 0) setPresetItems(normItems);
+        }
+        if (pMfrs && Array.isArray(pMfrs) && pMfrs.length > 0 && active) {
+          const normMfrs = pMfrs.map((m: any) => typeof m === "string" ? m : (m.name || m.description || String(m))).filter(Boolean);
+          if (normMfrs.length > 0) setPresetManufacturers(normMfrs);
+        }
+      } catch (e) {
+        console.warn("Error fetching remote presets:", e);
+      }
+    };
+
     loadRemoteConfig();
+    loadRemotePresets();
 
     const handleStorage = () => {
       loadRemoteConfig();
+      loadRemotePresets();
       try {
-        const saved = localStorage.getItem("acandido_garantia_fields_config");
-        if (saved) {
-          setGarantiaConfig(JSON.parse(saved));
-        }
+        const savedCfg = localStorage.getItem("acandido_garantia_fields_config");
+        if (savedCfg) setGarantiaConfig(JSON.parse(savedCfg));
+        const savedItems = localStorage.getItem("acandido_preset_items");
+        if (savedItems) setPresetItems(JSON.parse(savedItems));
+        const savedMfrs = localStorage.getItem("acandido_preset_manufacturers");
+        if (savedMfrs) setPresetManufacturers(JSON.parse(savedMfrs));
       } catch (e) {}
     };
 
@@ -229,13 +263,21 @@ export default function AlmoxarifeGarantia({
     ? getMonthFilterForBranch(activeBranch.id)
     : `${activeMonth} ${activeYear}`;
 
-  const persistChange = (updated: WarrantyItem[]) => {
+  const persistChange = async (updated: WarrantyItem[]) => {
     setWarranties(updated);
     localStorage.setItem("acandido_warranties", JSON.stringify(updated));
     if (isSupabaseReady()) {
-      dbSaveWarranties(updated).catch((err) => {
+      try {
+        await dbSaveWarranties(updated);
+        const freshData = await dbFetchWarranties();
+        if (freshData && freshData.length > 0) {
+          setWarranties(freshData);
+          localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
+        }
+        window.dispatchEvent(new Event("realtime-garantias-update"));
+      } catch (err) {
         console.error("Error saving warranties to Supabase in AlmoxarifeGarantia:", err);
-      });
+      }
     }
   };
 
@@ -320,13 +362,15 @@ export default function AlmoxarifeGarantia({
       }
     }
 
-    const matchedPreset = PRESET_ITEMS.find((pi) => pi.code === selectedItemCode);
+    const matchedPreset = presetItems.find((pi) => pi.code === selectedItemCode);
     const desc = matchedPreset ? matchedPreset.description : "Desconhecido";
     const finalPieceObs = pieceObservation.trim() === "" ? "Nenhuma observação" : pieceObservation.trim();
     
     // Derive dynamic monthYear filter group from Data de NF
     const finalNfEmissionDate = nfEmissionDate || new Date().toISOString().split('T')[0];
     const derivedMonthYear = getMonthYearFromDate(finalNfEmissionDate, activeMonth, activeYear);
+
+    const autoLastUpdateDate = new Date().toISOString().split('T')[0];
 
     if (editingItem) {
       // Edit mode
@@ -341,7 +385,7 @@ export default function AlmoxarifeGarantia({
             almoxarifado: selectedAlmoxarifado,
             nfEmissionDate: finalNfEmissionDate,
             reference,
-            lastUpdateDate,
+            lastUpdateDate: autoLastUpdateDate,
             pieceObservation: finalPieceObs,
             scrapObservation: scrapObservation.trim(),
             monthYear: derivedMonthYear,
@@ -364,7 +408,7 @@ export default function AlmoxarifeGarantia({
         almoxarifado: selectedAlmoxarifado,
         nfEmissionDate: finalNfEmissionDate,
         reference,
-        lastUpdateDate,
+        lastUpdateDate: autoLastUpdateDate,
         pieceObservation: finalPieceObs,
         scrapObservation: scrapObservation.trim(),
         monthYear: derivedMonthYear,
@@ -383,9 +427,21 @@ export default function AlmoxarifeGarantia({
       isOpen: true,
       title: "Remover Item de Garantia",
       message: "Deseja realmente remover este item de garantia?",
-      onConfirm: () => {
+      onConfirm: async () => {
         const updated = warranties.filter((w) => w.id !== id);
-        persistChange(updated);
+        setWarranties(updated);
+        localStorage.setItem("acandido_warranties", JSON.stringify(updated));
+        if (isSupabaseReady()) {
+          try {
+            await dbDeleteWarranty(id);
+            const freshData = await dbFetchWarranties();
+            setWarranties(freshData);
+            localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
+            window.dispatchEvent(new Event("realtime-garantias-update"));
+          } catch (e) {
+            console.error("Error deleting warranty:", e);
+          }
+        }
         setCustomConfirm(null);
       }
     });
@@ -393,9 +449,10 @@ export default function AlmoxarifeGarantia({
 
   // Filter local warranties list for the active branch and the active branch's selected monthly filter
   const filteredWarranties = warranties.filter((w) => {
-    if (w.monthYear && (w.monthYear.startsWith("Fevereiro") || w.monthYear.startsWith("Julho") || w.monthYear.startsWith("Agosto"))) return false;
     if (!activeBranch) return false;
-    const isCurrentBranch = w.almoxarifado.toLowerCase() === activeBranch.name.toLowerCase();
+    const normW = (w.almoxarifado || "").toLowerCase().replace("almoxarifado ", "").trim();
+    const normB = (activeBranch.name || "").toLowerCase().replace("almoxarifado ", "").trim();
+    const isCurrentBranch = normW.includes(normB) || normB.includes(normW);
     const isFilteredMonth = w.monthYear === activeBranchMonthFilter;
     return isCurrentBranch && isFilteredMonth;
   });
@@ -461,12 +518,11 @@ export default function AlmoxarifeGarantia({
             }}
             className="border border-slate-250 bg-white rounded-lg px-3 py-2 text-xs font-bold text-[#1B2A4A] focus:outline-none focus:border-[#1B2A4A]"
           >
-            <option value="Junho 2026">Junho 2026</option>
-            <option value="Maio 2026">Maio 2026</option>
-            <option value="Abril 2026">Abril 2026</option>
-            <option value="Março 2026">Março 2026</option>
-            <option value="Fevereiro 2026">Fevereiro 2026</option>
-            <option value="Janeiro 2026">Janeiro 2026</option>
+            {getMesesDisponiveis().map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -756,7 +812,7 @@ export default function AlmoxarifeGarantia({
                   className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
                 >
                   <option value="">— Selecione o Item —</option>
-                  {PRESET_ITEMS.map((pi) => (
+                  {presetItems.map((pi) => (
                     <option key={pi.code} value={pi.code}>
                       {pi.code} - {pi.description}
                     </option>
@@ -800,7 +856,7 @@ export default function AlmoxarifeGarantia({
                         className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
                       >
                         <option value="">— Selecione o Fabricante —</option>
-                        {MANUFACTURERS.map((f) => (
+                        {presetManufacturers.map((f) => (
                           <option key={f} value={f}>
                             {f}
                           </option>
@@ -927,17 +983,7 @@ export default function AlmoxarifeGarantia({
                 return null;
               })}
 
-              {/* Last update date - auto todays date editable */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-[#1B2A4A]">Data da Última Atualização *</label>
-                <input
-                  type="date"
-                  required
-                  value={lastUpdateDate}
-                  onChange={(e) => setLastUpdateDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#1B2A4A]"
-                />
-              </div>
+
 
               {/* Footer action buttons */}
               <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">

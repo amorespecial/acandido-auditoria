@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { getAnosDisponiveis, getAnosCalendario } from "../utils/dateUtils";
 import { AppUser, Branch, WarrantyItem } from "../types";
 import {
   isSupabaseReady,
@@ -237,7 +238,7 @@ export default function AdminConfiguracoes({
 
   // ================= STATE: REFRESH/MANAGE CYCLE & FORM FIELDS =================
   const [cycleMonth, setCycleMonth] = useState(cycleState?.activeMonth || "Junho");
-  const [cycleYear, setCycleYear] = useState(cycleState?.activeYear || "2026");
+  const [cycleYear, setCycleYear] = useState(cycleState?.activeYear || String(new Date().getFullYear()));
 
   const [supervisorFields, setSupervisorFields] = useState(() => {
     const saved = localStorage.getItem("acandido_supervisor_form_fields");
@@ -246,7 +247,6 @@ export default function AdminConfiguracoes({
     }
     return [
       { id: "veiculo", name: "Veículo", type: "text", required: true, builtIn: true },
-      { id: "codigoMaterial", name: "Código do Material", type: "text", required: false, builtIn: true },
       { id: "material", name: "Material em Falta", type: "text", required: true, builtIn: true },
       { id: "date", name: "Data", type: "date", required: true, builtIn: true },
       { id: "solicitante", name: "Solicitante", type: "text", required: true, builtIn: true }
@@ -312,7 +312,7 @@ export default function AdminConfiguracoes({
     };
   });
 
-  const [calendarYear, setCalendarYear] = useState(2026);
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarData, setCalendarData] = useState<{ id: string; branchId?: string; almoxarifado: string; ano: number; semestre: number; indice: number; data_agendada: string }[]>(() => {
     const local = externalCalendarData || PRELOADED_CALENDAR_2026;
     const migrated = local.map(item => {
@@ -522,10 +522,25 @@ export default function AdminConfiguracoes({
           setUnimobinConfig(unimobinCfg);
         }
         if (presetItemsData && Array.isArray(presetItemsData) && presetItemsData.length > 0) {
-          setGItems(presetItemsData);
+          const normItems = presetItemsData.map((item: any, idx: number) => {
+            if (typeof item === "string") return { code: `108${idx + 1}`, description: item };
+            if (item && typeof item === "object") {
+              return {
+                code: item.code || item.codigo || `108${idx + 1}`,
+                description: item.description || item.descricao || item.name || ""
+              };
+            }
+            return null;
+          }).filter((i): i is { code: string; description: string } => i !== null && Boolean(i.description.trim()));
+          if (normItems.length > 0) {
+            setGItems(normItems);
+          }
         }
         if (presetMfrsData && Array.isArray(presetMfrsData) && presetMfrsData.length > 0) {
-          setGManufacturers(presetMfrsData);
+          const normMfrs = presetMfrsData.map((m: any) => typeof m === "string" ? m : (m.name || m.description || String(m))).filter(Boolean);
+          if (normMfrs.length > 0) {
+            setGManufacturers(normMfrs);
+          }
         }
       } catch (e) {
         console.warn("[AdminConfiguracoes] Erro ao carregar configurações globais do Supabase:", e);
@@ -2052,7 +2067,7 @@ export default function AdminConfiguracoes({
                     onChange={(e) => setCycleYear(e.target.value)}
                     className="w-full bg-white border border-slate-250 p-2 text-xs font-black rounded-lg"
                   >
-                    {["2026"].map(y => (
+                    {getAnosDisponiveis().map(y => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -2488,10 +2503,10 @@ export default function AdminConfiguracoes({
               <span className="font-extrabold text-[#1B2A4A] uppercase">Ano:</span>
               <select
                 value={calendarYear}
-                onChange={(e) => setCalendarYear(Math.max(2026, parseInt(e.target.value) || 2026))}
+                onChange={(e) => setCalendarYear(parseInt(e.target.value) || new Date().getFullYear())}
                 className="border border-slate-200 rounded-lg bg-white px-3 py-1.5 text-xs text-[#1B2A4A] font-black focus:outline-none"
               >
-                {[2026].map(y => (
+                {getAnosCalendario().map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>

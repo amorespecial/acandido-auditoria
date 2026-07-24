@@ -6,6 +6,7 @@ import AdminServicosPanel from "./AdminServicosPanel";
 import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
+import { getMesesDisponiveis } from "../utils/dateUtils";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -2574,11 +2575,11 @@ export default function AdminEvaluationDetail({
 
               {selectedCriterion.id === "9" && (() => {
                 const auditorFilteredWarranties = warranties.filter((w) => {
-                  return (
-                    w.almoxarifado &&
-                    w.almoxarifado.toLowerCase() === branch.name.toLowerCase() &&
-                    w.monthYear === auditorMonthFilter
-                  );
+                  if (!w.almoxarifado) return false;
+                  const normW = (w.almoxarifado || "").toLowerCase().replace("almoxarifado ", "").trim();
+                  const normB = (branch.name || "").toLowerCase().replace("almoxarifado ", "").trim();
+                  const isBranchMatch = normW.includes(normB) || normB.includes(normW);
+                  return isBranchMatch && w.monthYear === auditorMonthFilter;
                 });
 
                 return (
@@ -2591,14 +2592,13 @@ export default function AdminEvaluationDetail({
                       <select
                         value={auditorMonthFilter}
                         onChange={(e) => setAuditorMonthFilter(e.target.value)}
-                        className="border border-slate-250 bg-white rounded-lg px-2 py-1 text-[11px] font-bold text-slate-705 text-slate-700 focus:outline-none"
+                        className="border border-slate-250 bg-white rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 focus:outline-none"
                       >
-                        <option value="Junho 2026">Junho 2026</option>
-                        <option value="Maio 2026">Maio 2026</option>
-                        <option value="Abril 2026">Abril 2026</option>
-                        <option value="Março 2026">Março 2026</option>
-                        <option value="Fevereiro 2026">Fevereiro 2026</option>
-                        <option value="Janeiro 2026">Janeiro 2026</option>
+                        {getMesesDisponiveis().map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
                       </select>
                     </div>
 

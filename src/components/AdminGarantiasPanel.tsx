@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { WarrantyItem, Branch } from "../types";
 import { dbFetchWarranties } from "../supabaseService";
+import { getAnosDisponiveis } from "../utils/dateUtils";
 
 interface AdminGarantiasPanelProps {
   branch?: Branch; // If provided, locks down to this specific branch!
@@ -14,7 +15,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   // Filters
   const [selectedAlmoxarifado, setSelectedAlmoxarifado] = useState<string>(branch ? branch.name : "TODOS");
   const [selectedMonth, setSelectedMonth] = useState<string>("TODOS");
-  const [selectedYear, setSelectedYear] = useState<string>("2026");
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
   const [selectedManufacturer, setSelectedManufacturer] = useState<string>("TODOS");
   const [selectedStatus, setSelectedStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -103,19 +104,15 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   ).sort();
 
   const availableYears = Array.from(
-    new Set<string>(
-      warranties.map((w) => {
+    new Set<string>([
+      ...getAnosDisponiveis().map(String),
+      ...warranties.map((w) => {
         if (!w.monthYear) return "";
         const parts = w.monthYear.split(" ");
         return parts[1] || "";
       }).filter(Boolean)
-    )
+    ])
   ).sort((a: string, b: string) => b.localeCompare(a)); // Descending years
-
-  // Add current base years as fallback if empty
-  if (!availableYears.includes("2026")) availableYears.push("2026");
-  if (!availableYears.includes("2025")) availableYears.push("2025");
-  availableYears.sort((a: string, b: string) => b.localeCompare(a));
 
   const monthsList = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -124,7 +121,6 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
 
   // Filtering Logic
   const filteredWarranties = warranties.filter((w) => {
-    if (w.monthYear && (w.monthYear.startsWith("Fevereiro") || w.monthYear.startsWith("Julho") || w.monthYear.startsWith("Agosto"))) return false;
     // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.name)
     const targetAlmox = branch ? branch.name : selectedAlmoxarifado;
     if (targetAlmox !== "TODOS") {

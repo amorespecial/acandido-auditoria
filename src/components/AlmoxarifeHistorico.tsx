@@ -461,10 +461,6 @@ export default function AlmoxarifeHistorico({
                 <p className="text-xs text-slate-400 mt-1">Acompanhe seus resultados anteriores e as orientações para melhoria contínua</p>
               </div>
             </div>
-            <div className="bg-indigo-50 border border-indigo-150 px-3 py-1 rounded-xl text-center select-none shrink-0">
-              <span className="text-[9px] uppercase font-black text-indigo-700 tracking-wider block">Ciclo Ativo</span>
-              <span className="text-[11px] font-black font-mono text-[#1B2A4A]">{activeMonth} {activeYear}</span>
-            </div>
           </div>
 
           {/* List of cards */}
