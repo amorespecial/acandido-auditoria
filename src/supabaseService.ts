@@ -116,8 +116,8 @@ export const uploadFile = async (
 // ROLE AND PERMISSION VALIDATION HELPERS (FASE 7)
 // ==========================================
 export const getRequesterRole = (): string | null => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    const raw = window.localStorage.getItem("acandido_app_user");
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    const raw = window.sessionStorage.getItem("acandido_app_user");
     if (raw) {
       try {
         const u = JSON.parse(raw);

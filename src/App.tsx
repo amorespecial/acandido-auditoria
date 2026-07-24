@@ -70,7 +70,7 @@ export default function App() {
   if (typeof window !== "undefined") {
     const resetKey = "acandido_general_clean_reset_v10_real";
     if (localStorage.getItem(resetKey) !== "true") {
-      const savedUser = localStorage.getItem("acandido_app_user");
+      const savedUser = sessionStorage.getItem("acandido_app_user");
       const savedUsersList = localStorage.getItem("acandido_users");
       
       // Clear all mock data keys
@@ -98,7 +98,7 @@ export default function App() {
         }
       }
 
-      if (savedUser) localStorage.setItem("acandido_app_user", savedUser);
+      if (savedUser) sessionStorage.setItem("acandido_app_user", savedUser);
       if (savedUsersList) localStorage.setItem("acandido_users", savedUsersList);
       
       // Seed Janeiro 2026 as unique active open cycle
@@ -120,7 +120,7 @@ export default function App() {
   }
 
   const [user, setUser] = useState<AppUser | null>(() => {
-    const saved = localStorage.getItem("acandido_app_user");
+    const saved = sessionStorage.getItem("acandido_app_user");
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -606,10 +606,10 @@ export default function App() {
   }, []);
 
   const handleClearLegacyLocalStorage = () => {
-    const savedUser = localStorage.getItem("acandido_app_user");
+    const savedUser = sessionStorage.getItem("acandido_app_user");
     localStorage.clear();
     if (savedUser) {
-      localStorage.setItem("acandido_app_user", savedUser);
+      sessionStorage.setItem("acandido_app_user", savedUser);
     }
     localStorage.setItem("acandido_localstorage_cleared", "true");
     setShowMigrationModal(false);
@@ -805,7 +805,7 @@ export default function App() {
       }
 
       // 4. Sync current user if changed/suspended/deleted
-      const storedUser = localStorage.getItem("acandido_app_user");
+      const storedUser = sessionStorage.getItem("acandido_app_user");
       const storedUsersList = localStorage.getItem("acandido_users");
       if (storedUser && storedUsersList) {
         try {
@@ -815,17 +815,17 @@ export default function App() {
           if (matched) {
             if (matched.status === "SUSPENSO") {
               setUser(null);
-              localStorage.removeItem("acandido_app_user");
+              sessionStorage.removeItem("acandido_app_user");
               alert("Sua conta foi suspensa temporariamente pelo Auditor Geral Fernando Silva.");
             } else if (JSON.stringify(matched) !== JSON.stringify(currentUser)) {
               setUser(matched);
-              localStorage.setItem("acandido_app_user", JSON.stringify(matched));
+              sessionStorage.setItem("acandido_app_user", JSON.stringify(matched));
             }
           } else {
             // Deleted
             if (currentUser.email !== "estoque01jp@gmail.com") {
               setUser(null);
-              localStorage.removeItem("acandido_app_user");
+              sessionStorage.removeItem("acandido_app_user");
               alert("Sua conta foi desativada ou removida pelo Auditor Geral.");
             }
           }
@@ -853,10 +853,10 @@ export default function App() {
   // Sync user state to local storage and active branch defaults
   useEffect(() => {
     if (user === null) {
-      localStorage.removeItem("acandido_app_user");
+      sessionStorage.removeItem("acandido_app_user");
       setActiveBranchId(null);
     } else {
-      localStorage.setItem("acandido_app_user", JSON.stringify(user));
+      sessionStorage.setItem("acandido_app_user", JSON.stringify(user));
       
       // Compute default active branch for Almoxarife
       if (user.role === "ALMOXARIFE") {
@@ -1925,7 +1925,7 @@ export default function App() {
     setSelectedBranchId(null);
     setActiveSubscreen(null);
     try {
-      localStorage.removeItem("acandido_app_user");
+      sessionStorage.removeItem("acandido_app_user");
     } catch (e) {}
   };
 

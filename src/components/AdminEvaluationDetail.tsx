@@ -284,7 +284,7 @@ export default function AdminEvaluationDetail({
     }
     let userName = "Auditor";
     try {
-      const su = localStorage.getItem("acandido_app_user");
+      const su = sessionStorage.getItem("acandido_app_user");
       if (su) {
         userName = JSON.parse(su).name || "Auditor";
       }
@@ -345,7 +345,7 @@ export default function AdminEvaluationDetail({
 
     let userName = "Auditor";
     try {
-      const su = localStorage.getItem("acandido_app_user");
+      const su = sessionStorage.getItem("acandido_app_user");
       if (su) {
         userName = JSON.parse(su).name || "Auditor";
       }
