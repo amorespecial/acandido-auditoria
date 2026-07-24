@@ -702,44 +702,44 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         let pageNumber = 1;
 
         const checkPage = (heightNeeded: number) => {
-          if (y + heightNeeded > 280) {
+          if (y + heightNeeded > 275) {
             doc.addPage();
             pageNumber++;
             doc.setFont("Helvetica", "normal");
             doc.setFontSize(8);
-            doc.setTextColor(150, 150, 150);
-            doc.text("A. CÂNDIDO GRUPO - Relatório de Auditoria Preventiva", 15, 10);
+            doc.setTextColor(148, 163, 184);
+            doc.text("A. CÂNDIDO GRUPO — Relatório de Auditoria Preventiva", 15, 10);
             doc.text(`Página ${pageNumber}`, 195, 10, { align: "right" });
-            doc.setDrawColor(220, 220, 220);
+            doc.setDrawColor(226, 232, 240);
             doc.line(15, 12, 195, 12);
             y = 20;
           }
         };
 
-        // Header Block
-        doc.setFillColor(27, 42, 74);
-        doc.rect(15, y, 180, 16, "F");
+        // Institutional Header Banner
+        doc.setFillColor(27, 42, 74); // #1B2A4A
+        doc.rect(15, y, 180, 18, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFont("Helvetica", "bold");
-        doc.setFontSize(11);
+        doc.setFontSize(12);
         doc.text("A. CÂNDIDO GRUPO", 20, y + 7);
         doc.setFont("Helvetica", "normal");
         doc.setFontSize(8);
-        doc.setTextColor(200, 168, 75);
-        doc.text("Gestão de Conformidade e Auditoria", 20, y + 11);
+        doc.setTextColor(226, 232, 240);
+        doc.text("Gestão de Conformidade e Auditoria", 20, y + 12);
 
         doc.setFontSize(10);
         doc.setFont("Helvetica", "bold");
         doc.setTextColor(255, 255, 255);
-        doc.text("AUDITORIA PREVENTIVA", 190, y + 10, { align: "right" });
-        y += 22;
+        doc.text("RELATÓRIO DE AUDITORIA PREVENTIVA", 190, y + 10, { align: "right" });
+        y += 24;
 
         // Metadata Block
         doc.setFillColor(248, 250, 252);
         doc.setDrawColor(226, 232, 240);
         doc.rect(15, y, 180, 22, "FD");
 
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor(100, 116, 139);
         doc.setFont("Helvetica", "bold");
         doc.text("ALMOXARIFADO / FILIAL", 20, y + 6);
@@ -748,7 +748,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.text("DATA DE EMISSÃO", 160, y + 6);
 
         doc.setFontSize(9);
-        doc.setTextColor(15, 23, 42);
+        doc.setTextColor(27, 42, 74);
         doc.setFont("Helvetica", "bold");
         doc.text(activeBranch.name, 20, y + 12);
         doc.text(activeBranch.ownerName, 70, y + 12);
@@ -760,14 +760,14 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.text(`Ref ID: ACD-AUD-2026-${selectedBranchId.toUpperCase().slice(0, 4)}-${selectedEntry.monthYear.toUpperCase().replace(/\s/g, "")}`, 20, y + 19);
         y += 28;
 
-        // 1. Resumo Executivo
+        // 1. Resumo Executivo Operacional
         checkPage(20);
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(27, 42, 74);
         doc.text("1. Resumo Executivo Operacional", 15, y);
         y += 2;
-        doc.setDrawColor(200, 168, 75);
+        doc.setDrawColor(27, 42, 74);
         doc.line(15, y, 195, y);
         y += 5;
 
@@ -777,8 +777,8 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         const summarySplit = doc.splitTextToSize(currentSummary, 170);
         const boxHeight = summarySplit.length * 4.5 + 6;
         checkPage(boxHeight);
-        doc.setFillColor(250, 250, 250);
-        doc.setDrawColor(230, 230, 230);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
         doc.rect(15, y, 180, boxHeight, "FD");
 
         let iy = y + 4.5;
@@ -788,22 +788,23 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         });
         y += boxHeight + 8;
 
-        // 2. Checklist Table
+        // 2. Checklist Geral de Auditoria (10 Critérios)
         checkPage(25);
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(27, 42, 74);
         doc.text("2. Checklist Geral de Auditoria (10 Critérios)", 15, y);
         y += 2;
+        doc.setDrawColor(27, 42, 74);
         doc.line(15, y, 195, y);
         y += 4;
 
-        // Headers
-        doc.setFillColor(241, 245, 249);
+        // Table Header in Institutional Navy
+        doc.setFillColor(27, 42, 74);
         doc.rect(15, y, 180, 7, "F");
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(8);
-        doc.setTextColor(71, 85, 105);
+        doc.setTextColor(255, 255, 255);
         doc.text("#", 18, y + 5);
         doc.text("Critério Operacional", 25, y + 5);
         doc.text("Frequência", 90, y + 5);
@@ -827,12 +828,14 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
 
           if (c.status === "OK") {
             doc.setTextColor(16, 124, 65);
+            doc.setFont("Helvetica", "bold");
             doc.text(`${c.pointsObtained} pts`, 140, y + 5);
             doc.text("OK", 165, y + 5);
           } else {
             doc.setTextColor(185, 28, 28);
+            doc.setFont("Helvetica", "bold");
             doc.text(`0 pts`, 140, y + 5);
-            doc.text("", 165, y + 5); // Empty status if NOK
+            doc.text("NOK", 165, y + 5);
           }
           y += 6;
         });
@@ -846,17 +849,17 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(15, 23, 42);
-        doc.text(`PONTUAÇÃO ACUMULADA — ${score} pts referente ao critério e ao relatório/almoxarifado em questão`, 18, y + 5.5);
+        doc.text(`PONTUAÇÃO ACUMULADA — ${score} pts referente ao relatório de auditoria`, 18, y + 5.5);
         y += 14;
 
-        // 3. Conformities
+        // 3. Conformidades Identificadas
         checkPage(20);
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(16, 124, 65);
         doc.text(`3. Conformidades Identificadas (${okCount})`, 15, y);
         y += 2;
-        doc.setDrawColor(226, 232, 240);
+        doc.setDrawColor(220, 252, 231);
         doc.line(15, y, 195, y);
         y += 4;
 
@@ -886,14 +889,14 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           y += 10;
         }
 
-        // 4. Non-Conformities
+        // 4. Não Conformidades Registradas
         checkPage(20);
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(185, 28, 28);
         doc.text(`4. Não Conformidades Registradas (${nokCount})`, 15, y);
         y += 2;
-        doc.setDrawColor(226, 232, 240);
+        doc.setDrawColor(254, 226, 226);
         doc.line(15, y, 195, y);
         y += 4;
 
@@ -950,7 +953,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           doc.setFont("Helvetica", "bold");
           doc.setFontSize(8.5);
           doc.setTextColor(21, 128, 61);
-          doc.text("Unidade opera em perfeição técnica estrutural! Nenhuma não-conformidade detectada.", 20, y + 6);
+          doc.text("Unidade opera em conformidade técnica estrutural! Nenhuma não-conformidade detectada.", 20, y + 6);
           y += 14;
         }
 
@@ -961,7 +964,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.setTextColor(27, 42, 74);
         doc.text("5. Conclusão e Recomendações", 15, y);
         y += 2;
-        doc.setDrawColor(226, 232, 240);
+        doc.setDrawColor(27, 42, 74);
         doc.line(15, y, 195, y);
         y += 5;
 
@@ -971,8 +974,9 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         const conclusionSplit = doc.splitTextToSize(currentConclusion, 170);
         const concBoxHeight = conclusionSplit.length * 4.5 + 6;
         checkPage(concBoxHeight);
-        doc.setFillColor(250, 250, 250);
-        doc.rect(15, y, 180, concBoxHeight, "F");
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.rect(15, y, 180, concBoxHeight, "FD");
 
         let cy = y + 4.5;
         conclusionSplit.forEach((line: string) => {
@@ -981,14 +985,14 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         });
         y += concBoxHeight + 8;
 
-        // 6. Histórico Consolidado
+        // 6. Histórico Consolidado dos Ciclos Anteriores
         checkPage(20);
         doc.setFont("Helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(27, 42, 74);
         doc.text("6. Histórico Consolidado dos Ciclos Anteriores", 15, y);
         y += 2;
-        doc.setDrawColor(226, 232, 240);
+        doc.setDrawColor(27, 42, 74);
         doc.line(15, y, 195, y);
         y += 5;
 
@@ -1004,7 +1008,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         y += 7;
 
         historyList.forEach((h) => {
-          const isJanOrJul = s(h.monthYear).toLowerCase().includes("janeiro") || s(h.monthYear).toLowerCase().includes("julho");
+          const isJanOrJul = (h.monthYear == null ? "" : String(h.monthYear)).toLowerCase().includes("janeiro") || (h.monthYear == null ? "" : String(h.monthYear)).toLowerCase().includes("julho");
           const filteredNok = h.nokItems.filter(item => {
             if (item === "Inventário") {
               return isJanOrJul;
@@ -1059,7 +1063,6 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.setTextColor(100, 116, 139);
         doc.text("Auditor Geral de Qualidade", 140, y + 18);
 
-        // Sanitize name helper for filename output
         const sanitizeName = (name: string) => {
           return (name == null ? "" : String(name))
             .toLowerCase()
@@ -1191,97 +1194,97 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         </div>
 
         {/* COMPREHENSIVE EXECUTIVE AUDIT DOCUMENT REPORT PANEL */}
-        <div id="audit-report-printable" className="print-container bg-white border-2 border-slate-300 rounded-2xl p-6 sm:p-10 shadow-lg  text-[#0F172A] font-sans">
+        <div id="audit-report-printable" className="print-container bg-white border border-slate-200 rounded-2xl p-6 sm:p-10 shadow-sm text-[#0F172A] font-sans">
           {/* Document Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b-2 border-[#1B2A4A] pb-5">
             <div>
-              <h1 className="text-xl font-black text-[#1B2A4A] tracking-wider font-mono">
+              <h1 className="text-2xl sm:text-3xl font-black text-[#1B2A4A] tracking-wider font-sans uppercase">
                 A. CÂNDIDO GRUPO
               </h1>
-              <p className="text-[10px] text-slate-500 font-extrabold tracking-widest uppercase mt-0.5">
+              <p className="text-xs text-slate-500 font-bold tracking-widest uppercase mt-1">
                 Gestão de Conformidade e Auditoria
               </p>
             </div>
             <div className="text-left sm:text-right">
-              <h2 className="text-base font-black text-[#C8A84B] uppercase tracking-normal">
+              <h2 className="text-lg sm:text-xl font-black text-[#1B2A4A] uppercase tracking-normal">
                 Relatório de Auditoria Preventiva
               </h2>
-              <p className="text-[10px] text-slate-400 font-mono font-bold mt-0.5">
+              <p className="text-xs text-slate-400 font-mono font-bold mt-1">
                 Ref ID: ACD-AUD-2026-{selectedBranchId.toUpperCase().slice(0, 4)}-{selectedEntry.monthYear.toUpperCase().replace(/\s/g, "")}
               </p>
             </div>
           </div>
 
           {/* Metadata Grid */}
-          <div className="mt-5 bg-slate-50 border border-slate-200 p-4 rounded-xl">
-            <h3 className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider mb-2.5">
+          <div className="mt-6 bg-slate-50/90 border border-slate-200 p-5 rounded-xl">
+            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider mb-3">
               Identificação do Ciclo de Auditoria
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs sm:text-sm">
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Almoxarifado / Filial</p>
-                <p className="font-extrabold text-[#1B2A4A] mt-0.5">{activeBranch.name}</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px]">Almoxarifado / Filial</p>
+                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{activeBranch.name}</p>
               </div>
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Responsável Alocado</p>
-                <p className="font-extrabold text-[#1B2A4A] mt-0.5">{activeBranch.ownerName}</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px]">Responsável Alocado</p>
+                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{activeBranch.ownerName}</p>
               </div>
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Mês Referência</p>
-                <p className="font-extrabold text-[#1B2A4A] mt-0.5">{selectedEntry.monthYear}</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px]">Mês Referência</p>
+                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{selectedEntry.monthYear}</p>
               </div>
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Data de Emissão</p>
-                <p className="font-extrabold text-[#1B2A4A] mt-0.5">{evaluationDate} (Vistoria)</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px]">Data de Emissão</p>
+                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{evaluationDate} (Vistoria)</p>
               </div>
             </div>
           </div>
 
           {/* Section 1: Executive Summary */}
-          <div className="mt-6 space-y-2">
-            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-[#C8A84B]">description</span>
+          <div className="mt-8 space-y-3">
+            <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">description</span>
               1. Resumo Executivo Operacional
             </h3>
-            <div className="bg-[#f8fafc] border border-slate-200 p-5 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans mt-2.5">
+            <div className="bg-slate-50/90 border border-slate-200 border-l-4 border-l-[#1B2A4A] p-5 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans mt-3 shadow-xs">
               {currentSummary}
             </div>
           </div>
 
           {/* Section 2: Full Checklist Table */}
-          <div className="mt-6 space-y-2">
-            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-[#C8A84B]">fact_check</span>
+          <div className="mt-8 space-y-3">
+            <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">fact_check</span>
               2. Checklist Geral de Auditoria (10 Critérios)
             </h3>
-            <div className="overflow-x-auto border border-slate-200 rounded-xl mt-2.5">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl mt-3 shadow-2xs">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-black uppercase text-[9px] tracking-wider">
-                    <th className="py-2.5 px-4 w-12">#</th>
-                    <th className="py-2.5 px-4">Critério Operacional</th>
-                    <th className="py-2.5 px-4 text-center">Frequência</th>
-                    <th className="py-2.5 px-4 text-center">Pontos Possíveis</th>
-                    <th className="py-2.5 px-4 text-center">Pontos Obtidos</th>
-                    <th className="py-2.5 px-4 text-center">Status</th>
-                    <th className="py-2.5 px-4 text-center">Data Avaliação</th>
+                  <tr className="bg-[#1B2A4A] text-white text-xs font-black uppercase tracking-wider">
+                    <th className="py-3 px-4 w-12">#</th>
+                    <th className="py-3 px-4">Critério Operacional</th>
+                    <th className="py-3 px-4 text-center">Frequência</th>
+                    <th className="py-3 px-4 text-center">Pontos Possíveis</th>
+                    <th className="py-3 px-4 text-center">Pontos Obtidos</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Data Avaliação</th>
                   </tr>
                 </thead>
                 <tbody>
                   {criteriaList.map((c) => (
                     <tr key={c.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="py-2.5 px-4 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
-                      <td className="py-2.5 px-4 font-bold text-[#1B2A4A] text-xs">
+                      <td className="py-3 px-4 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
+                      <td className="py-3 px-4 font-bold text-[#1B2A4A]">
                         {c.name === "LayOut" ? "Layout" : c.name}
                       </td>
-                      <td className="py-2.5 px-4 text-center font-semibold text-slate-500">{c.recurrence}</td>
-                      <td className="py-2.5 px-4 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
-                      <td className={`py-2.5 px-4 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-500">{c.recurrence}</td>
+                      <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
+                      <td className={`py-3 px-4 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
                         {c.pointsObtained} pts
                       </td>
-                      <td className="py-2.5 px-4 text-center">
+                      <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black ${
+                          <span className={`inline-block px-2.5 py-1 rounded text-xs font-black ${
                             c.status === "OK" 
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
                               : "bg-rose-50 text-rose-700 border border-rose-200"
@@ -1298,7 +1301,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1.5 text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-black transition-all shadow-3xs"
+                                    className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded font-black transition-all shadow-3xs"
                                   >
                                     <span>🔗 Ver evidência {lIdx + 1}</span>
                                   </a>
@@ -1326,7 +1329,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                                       window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
                                     }
                                   }}
-                                  className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
+                                  className="inline-flex items-center gap-1 text-xs bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-2.5 py-1 rounded font-black transition-all shadow-3xs"
                                 >
                                   <span>📎 Ver evidência</span>
                                 </button>
@@ -1335,46 +1338,46 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                           )}
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-center text-slate-500 font-mono font-semibold">
+                      <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">
                         {evaluationDate}
                       </td>
                     </tr>
                   ))}
-                  <tr className="bg-slate-55 bg-slate-100 font-black border-t border-slate-250">
-                    <td colSpan={3} className="py-2.5 px-4 text-right text-slate-550 text-slate-500">PONTUAÇÃO ACUMULADA:</td>
-                    <td className="py-2.5 px-4 text-center font-mono text-slate-600">100 pts</td>
-                    <td className={`py-2.5 px-4 text-center font-mono text-sm ${score >= 80 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <tr className="bg-slate-100 font-black border-t-2 border-slate-300">
+                    <td colSpan={3} className="py-3 px-4 text-right text-slate-600">PONTUAÇÃO ACUMULADA:</td>
+                    <td className="py-3 px-4 text-center font-mono text-slate-600">100 pts</td>
+                    <td className={`py-3 px-4 text-center font-mono text-sm ${score >= 80 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {score} pts
                     </td>
-                    <td className="py-2.5 px-4 text-center">
+                    <td className="py-3 px-4 text-center">
                       <span className={`inline-block px-3 py-1 rounded text-xs uppercase font-black tracking-wider ${
                         score >= 80 ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
                       }`}>
                         {score >= 80 ? "QUALIFICADO" : "EM ALERTA"}
                       </span>
                     </td>
-                    <td className="py-2.5 px-4"></td>
+                    <td className="py-3 px-4"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Section 3: Conformidades */}
-            <div className="space-y-2">
-              <h3 className="text-xs font-black text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-1.5 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+            <div className="space-y-3">
+              <h3 className="text-base sm:text-lg font-black text-emerald-800 uppercase tracking-wider border-b-2 border-emerald-200 pb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
                 3. Conformidades Identificadas ({okCount})
               </h3>
               {okCount > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   {okList.map(c => (
-                    <div key={c.id} className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg flex items-center gap-2">
-                      <span className="material-symbols-outlined text-emerald-600 text-sm font-black shrink-0">check</span>
+                    <div key={c.id} className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-2.5 shadow-2xs">
+                      <span className="material-symbols-outlined text-emerald-600 text-base font-bold shrink-0">check</span>
                       <div className="overflow-hidden">
-                        <p className="text-[11px] font-bold text-emerald-900 truncate">{c.name}</p>
-                        <p className="text-[9px] text-[#C8A84B] font-mono font-black">{c.pointsPossible} pts obtidos</p>
+                        <p className="text-xs sm:text-sm font-extrabold text-emerald-950 truncate">{c.name === "LayOut" ? "Layout" : c.name}</p>
+                        <p className="text-[10px] sm:text-xs text-emerald-700 font-mono font-bold">{c.pointsPossible} pts obtidos</p>
                       </div>
                     </div>
                   ))}
@@ -1385,35 +1388,36 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             </div>
 
             {/* Section 4: Não Conformidades */}
-            <div className="space-y-2">
-              <h3 className="text-xs font-black text-rose-800 uppercase tracking-wider border-b border-rose-200 pb-1.5 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-rose-600">report_problem</span>
+            <div className="space-y-3">
+              <h3 className="text-base sm:text-lg font-black text-rose-800 uppercase tracking-wider border-b-2 border-rose-200 pb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-rose-600">report_problem</span>
                 4. Não Conformidades Registradas ({nokCount})
               </h3>
               {nokCount > 0 ? (
-                <div className="space-y-3 mt-2">
+                <div className="space-y-3 mt-3">
                   {nokList.map(c => {
                     const evidence = getEvidenceForCriterion(c.id);
                     return (
-                      <div key={c.id} className="p-3 bg-rose-50/75 border border-rose-100 rounded-xl space-y-1.5">
+                      <div key={c.id} className="p-4 bg-rose-50/80 border border-rose-200 rounded-2xl space-y-2.5 shadow-2xs">
                         <div className="flex justify-between items-start gap-2">
-                          <p className="text-xs font-black text-rose-950 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-rose-600 text-sm">warning</span>
-                            {c.name}
+                          <p className="text-xs sm:text-sm font-black text-rose-950 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-rose-600 text-base">warning</span>
+                            {c.name === "LayOut" ? "Layout" : c.name}
                           </p>
-                          <span className="font-mono text-[9px] font-black text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
+                          <span className="font-mono text-xs font-extrabold text-rose-800 bg-rose-100/90 px-2 py-0.5 rounded-md border border-rose-200">
                             0 / {c.pointsPossible} pts
                           </span>
                         </div>
-                        <div className="text-[11px] pl-5 space-y-1 text-rose-900 leading-normal">
-                          <p><strong className="text-rose-950">Desvio: </strong>{evidence.reasonNok}</p>
-                          <p className="font-medium italic text-rose-850"><strong className="text-rose-950">Nota de Auditoria: </strong>"{evidence.obsNok}"</p>
-                          <div className="mt-2 p-2.5 bg-white/60 border border-rose-100/80 rounded-lg text-slate-700 text-xs shadow-3xs">
-                            <strong className="text-rose-950 font-bold block mb-0.5">Plano de Ação Corretiva Oficial:</strong>
-                            <span className="font-medium text-rose-900 leading-relaxed">{planosDeAcao[c.name]}</span>
+                        <div className="text-xs sm:text-sm space-y-2 text-rose-900 leading-relaxed">
+                          <p><strong className="text-rose-950 font-extrabold">Desvio: </strong>{evidence.reasonNok}</p>
+                          <p className="font-medium italic text-rose-850"><strong className="text-rose-950 font-extrabold">Nota de Auditoria: </strong>"{evidence.obsNok}"</p>
+                          <div className="p-3 bg-white border border-rose-200 rounded-xl text-xs sm:text-sm text-slate-800 shadow-2xs space-y-1">
+                            <strong className="text-rose-950 font-extrabold block mb-1">Plano de Ação Corretiva Oficial:</strong>
+                            <span className="font-medium text-slate-700 leading-relaxed">{planosDeAcao[c.name]}</span>
                           </div>
-                          <p className="text-[9px] font-mono text-slate-500 font-bold bg-white/70 inline-block px-1.5 py-0.5 rounded border border-rose-100 mt-1.5">
-                            📁 Arquivo de Evidência: {evidence.title}
+                          <p className="text-[11px] font-mono text-slate-600 font-semibold bg-white/80 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-rose-200 mt-1 shadow-2xs">
+                            <span className="material-symbols-outlined text-[14px] text-rose-600">folder_open</span>
+                            <span>Arquivo de Evidência: {evidence.title}</span>
                           </p>
                         </div>
                       </div>
@@ -1421,7 +1425,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                   })}
                 </div>
               ) : (
-                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-800 leading-relaxed font-semibold">
+                <div className="p-5 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-xs sm:text-sm text-emerald-900 leading-relaxed font-semibold">
                   ✅ Unidade opera em perfeição técnica estrutural! Nenhuma não-conformidade operacional foi detectada neste ciclo mensal de vistoria preventiva.
                 </div>
               )}
@@ -1429,45 +1433,45 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           </div>
 
           {/* Section 5: Conclusão e Recomendações */}
-          <div className="mt-6 space-y-2">
-            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-[#C8A84B]">engineering</span>
+          <div className="mt-8 space-y-3">
+            <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">engineering</span>
               5. Conclusão e Recomendações
             </h3>
-            <div className="bg-[#f8fafc] border border-slate-200 p-5 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans mt-2.5">
+            <div className="bg-slate-50/90 border border-slate-200 border-l-4 border-l-[#1B2A4A] p-5 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans mt-3 shadow-xs">
               {currentConclusion}
             </div>
           </div>
 
           {/* Section 6: Histórico Consolidado */}
-          <div className="mt-6 space-y-2">
-            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-[#C8A84B]">history</span>
+          <div className="mt-8 space-y-3">
+            <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">history</span>
               6. Histórico Consolidado dos Ciclos Anteriores
             </h3>
-            <div className="overflow-x-auto border border-slate-200 rounded-xl mt-2.5">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl mt-3 shadow-2xs">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-black uppercase text-[9px] tracking-wider">
-                    <th className="py-2.5 px-4 font-mono">Ciclo</th>
-                    <th className="py-2.5 px-4 text-center font-mono">Tipo</th>
-                    <th className="py-2.5 px-4 text-center font-mono">Pontuação</th>
-                    <th className="py-2.5 px-4 font-mono">Ocorrências / Desvios</th>
+                  <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
+                    <th className="py-3 px-4 font-mono">Ciclo</th>
+                    <th className="py-3 px-4 text-center font-mono">Tipo</th>
+                    <th className="py-3 px-4 text-center font-mono">Pontuação</th>
+                    <th className="py-3 px-4 font-mono">Ocorrências / Desvios</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historyList.map((h) => (
                     <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="py-2.5 px-4 font-bold text-[#1B2A4A]">{h.monthYear}</td>
-                      <td className="py-2.5 px-4 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black ${getTypeBadgeColor(h.type)}`}>
+                      <td className="py-3 px-4 font-bold text-[#1B2A4A]">{h.monthYear}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${getTypeBadgeColor(h.type)}`}>
                           {h.type}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 text-center font-mono font-black text-slate-800">
+                      <td className="py-3 px-4 text-center font-mono font-black text-slate-800">
                         {h.score} pts
                       </td>
-                      <td className="py-2.5 px-4 text-slate-600">
+                      <td className="py-3 px-4 text-slate-700 font-medium">
                         {h.nokItems.length > 0 ? (
                           <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
                         ) : (
@@ -1482,19 +1486,19 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           </div>
 
           {/* Document Footer */}
-          <div className="mt-8 pt-6 border-t border-slate-250 flex flex-col md:flex-row md:items-end justify-between gap-6 text-[10px] text-slate-400 font-bold">
+          <div className="mt-10 pt-6 border-t-2 border-slate-200 flex flex-col md:flex-row md:items-end justify-between gap-6 text-xs text-slate-500 font-medium">
             <div>
-              <p className="text-slate-500 font-black uppercase">Auditoria de Operações Preventivas</p>
-              <p className="mt-0.5 text-slate-400">A.Cândido Grupo S/A — Seção de Planejamento de Ativos</p>
+              <p className="text-slate-700 font-black uppercase tracking-wider">Auditoria de Operações Preventivas</p>
+              <p className="mt-0.5 text-slate-500">A.Cândido Grupo S/A — Seção de Planejamento de Ativos</p>
               <p className="text-slate-400">Emissão Oficial: {new Date().toLocaleDateString("pt-BR")}</p>
             </div>
             
             <div className="flex flex-col items-start md:items-end gap-1 shrink-0">
-              <div className="w-52 h-px bg-slate-350"></div>
-              <p className="text-slate-700 font-black font-sans">
+              <div className="w-56 h-px bg-slate-300"></div>
+              <p className="text-slate-900 font-black font-sans text-sm">
                 Fernando Silva
               </p>
-              <p className="text-[9px] text-slate-400 font-bold tracking-tight uppercase leading-none">
+              <p className="text-xs text-slate-500 font-bold tracking-tight uppercase leading-none">
                 Auditor Geral de Qualidade — Grupo A. Cândido
               </p>
             </div>
