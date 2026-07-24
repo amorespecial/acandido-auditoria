@@ -1484,7 +1484,7 @@ function garantiaNumToMonth(num: number): string {
 export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
   
-  const spaceParts = (garantia.monthYear || `${garantia.mes} ${garantia.ano}`).split(' ');
+  const spaceParts = (garantia.monthYear || `${garantia.mes || ''} ${garantia.ano || ''}`).trim().split(' ');
   const mesName = spaceParts[0] || "Janeiro";
   const anoNum = parseInt(spaceParts[1] || "2026", 10) || 2026;
   const mesNum = garantiaMonthToNum(mesName);
@@ -1500,7 +1500,14 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     item: fullItem,
     fabricante: garantia.fabricante || garantia.manufacturer || "",
     garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
-    registrado_por: garantia.registrado_por || garantia.registeredBy || null
+    registrado_por: garantia.registrado_por || garantia.registeredBy || null,
+    data_emissao_nf: garantia.data_emissao_nf || garantia.nfEmissionDate || null,
+    referencia_item: garantia.referencia_item || garantia.reference || null,
+    nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
+    veiculo: garantia.veiculo || null,
+    localizacao: garantia.localizacao || null,
+    observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null,
+    anexo_url: garantia.anexo_url || garantia.anexo_base64 || garantia.arquivo_base64 || null
   };
 
   if (garantia.anexo_base64 || garantia.arquivo_base64) {
@@ -1541,7 +1548,7 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
   const { data, error } = await supabase
     .from('garantias')
-    .select('id, item_code, item_description, manufacturer, warranty_expiry, almoxarifado, status, reference, piece_observation, scrap_observation, nf_emission_date, custom_fields')
+    .select('*')
     .order('registrado_em', { ascending: false });
 
   if (error || !data) {
@@ -1550,8 +1557,8 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   }
 
   return data.map((item) => {
-    let itemCode = "";
-    let itemDescription = item.item || "";
+    let itemCode = item.item_code || "";
+    let itemDescription = item.item || item.item_description || "";
     if (item.item && item.item.includes(" - ")) {
       const parts = item.item.split(" - ");
       itemCode = parts[0].trim();
@@ -1559,21 +1566,28 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
     }
 
     const monthName = garantiaNumToMonth(item.mes);
-    const monthYear = `${monthName} ${item.ano || 2026}`;
+    const monthYear = item.mes && item.ano ? `${monthName} ${item.ano}` : (item.monthYear || "");
 
     return {
       id: item.id,
       itemCode,
       itemDescription,
-      manufacturer: item.fabricante || "",
-      expiryDate: item.garantia_ate || "",
+      manufacturer: item.fabricante || item.manufacturer || "",
+      expiryDate: item.garantia_ate || item.warranty_expiry || "",
       almoxarifado: item.almoxarifado || "",
-      nfEmissionDate: "",
-      reference: "",
-      lastUpdateDate: item.registrado_em ? item.registrado_em.split("T")[0] : "",
+      nfEmissionDate: item.data_emissao_nf || item.nf_emission_date || "",
+      reference: item.referencia_item || item.reference || "",
+      notaFiscal: item.nota_fiscal || item.notaFiscal || "",
+      veiculo: item.veiculo || "",
+      localizacao: item.localizacao || "",
+      scrapObservation: item.observacao_sucata || item.scrap_observation || "",
       pieceObservation: "",
-      scrapObservation: "",
+      anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64 || "",
+      anexo_base64: item.anexo_base64 || item.arquivo_base64 || item.anexo_url || "",
+      arquivo_base64: item.arquivo_base64 || item.anexo_base64 || item.anexo_url || "",
+      registeredBy: item.registrado_por || item.registeredBy || "",
       monthYear,
+      lastUpdateDate: item.registrado_em ? item.registrado_em.split("T")[0] : "",
       createdAt: item.registrado_em ? new Date(item.registrado_em).toLocaleString("pt-BR") : ""
     };
   });
@@ -1592,9 +1606,19 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
         monthYear: item.monthYear,
         itemCode: item.itemCode,
         itemDescription: item.itemDescription,
-        manufacturer: item.manufacturer,
-        expiryDate: item.expiryDate
-      });
+        manufacturer: item.manufacturer || item.fabricante,
+        expiryDate: item.expiryDate || item.garantia_ate,
+        data_emissao_nf: item.nfEmissionDate || item.data_emissao_nf,
+        referencia_item: item.reference || item.referencia_item,
+        nota_fiscal: item.notaFiscal || item.nota_fiscal,
+        veiculo: item.veiculo,
+        localizacao: item.localizacao,
+        observacao_sucata: item.scrapObservation || item.observacao_sucata,
+        anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64,
+        anexo_base64: item.anexo_base64 || item.arquivo_base64,
+        arquivo_base64: item.arquivo_base64 || item.anexo_base64,
+        registeredBy: item.registeredBy || item.registrado_por
+      }, requesterRole);
     }
   } catch (err) {
     console.error("Error in dbSaveWarranties:", err);
