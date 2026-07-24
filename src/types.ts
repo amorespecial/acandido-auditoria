@@ -122,7 +122,7 @@ export type AppUserRole = "ROBSON" | "ADMIN";
 export interface AuditHistoryEntry {
   id: string;
   monthYear: string;
-  type: "Mensal" | "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral";
+  type: "Mensal" | "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral" | "Bom";
   score: number;
   nokItems: string[];
   auditedDetails?: string;

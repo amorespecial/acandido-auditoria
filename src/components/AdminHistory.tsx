@@ -302,13 +302,11 @@ const getHistoryForBranch = (bId: string, historyList: any[]): AuditHistoryEntry
   const combined: AuditHistoryEntry[] = [];
   
   realBranchEntries.forEach((entry) => {
-    let type: "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral" | "Mensal" = "Mensal";
-    if (isSemestralMonth(entry.monthYear)) {
-      type = "Avaliação Semestral";
-    } else if (entry.score >= 90) {
+    let type: "Excelente" | "Alerta" | "Atenção" | "Bom" | "Avaliação Semestral" | "Mensal" = "Bom";
+    if (entry.score >= 90) {
       type = "Excelente";
     } else if (entry.score >= 80) {
-      type = "Mensal";
+      type = "Bom";
     } else if (entry.score >= 70) {
       type = "Atenção";
     } else {
@@ -478,10 +476,15 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
     switch (type) {
       case "Excelente":
         return "bg-emerald-100 text-emerald-800 border-emerald-200";
-      case "Alerta":
-        return "bg-red-50 text-red-700 border-red-200";
+      case "Bom":
+      case "Mensal":
+      case "Meta Cumprida":
+        return "bg-cyan-100 text-cyan-800 border-cyan-200";
       case "Atenção":
         return "bg-amber-100 text-amber-800 border-amber-200";
+      case "Alerta":
+      case "Crítico":
+        return "bg-red-50 text-red-700 border-red-200";
       case "Avaliação Semestral":
         return "bg-purple-100 text-purple-800 border-purple-200";
       default:
@@ -1024,7 +1027,14 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           doc.setFontSize(8);
           doc.setTextColor(51, 65, 85);
           doc.text(h.monthYear, 18, y + 5);
-          doc.text(h.type, 55, y + 5);
+          let pdfType = h.type;
+          if (pdfType === "Avaliação Semestral" || pdfType === "Mensal" || !pdfType) {
+            if (h.score >= 90) pdfType = "Excelente";
+            else if (h.score >= 80) pdfType = "Bom";
+            else if (h.score >= 70) pdfType = "Atenção";
+            else pdfType = "Alerta";
+          }
+          doc.text(pdfType, 55, y + 5);
           doc.text(`${h.score} pts`, 95, y + 5);
 
           if (filteredNok.length > 0) {
@@ -1454,32 +1464,52 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
                     <th className="py-3 px-4 font-mono">Ciclo</th>
-                    <th className="py-3 px-4 text-center font-mono">Tipo</th>
+                    <th className="py-3 px-4 text-center font-mono">Resultado</th>
                     <th className="py-3 px-4 text-center font-mono">Pontuação</th>
                     <th className="py-3 px-4 font-mono">Ocorrências / Desvios</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {historyList.map((h) => (
-                    <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3 px-4 font-bold text-[#1B2A4A]">{h.monthYear}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${getTypeBadgeColor(h.type)}`}>
-                          {h.type}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center font-mono font-black text-slate-800">
-                        {h.score} pts
-                      </td>
-                      <td className="py-3 px-4 text-slate-700 font-medium">
-                        {h.nokItems.length > 0 ? (
-                          <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
-                        ) : (
-                          <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {historyList.map((h) => {
+                    let displayType = h.type;
+                    if (displayType === "Avaliação Semestral" || displayType === "Mensal" || !displayType) {
+                      if (h.score >= 90) displayType = "Excelente";
+                      else if (h.score >= 80) displayType = "Bom";
+                      else if (h.score >= 70) displayType = "Atenção";
+                      else displayType = "Alerta";
+                    }
+                    const isSemestral = isSemestralMonth(h.monthYear);
+
+                    return (
+                      <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-[#1B2A4A]">
+                          <div>
+                            <span>{h.monthYear}</span>
+                            {isSemestral && (
+                              <span className="block text-[10px] text-slate-400 font-semibold leading-tight mt-0.5">
+                                Auditoria Semestral
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${getTypeBadgeColor(displayType)}`}>
+                            {displayType}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-black text-slate-800">
+                          {h.score} pts
+                        </td>
+                        <td className="py-3 px-4 text-slate-700 font-medium">
+                          {h.nokItems.length > 0 ? (
+                            <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
+                          ) : (
+                            <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2112,21 +2142,39 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             {historyList.map((entry) => {
               const criteriaListForScore = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
               const adjustedScore = criteriaListForScore.reduce((acc, c) => acc + c.pointsObtained, 0);
-              
+              const scoreToUse = adjustedScore !== undefined ? adjustedScore : entry.score;
+
+              let displayType = entry.type;
+              if (displayType === "Avaliação Semestral" || displayType === "Mensal" || !displayType) {
+                if (scoreToUse >= 90) displayType = "Excelente";
+                else if (scoreToUse >= 80) displayType = "Bom";
+                else if (scoreToUse >= 70) displayType = "Atenção";
+                else displayType = "Alerta";
+              }
+
+              const isSemestral = isSemestralMonth(entry.monthYear);
+
               return (
                 <div key={entry.id} className="relative group">
                   {/* Connector Dot */}
                   <span className={`absolute -left-[31px] top-1.5 w-[11px] h-[11px] rounded-full border-2 border-white shadow-md transition-all ${
-                    adjustedScore >= 80 ? "bg-emerald-500" : adjustedScore >= 70 ? "bg-amber-400" : "bg-red-500"
+                    scoreToUse >= 80 ? "bg-emerald-500" : scoreToUse >= 70 ? "bg-amber-400" : "bg-red-500"
                   }`}></span>
 
                   {/* Card */}
                   <div className="bg-white border border-slate-200 hover:border-[#1B2A4A]/40 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-extrabold text-[#1B2A4A]">{entry.monthYear}</span>
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${getTypeBadgeColor(entry.type)} uppercase tracking-wider`}>
-                          {entry.type}
+                        <div>
+                          <span className="text-sm font-extrabold text-[#1B2A4A]">{entry.monthYear}</span>
+                          {isSemestral && (
+                            <span className="block text-[10px] text-slate-400 font-semibold leading-tight mt-0.5">
+                              Auditoria Semestral
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${getTypeBadgeColor(displayType)} uppercase tracking-wider`}>
+                          {displayType}
                         </span>
                       </div>
 

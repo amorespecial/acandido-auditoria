@@ -493,6 +493,11 @@ export default function AlmoxarifeHistorico({
                         <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5" title={activeBranch.name}>
                           {activeBranch.name.replace("ALMOXARIFADO ", "")}
                         </p>
+                        {(report.monthYear.toLowerCase().includes("janeiro") || report.monthYear.toLowerCase().includes("julho")) && (
+                          <span className="block text-[10px] text-slate-400 font-semibold leading-tight mt-0.5">
+                            Auditoria Semestral
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-col items-end gap-1.5 shrink-0 select-none">
