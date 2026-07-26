@@ -931,7 +931,7 @@ export default function AlmoxarifeHistorico({
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(100, 116, 139);
-      doc.text("Auditor Geral de Qualidade — Grupo A. Cândido", 140, y + 18);
+      doc.text("Auditor de Estoque — Grupo A. Cândido", 140, y + 18);
 
       const sanitizeName = (name: string) => {
         return (name == null ? "" : String(name))
@@ -1475,7 +1475,7 @@ export default function AlmoxarifeHistorico({
                   Fernando Silva
                 </p>
                 <p className="text-xs text-slate-500 font-bold tracking-tight uppercase leading-none">
-                  Auditor Geral de Qualidade — Grupo A. Cândido
+                  Auditor de Estoque — Grupo A. Cândido
                 </p>
               </div>
             </div>

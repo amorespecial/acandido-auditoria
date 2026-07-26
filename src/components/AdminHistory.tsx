@@ -1071,7 +1071,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         doc.setFont("Helvetica", "normal");
         doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
-        doc.text("Auditor Geral de Qualidade", 140, y + 18);
+        doc.text("Auditor de Estoque — Grupo A. Cândido", 140, y + 18);
 
         const sanitizeName = (name: string) => {
           return (name == null ? "" : String(name))
@@ -1225,27 +1225,47 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             </div>
           </div>
 
-          {/* Metadata Grid */}
-          <div className="mt-6 bg-slate-50/90 border border-slate-200 p-5 rounded-xl">
-            <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider mb-3">
-              Identificação do Ciclo de Auditoria
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs sm:text-sm">
-              <div>
-                <p className="text-slate-400 font-bold uppercase text-[10px]">Almoxarifado / Filial</p>
-                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{activeBranch.name}</p>
+          {/* Card de Identificação (Histórico Detalhado) */}
+          <div className="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-sans">
+                Histórico Detalhado — {selectedEntry.monthYear}
+              </span>
+              <h2 className="text-2xl font-black text-[#1B2A4A] tracking-tight">
+                {activeBranch.name}
+              </h2>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-bold">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-slate-400 text-[14px]">person</span>
+                  Responsável: <strong className="text-slate-700">{activeBranch.ownerName}</strong>
+                </span>
+                <span className="hidden sm:inline text-slate-300">•</span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-slate-400 text-[14px]">map</span>
+                  Local: <strong className="text-slate-700">{activeBranch.location}</strong>
+                </span>
+                <span className="hidden sm:inline text-slate-300">•</span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-slate-400 text-[14px]">event_available</span>
+                  Avaliação: <strong className="text-slate-700">{evaluationDate}</strong>
+                </span>
               </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase text-[10px]">Responsável Alocado</p>
-                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{activeBranch.ownerName}</p>
+            </div>
+
+            <div className="flex items-center gap-4 bg-white border border-slate-200 p-4 rounded-xl shrink-0 self-start md:self-auto shadow-3xs">
+              <div className="text-right">
+                <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-widest">Resultado</p>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-3xl font-mono font-black text-[#1B2A4A]">{score}</span>
+                  <span className="text-xs font-semibold text-slate-400">/100 pts</span>
+                </div>
               </div>
+              <div className="h-10 w-px bg-slate-300"></div>
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[10px]">Mês Referência</p>
-                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{selectedEntry.monthYear}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase text-[10px]">Data de Emissão</p>
-                <p className="font-extrabold text-[#1B2A4A] text-sm mt-0.5">{evaluationDate} (Vistoria)</p>
+                <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-widest">Classificação</p>
+                <span className={`inline-block px-3 py-1 mt-1 text-xs font-black uppercase tracking-wider rounded ${badgeClass}`}>
+                  {statusLabel}
+                </span>
               </div>
             </div>
           </div>
@@ -1261,11 +1281,11 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             </div>
           </div>
 
-          {/* Section 2: Full Checklist Table */}
+          {/* Section 2: Full Interactive Checklist Table */}
           <div className="mt-8 space-y-3">
             <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">fact_check</span>
-              2. Checklist Geral de Auditoria (10 Critérios)
+              2. Checklist de Auditoria Preventiva (10 Critérios Consolidados)
             </h3>
             <div className="overflow-x-auto border border-slate-200 rounded-xl mt-3 shadow-2xs">
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
@@ -1278,81 +1298,244 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                     <th className="py-3 px-4 text-center">Pontos Obtidos</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-center">Data Avaliação</th>
+                    <th className="py-3 px-4 text-right"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {criteriaList.map((c) => (
-                    <tr key={c.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3 px-4 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
-                      <td className="py-3 px-4 font-bold text-[#1B2A4A]">
-                        {c.name === "LayOut" ? "Layout" : c.name}
-                      </td>
-                      <td className="py-3 px-4 text-center font-semibold text-slate-500">{c.recurrence}</td>
-                      <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
-                      <td className={`py-3 px-4 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
-                        {c.pointsObtained} pts
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className={`inline-block px-2.5 py-1 rounded text-xs font-black ${
-                            c.status === "OK" 
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                              : "bg-rose-50 text-rose-700 border border-rose-200"
+                  {criteriaList.map((c) => {
+                    const isExpanded = expandedCriterionId === c.id;
+                    const evidence = getEvidenceForCriterion(c.id);
+
+                    return (
+                      <React.Fragment key={c.id}>
+                        {/* Base Row */}
+                        <tr
+                          onClick={() => setExpandedCriterionId(isExpanded ? null : c.id)}
+                          className={`border-b border-slate-150 hover:bg-slate-50/75 transition-colors cursor-pointer ${
+                            isExpanded ? "bg-slate-50/50" : ""
+                          }`}
+                        >
+                          <td className="py-3 px-4 font-mono font-black text-slate-400">
+                            {c.id.padStart(2, "0")}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-[#1B2A4A]">
+                            {c.name === "LayOut" ? "Layout" : c.name}
+                          </td>
+                          <td className="py-3 px-4 text-center font-semibold text-slate-500">
+                            {c.recurrence}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">
+                            {c.pointsPossible} pts
+                          </td>
+                          <td className={`py-3 px-4 text-center font-mono font-black ${
+                            c.status === "OK" ? "text-emerald-700" : "text-rose-600"
                           }`}>
-                            {c.status}
-                          </span>
-                          {c.status === "NOK" && (
-                            <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
-                              {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
-                                (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
-                                  <a
-                                    key={lIdx}
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded font-black transition-all shadow-3xs"
-                                  >
-                                    <span>🔗 Ver evidência {lIdx + 1}</span>
-                                  </a>
-                                ))
-                              ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if ((c as any).nokEvidenceFileData) {
-                                      const newTab = window.open();
-                                      if (newTab) {
-                                        newTab.document.write(
-                                          `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                          `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                          `${(c as any).nokEvidenceFileType?.startsWith("image/") 
-                                              ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                              : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                           }` +
-                                          `</body></html>`
-                                        );
-                                        newTab.document.close();
-                                      }
-                                    } else if ((c as any).nokEvidenceLink) {
-                                      window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 text-xs bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-2.5 py-1 rounded font-black transition-all shadow-3xs"
-                                >
-                                  <span>📎 Ver evidência</span>
-                                </button>
-                              ) : null}
+                            {c.pointsObtained} pts
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex flex-col items-center justify-center gap-1">
+                              <span className={`inline-block px-2.5 py-1 rounded text-xs font-black ${
+                                c.status === "OK"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                              }`}>
+                                {c.status}
+                              </span>
+                              {c.status === "NOK" && (
+                                <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
+                                  {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
+                                    (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
+                                      <a
+                                        key={lIdx}
+                                        href={link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded font-black transition-all shadow-3xs"
+                                      >
+                                        <span>🔗 Ver evidência {lIdx + 1}</span>
+                                      </a>
+                                    ))
+                                  ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if ((c as any).nokEvidenceFileData) {
+                                          const newTab = window.open();
+                                          if (newTab) {
+                                            newTab.document.write(
+                                              `<html><head><title>Visualizar Evidência - NOK</title></head>` +
+                                              `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
+                                              `${(c as any).nokEvidenceFileType?.startsWith("image/") 
+                                                  ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                                  : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
+                                               }` +
+                                              `</body></html>`
+                                            );
+                                            newTab.document.close();
+                                          }
+                                        } else if ((c as any).nokEvidenceLink) {
+                                          window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 text-xs bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-2.5 py-1 rounded font-black transition-all shadow-3xs"
+                                    >
+                                      <span>📎 Ver evidência</span>
+                                    </button>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">
-                        {evaluationDate}
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-500 font-mono font-semibold">
+                            {evaluationDate}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="material-symbols-outlined text-slate-400 text-[18px] select-none">
+                              {isExpanded ? "expand_less" : "expand_more"}
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Section Details */}
+                        {isExpanded && (
+                          <tr className="bg-slate-50/30 border-b border-slate-200/60 font-sans">
+                            <td colSpan={8} className="py-4 px-6">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Left Columns (Details/Remarks) */}
+                                <div className="lg:col-span-2 space-y-3">
+                                  <div>
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                      Observação do Auditor
+                                    </h4>
+                                    <p className="text-xs text-slate-600 leading-relaxed mt-1 italic">
+                                      "{c.status === "OK" ? evidence.obsOk : evidence.obsNok}"
+                                    </p>
+                                  </div>
+
+                                  {c.status === "NOK" && (
+                                    <div className="p-3 bg-rose-50 border border-rose-150/40 rounded-xl">
+                                      <h5 className="text-[10px] font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-rose-700 text-[14px]">announcement</span>
+                                        Motivo Registrado para Inconformidade:
+                                      </h5>
+                                      <p className="text-xs text-rose-950 font-medium leading-normal mt-1">
+                                        {evidence.reasonNok}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {(() => {
+                                    if (c.id !== "1" || !selectedEntry) return null;
+                                    const bObj = branches.find(b => b.id === selectedEntry.branchId);
+                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear, bObj?.name, calendarData);
+                                    if (calItems.length === 0) return null;
+
+                                    return (
+                                      <div className="mt-4 p-3 bg-white border border-slate-200/60 rounded-xl space-y-2 select-text">
+                                        <h5 className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1.5">
+                                          <span className="material-symbols-outlined text-[#C8A84B] text-[14px]">calendar_month</span>
+                                          Detalhamento dos Inventários Agendados
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                          {calItems.map((item, idx) => {
+                                            const itemStatus = item.status || "PENDENTE";
+                                            const dateFormatted = item.data_agendada 
+                                              ? item.data_agendada.split("-").reverse().join("/")
+                                              : "--/--/----";
+                                            
+                                            let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                                            if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                            if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+
+                                            return (
+                                              <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100/85 rounded-lg text-xs flex flex-col gap-1.5 shadow-3xs">
+                                                <div className="flex items-center justify-between">
+                                                  <div>
+                                                    <span className="text-[10px] font-extrabold text-slate-600 block">
+                                                      Inventário Semestral #{idx + 1}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-400 font-mono">
+                                                      Agendado: {dateFormatted}
+                                                    </span>
+                                                  </div>
+                                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border leading-none ${badgeColor}`}>
+                                                    {itemStatus}
+                                                  </span>
+                                                </div>
+
+                                                {itemStatus === "NOK" && item.nokEvidenceLink && typeof item.nokEvidenceLink === "string" && !item.nokEvidenceLink.includes("mock-nok-folder") && item.nokEvidenceLink.trim() !== "" && (
+                                                  <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1">
+                                                    <span className="font-extrabold uppercase tracking-wider text-rose-700 flex items-center gap-1 leading-none">
+                                                      <span className="material-symbols-outlined text-[11px] leading-none text-rose-600 font-bold">link</span>
+                                                      <span>Evidência:</span>
+                                                    </span>
+                                                    <a
+                                                      href={item.nokEvidenceLink}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="text-indigo-600 hover:text-indigo-850 hover:underline font-black truncate block"
+                                                    >
+                                                      {item.nokEvidenceLink} ↗
+                                                    </a>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+
+                                {/* Right Column (Visual Evidence Thumbnail) */}
+                                <div className="space-y-1.5">
+                                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Evidência Digital Anexada
+                                  </h4>
+                                  
+                                  <div
+                                    onClick={() => setActiveLightbox({
+                                      type: evidence.type,
+                                      title: evidence.title,
+                                      desc: evidence.desc,
+                                      cId: c.id,
+                                      status: c.status
+                                    })}
+                                    className="group relative bg-white border border-slate-200 p-3 rounded-xl shadow-xs hover:border-[#1B2A4A] cursor-pointer transition-all hover:shadow-md flex items-center gap-3"
+                                  >
+                                    {/* Thumbnail Preview Area */}
+                                    <div className={`w-12 h-12 flex items-center justify-center rounded-lg ${
+                                      evidence.type === "PDF" ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-blue-600"
+                                    }`}>
+                                      <span className="material-symbols-outlined text-[28px]">
+                                        {evidence.iconName}
+                                      </span>
+                                    </div>
+
+                                    <div className="overflow-hidden flex-1">
+                                      <p className="text-xs font-black text-[#1B2A4A] truncate">
+                                        {evidence.title}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                        {evidence.type} • Clique para ampliar
+                                      </p>
+                                    </div>
+
+                                    <span className="material-symbols-outlined text-slate-400 group-hover:text-[#1B2A4A] text-[20px]">
+                                      zoom_in
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                   <tr className="bg-slate-100 font-black border-t-2 border-slate-300">
                     <td colSpan={3} className="py-3 px-4 text-right text-slate-600">PONTUAÇÃO ACUMULADA:</td>
                     <td className="py-3 px-4 text-center font-mono text-slate-600">100 pts</td>
@@ -1366,7 +1549,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                         {score >= 80 ? "QUALIFICADO" : "EM ALERTA"}
                       </span>
                     </td>
-                    <td className="py-3 px-4"></td>
+                    <td colSpan={2} className="py-3 px-4"></td>
                   </tr>
                 </tbody>
               </table>
@@ -1529,327 +1712,13 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                 Fernando Silva
               </p>
               <p className="text-xs text-slate-500 font-bold tracking-tight uppercase leading-none">
-                Auditor Geral de Qualidade — Grupo A. Cândido
+                Auditor de Estoque — Grupo A. Cândido
               </p>
             </div>
           </div>
         </div>
 
-        {/* INTERACTIVE DASHBOARD SECTION - HIDDEN IN PRINTING */}
-        <div className="no-print space-y-6">
-          {/* Dashboard Top Card */}
-          <div id="print-area" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-sans">
-                Histórico Detalhado — {selectedEntry.monthYear}
-              </span>
-              <h2 className="text-2xl font-black text-[#1B2A4A] tracking-tight">
-                {activeBranch.name}
-              </h2>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 font-bold">
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-slate-400 text-[14px]">person</span>
-                  Responsável: <strong className="text-slate-700">{activeBranch.ownerName}</strong>
-                </span>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-slate-400 text-[14px]">map</span>
-                  Local: <strong className="text-slate-700">{activeBranch.location}</strong>
-                </span>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-slate-400 text-[14px]">event_available</span>
-                  Avaliação: <strong className="text-slate-700">{evaluationDate}</strong>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 p-4 rounded-xl shrink-0 self-start md:self-auto">
-              <div className="text-right">
-                <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-widest">Resultado</p>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-3xl font-mono font-black text-[#1B2A4A]">{score}</span>
-                  <span className="text-xs font-semibold text-slate-400">/100 pts</span>
-                </div>
-              </div>
-              <div className="h-10 w-px bg-slate-300"></div>
-              <div>
-                <p className="text-[9px] text-[#C8A84B] font-black uppercase font-mono tracking-widest">Classificação</p>
-                <span className={`inline-block px-3 py-1 mt-1 text-xs font-black uppercase tracking-wider rounded ${badgeClass}`}>
-                  {statusLabel}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 10 CRITERIA TABLE */}
-          <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">
-                Checklist de Auditoria Preventiva — 10 Critérios Consolidados
-              </h3>
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded font-black uppercase tracking-wide">
-                {criteriaList.length} Itens Verificados
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    <th className="py-3 px-6 w-12">#</th>
-                    <th className="py-3 px-4">Critério Operacional</th>
-                    <th className="py-3 px-4 text-center">Frequência</th>
-                    <th className="py-3 px-4 text-center">Pontos Possíveis</th>
-                    <th className="py-3 px-4 text-center">Pontos Obtidos</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-center">Data Avaliação</th>
-                    <th className="py-3 px-6 text-right"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {criteriaList.map((c) => {
-                    const isExpanded = expandedCriterionId === c.id;
-                    const evidence = getEvidenceForCriterion(c.id);
-
-                    return (
-                      <React.Fragment key={c.id}>
-                        {/* Base Row */}
-                        <tr
-                          onClick={() => setExpandedCriterionId(isExpanded ? null : c.id)}
-                          className={`border-b border-slate-100 hover:bg-slate-50/75 transition-colors cursor-pointer ${
-                            isExpanded ? "bg-slate-50/50" : ""
-                          }`}
-                        >
-                          <td className="py-3.5 px-6 font-mono text-xs font-black text-slate-400">
-                            {c.id.padStart(2, "0")}
-                          </td>
-                          <td className="py-3.5 px-4 font-extrabold text-[#1B2A4A] text-xs">
-                            {c.name === "LayOut" ? "Layout" : c.name}
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              {c.recurrence}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-slate-500">
-                            {c.pointsPossible} pts
-                          </td>
-                          <td className={`py-3.5 px-4 text-center font-mono text-xs font-black ${
-                            c.status === "OK" ? "text-emerald-700" : "text-rose-600"
-                          }`}>
-                            {c.pointsObtained} pts
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <div className="flex flex-col items-center justify-center gap-1">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black ${
-                                c.status === "OK"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold"
-                              }`}>
-                                {c.status}
-                              </span>
-                              {c.status === "NOK" && (
-                                <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
-                                  {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
-                                    (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
-                                      <a
-                                        key={lIdx}
-                                        href={link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="inline-flex items-center gap-1.5 text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-black transition-all shadow-3xs"
-                                      >
-                                        <span>🔗 Ver evidência {lIdx + 1}</span>
-                                      </a>
-                                    ))
-                                  ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if ((c as any).nokEvidenceFileData) {
-                                          const newTab = window.open();
-                                          if (newTab) {
-                                            newTab.document.write(
-                                              `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                              `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                              `${(c as any).nokEvidenceFileType?.startsWith("image/") 
-                                                  ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                                  : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                               }` +
-                                              `</body></html>`
-                                            );
-                                            newTab.document.close();
-                                          }
-                                        } else if ((c as any).nokEvidenceLink) {
-                                          window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
-                                        }
-                                      }}
-                                      className="inline-flex items-center gap-1 text-[9px] bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-1.5 py-0.5 rounded font-black transition-all shadow-3xs"
-                                    >
-                                      <span>📎 Ver evidência</span>
-                                    </button>
-                                  ) : null}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-center text-slate-500 font-mono text-xs font-medium">
-                            {evaluationDate}
-                          </td>
-                          <td className="py-3.5 px-6 text-right">
-                            <span className="material-symbols-outlined text-slate-400 text-[18px] select-none">
-                              {isExpanded ? "expand_less" : "expand_more"}
-                            </span>
-                          </td>
-                        </tr>
-
-                        {/* Expanded Section Details */}
-                        {isExpanded && (
-                          <tr className="bg-slate-50/30 border-b border-slate-200/60 font-sans">
-                            <td colSpan={8} className="py-4 px-8">
-                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Left Columns (Details/Remarks) */}
-                                <div className="lg:col-span-2 space-y-3">
-                                  <div>
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                      Observação do Auditor
-                                    </h4>
-                                    <p className="text-xs text-slate-600 leading-relaxed mt-1 italic">
-                                      "{c.status === "OK" ? evidence.obsOk : evidence.obsNok}"
-                                    </p>
-                                  </div>
-
-                                  {c.status === "NOK" && (
-                                    <div className="p-3 bg-rose-55 bg-rose-50 border border-rose-150/40 rounded-xl">
-                                      <h5 className="text-[10px] font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span className="material-symbols-outlined text-rose-700 text-[14px]">announcement</span>
-                                        Motivo Registrado para Inconformidade:
-                                      </h5>
-                                      <p className="text-xs text-rose-950 font-medium leading-normal mt-1">
-                                        {evidence.reasonNok}
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {(() => {
-                                    if (c.id !== "1" || !selectedEntry) return null;
-                                    const bObj = branches.find(b => b.id === selectedEntry.branchId);
-                                    const calItems = getBranchCalendarForEntry(selectedEntry.branchId, selectedEntry.monthYear, bObj?.name, calendarData);
-                                    if (calItems.length === 0) return null;
-
-                                    return (
-                                      <div className="mt-4 p-3 bg-white border border-slate-200/60 rounded-xl space-y-2 select-text">
-                                        <h5 className="text-[10px] font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-1.5">
-                                          <span className="material-symbols-outlined text-[#C8A84B] text-[14px]">calendar_month</span>
-                                          Detalhamento dos Inventários Agendados
-                                        </h5>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                          {calItems.map((item, idx) => {
-                                            const itemStatus = item.status || "PENDENTE";
-                                            const dateFormatted = item.data_agendada 
-                                              ? item.data_agendada.split("-").reverse().join("/")
-                                              : "--/--/----";
-                                            
-                                            let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
-                                            if (itemStatus === "OK") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                                            if (itemStatus === "NOK") badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
-
-                                            return (
-                                              <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100/85 rounded-lg text-xs flex flex-col gap-1.5 shadow-3xs">
-                                                <div className="flex items-center justify-between">
-                                                  <div>
-                                                    <span className="text-[10px] font-extrabold text-slate-600 block">
-                                                      Inventário Semestral #{idx + 1}
-                                                    </span>
-                                                    <span className="text-[9px] text-slate-400 font-mono">
-                                                      Agendado: {dateFormatted}
-                                                    </span>
-                                                  </div>
-                                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border leading-none ${badgeColor}`}>
-                                                    {itemStatus}
-                                                  </span>
-                                                </div>
-
-                                                {itemStatus === "NOK" && item.nokEvidenceLink && typeof item.nokEvidenceLink === "string" && !item.nokEvidenceLink.includes("mock-nok-folder") && item.nokEvidenceLink.trim() !== "" && (
-                                                  <div className="bg-white border border-rose-100 rounded p-1.5 text-[9px] text-rose-800 flex flex-col gap-1">
-                                                    <span className="font-extrabold uppercase tracking-wider text-rose-700 flex items-center gap-1 leading-none">
-                                                      <span className="material-symbols-outlined text-[11px] leading-none text-rose-600 font-bold">link</span>
-                                                      <span>Evidência:</span>
-                                                    </span>
-                                                    <a
-                                                      href={item.nokEvidenceLink}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      className="text-indigo-600 hover:text-indigo-850 hover:underline font-black truncate block"
-                                                    >
-                                                      {item.nokEvidenceLink} ↗
-                                                    </a>
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-
-                                {/* Right Column (Visual Evidence Thumbnail) */}
-                                <div className="space-y-1.5">
-                                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                    Evidência Digital Anexada
-                                  </h4>
-                                  
-                                  <div
-                                    onClick={() => setActiveLightbox({
-                                      type: evidence.type,
-                                      title: evidence.title,
-                                      desc: evidence.desc,
-                                      cId: c.id,
-                                      status: c.status
-                                    })}
-                                    className="group relative bg-white border border-slate-200 p-3 rounded-xl shadow-xs hover:border-[#1B2A4A] cursor-pointer transition-all hover:shadow-md flex items-center gap-3"
-                                  >
-                                    {/* Thumbnail Preview Area */}
-                                    <div className={`w-12 h-12 flex items-center justify-center rounded-lg ${
-                                      evidence.type === "PDF" ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-blue-600"
-                                    }`}>
-                                      <span className="material-symbols-outlined text-[28px]">
-                                        {evidence.iconName}
-                                      </span>
-                                    </div>
-
-                                    <div className="overflow-hidden flex-1">
-                                      <p className="text-xs font-black text-[#1B2A4A] truncate">
-                                        {evidence.title}
-                                      </p>
-                                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                                        {evidence.type} • Clique para ampliar
-                                      </p>
-                                    </div>
-
-                                    <span className="material-symbols-outlined text-slate-400 group-hover:text-[#1B2A4A] text-[20px]">
-                                      zoom_in
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* LIGHTBOX / FULLSCREEN VERIFIER DIALOG MODAL */}
+        {/* LIGHTBOX / FULLSCREEN VERIFIER DIALOG MODAL */}
           {activeLightbox && (
             <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-xs font-sans">
               <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-slate-150 animate-in fade-in zoom-in duration-200">
@@ -2028,7 +1897,6 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
               </div>
             </div>
           )}
-        </div>
       </div>
     );
   }

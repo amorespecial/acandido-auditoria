@@ -14,7 +14,7 @@ export const OFFICIAL_CREDENTIALS = [
     password: "33911386Fe@",
     ownerName: "Fernando",
     group: "A" as const,
-    cargo: "Auditor Geral"
+    cargo: "Auditor de Estoque"
   },
   {
     name: "Natalice Oliveira",
@@ -23,7 +23,7 @@ export const OFFICIAL_CREDENTIALS = [
     password: "Nathalia1",
     ownerName: "Natalice Oliveira",
     group: "A" as const,
-    cargo: "Auditor Geral"
+    cargo: "Auditor de Estoque"
   },
   {
     name: "Robson",
