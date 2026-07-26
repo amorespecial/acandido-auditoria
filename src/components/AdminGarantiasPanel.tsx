@@ -420,28 +420,6 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
             </select>
           </div>
         </div>
-
-        {/* Free search input */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <span className="material-symbols-outlined text-slate-400 text-[18px] absolute left-3.5 top-2.5">search</span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por código de item, descrição ou fabricante..."
-              className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs font-semibold focus:outline-none focus:border-[#1B2A4A] shadow-3xs"
-            />
-          </div>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-xs font-bold transition-colors"
-            >
-              Limpar
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Main Content Details */}
