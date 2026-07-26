@@ -1230,11 +1230,11 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="notaFiscal" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Número da Nota Fiscal{isReq && <span className="text-[#F11E26]"> *</span>}
+                        Nota Fiscal{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <input
                         type="text"
-                        placeholder="Ex: 123456"
+                        placeholder="Digite a nota fiscal"
                         value={notaFiscal}
                         onChange={(e) => {
                           setNotaFiscal(e.target.value);
@@ -1326,16 +1326,26 @@ export default function AlmoxarifeGarantia({
                       <label className="text-xs font-bold text-[#1B2A4A]">
                         Localização{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Prateleira A2"
+                      <select
                         value={localizacao}
                         onChange={(e) => {
-                          setLocalizacao(e.target.value);
-                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, localizacao: "" }));
+                          const val = e.target.value;
+                          setLocalizacao(val);
+                          if (val.trim()) setFieldErrors((prev) => ({ ...prev, localizacao: "" }));
                         }}
-                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
-                      />
+                        style={{
+                          height: "40px",
+                          border: fieldErr ? "1.5px solid #F11E26" : "1.5px solid #CBD5E1",
+                          borderRadius: "8px"
+                        }}
+                        className="w-full bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                      >
+                        <option value="">— Selecione a Localização —</option>
+                        <option value="Em Uso">Em Uso</option>
+                        <option value="Em Garantia">Em Garantia</option>
+                        <option value="Em Estoque">Em Estoque</option>
+                        <option value="Sucateado">Sucateado</option>
+                      </select>
                       {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
                     </div>
                   );
