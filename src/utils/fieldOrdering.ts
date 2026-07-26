@@ -26,8 +26,11 @@ export function isFieldRequired(field: ConfigFieldItem, configState?: any): bool
 
 export const BUILTIN_GARANTIA_FIELDS: ConfigFieldItem[] = [
   { id: "fabricante", name: "Fabricante", builtIn: true },
-  { id: "nfEmissionDate", name: "Nota Fiscal / Data de Emissão", builtIn: true },
-  { id: "reference", name: "Referência", builtIn: true },
+  { id: "notaFiscal", name: "Número da NF", builtIn: true },
+  { id: "nfEmissionDate", name: "Data de Emissão da NF", builtIn: true },
+  { id: "reference", name: "Referência do Item", builtIn: true },
+  { id: "veiculo", name: "Veículo", builtIn: true },
+  { id: "localizacao", name: "Localização", builtIn: true },
   { id: "pieceObservation", name: "Observação da Peça", builtIn: true },
   { id: "scrapObservation", name: "Observação da Sucata", builtIn: true }
 ];

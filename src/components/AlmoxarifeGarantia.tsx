@@ -410,8 +410,11 @@ export default function AlmoxarifeGarantia({
   const [selectedManufacturer, setSelectedManufacturer] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [selectedAlmoxarifado, setSelectedAlmoxarifado] = useState("");
+  const [notaFiscal, setNotaFiscal] = useState("");
   const [nfEmissionDate, setNfEmissionDate] = useState("");
   const [reference, setReference] = useState("");
+  const [veiculo, setVeiculo] = useState("");
+  const [localizacao, setLocalizacao] = useState("");
   const [lastUpdateDate, setLastUpdateDate] = useState(() => {
     // Dynamic default is simulating todays date/month
     const mStr = activeMonth.toLowerCase() === "junho" ? "06" : "01";
@@ -517,8 +520,11 @@ export default function AlmoxarifeGarantia({
     setSelectedItemCode("");
     setSelectedManufacturer("");
     setExpiryDate("");
+    setNotaFiscal("");
     setNfEmissionDate("");
     setReference("");
+    setVeiculo("");
+    setLocalizacao("");
     setCustomFormValues({});
     setFieldErrors({});
     setAttachmentFile(null);
@@ -553,11 +559,14 @@ export default function AlmoxarifeGarantia({
     setSelectedManufacturer(item.manufacturer);
     setExpiryDate(item.expiryDate);
     setSelectedAlmoxarifado(item.almoxarifado);
-    setNfEmissionDate(item.nfEmissionDate);
-    setReference(item.reference);
+    setNotaFiscal(item.notaFiscal || (item as any).nota_fiscal || "");
+    setNfEmissionDate(item.nfEmissionDate || (item as any).data_emissao_nf || "");
+    setReference(item.reference || (item as any).referencia_item || "");
+    setVeiculo(item.veiculo || "");
+    setLocalizacao(item.localizacao || "");
     setLastUpdateDate(item.lastUpdateDate);
-    setPieceObservation(item.pieceObservation === "Nenhuma observação" ? "" : item.pieceObservation);
-    setScrapObservation(item.scrapObservation);
+    setPieceObservation(item.pieceObservation === "Nenhuma observação" ? "" : (item.pieceObservation || (item as any).observacao || ""));
+    setScrapObservation(item.scrapObservation || (item as any).observacao_sucata || "");
 
     setFieldErrors({});
     setAttachmentError("");
@@ -614,10 +623,16 @@ export default function AlmoxarifeGarantia({
       let val = "";
       if (f.id === "fabricante") {
         val = selectedManufacturer;
+      } else if (f.id === "notaFiscal") {
+        val = notaFiscal;
       } else if (f.id === "nfEmissionDate") {
         val = nfEmissionDate;
       } else if (f.id === "reference") {
         val = reference;
+      } else if (f.id === "veiculo") {
+        val = veiculo;
+      } else if (f.id === "localizacao") {
+        val = localizacao;
       } else if (f.id === "pieceObservation") {
         val = pieceObservation;
       } else if (f.id === "scrapObservation") {
@@ -665,14 +680,24 @@ export default function AlmoxarifeGarantia({
             manufacturer: selectedManufacturer,
             expiryDate,
             almoxarifado: selectedAlmoxarifado,
+            notaFiscal: notaFiscal.trim(),
+            nota_fiscal: notaFiscal.trim(),
             nfEmissionDate: finalNfEmissionDate,
-            reference,
+            data_emissao_nf: finalNfEmissionDate,
+            reference: reference.trim(),
+            referencia_item: reference.trim(),
+            veiculo: veiculo.trim(),
+            localizacao: localizacao.trim(),
             lastUpdateDate: autoLastUpdateDate,
             pieceObservation: finalPieceObs,
+            observacao_peca: finalPieceObs,
+            observacao: finalPieceObs,
             scrapObservation: scrapObservation.trim(),
+            observacao_sucata: scrapObservation.trim(),
             monthYear: derivedMonthYear,
             createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
             registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
+            anexo_url: base64Anexo,
             anexo_base64: base64Anexo,
             arquivo_base64: base64Anexo,
             anexo_nome: nomeAnexo,
@@ -692,14 +717,24 @@ export default function AlmoxarifeGarantia({
         manufacturer: selectedManufacturer,
         expiryDate,
         almoxarifado: selectedAlmoxarifado,
+        notaFiscal: notaFiscal.trim(),
+        nota_fiscal: notaFiscal.trim(),
         nfEmissionDate: finalNfEmissionDate,
-        reference,
+        data_emissao_nf: finalNfEmissionDate,
+        reference: reference.trim(),
+        referencia_item: reference.trim(),
+        veiculo: veiculo.trim(),
+        localizacao: localizacao.trim(),
         lastUpdateDate: autoLastUpdateDate,
         pieceObservation: finalPieceObs,
+        observacao_peca: finalPieceObs,
+        observacao: finalPieceObs,
         scrapObservation: scrapObservation.trim(),
+        observacao_sucata: scrapObservation.trim(),
         monthYear: derivedMonthYear,
         createdAt: new Date().toLocaleString("pt-BR"),
         registeredBy: user.name || user.ownerName || "Almoxarife",
+        anexo_url: base64Anexo,
         anexo_base64: base64Anexo,
         arquivo_base64: base64Anexo,
         anexo_nome: nomeAnexo,
@@ -1190,6 +1225,28 @@ export default function AlmoxarifeGarantia({
                   );
                 }
 
+                if (field.id === "notaFiscal") {
+                  if (garantiaConfig.notaFiscal === false) return null;
+                  return (
+                    <div key="notaFiscal" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Número da Nota Fiscal{isReq && <span className="text-[#F11E26]"> *</span>}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 123456"
+                        value={notaFiscal}
+                        onChange={(e) => {
+                          setNotaFiscal(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, notaFiscal: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
+                      />
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
+                    </div>
+                  );
+                }
+
                 if (field.id === "nfEmissionDate") {
                   if (garantiaConfig.nfEmissionDate === false) return null;
                   return (
@@ -1232,6 +1289,50 @@ export default function AlmoxarifeGarantia({
                         onChange={(e) => {
                           setReference(e.target.value);
                           if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, reference: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
+                      />
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
+                    </div>
+                  );
+                }
+
+                if (field.id === "veiculo") {
+                  if (garantiaConfig.veiculo === false) return null;
+                  return (
+                    <div key="veiculo" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Veículo{isReq && <span className="text-[#F11E26]"> *</span>}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: V-102"
+                        value={veiculo}
+                        onChange={(e) => {
+                          setVeiculo(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, veiculo: "" }));
+                        }}
+                        className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
+                      />
+                      {fieldErr && <p className="text-[12px] text-[#F11E26] font-medium mt-0.5">{fieldErr}</p>}
+                    </div>
+                  );
+                }
+
+                if (field.id === "localizacao") {
+                  if (garantiaConfig.localizacao === false) return null;
+                  return (
+                    <div key="localizacao" className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-[#1B2A4A]">
+                        Localização{isReq && <span className="text-[#F11E26]"> *</span>}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Prateleira A2"
+                        value={localizacao}
+                        onChange={(e) => {
+                          setLocalizacao(e.target.value);
+                          if (e.target.value.trim()) setFieldErrors((prev) => ({ ...prev, localizacao: "" }));
                         }}
                         className={`w-full border ${fieldErr ? "border-[#F11E26]" : "border-slate-200"} rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                       />

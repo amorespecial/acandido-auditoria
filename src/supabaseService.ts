@@ -1532,15 +1532,13 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     console.warn("Retrying dbSalvarGarantia with safe payload without optional/large attachment columns:", error.message);
     const safePayload = { ...payload };
     delete safePayload.anexo_url;
-    delete safePayload.veiculo;
-    delete safePayload.localizacao;
 
     const retry = await supabase.from('garantias').upsert(safePayload).select();
     data = retry.data;
     error = retry.error;
 
     if (error) {
-      console.warn("Retrying dbSalvarGarantia with core minimal fields:", error.message);
+      console.warn("Retrying dbSalvarGarantia with core fields:", error.message);
       const corePayload: any = {
         almoxarifado: garantia.almoxarifado || "",
         mes: mesNum,
@@ -1552,6 +1550,8 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
         data_emissao_nf: garantia.data_emissao_nf || garantia.data_nf || garantia.nfEmissionDate || null,
         referencia_item: garantia.referencia_item || garantia.referencia || garantia.reference || null,
         nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
+        veiculo: garantia.veiculo || null,
+        localizacao: garantia.localizacao || null,
         observacao: obsPeca,
         observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null
       };
