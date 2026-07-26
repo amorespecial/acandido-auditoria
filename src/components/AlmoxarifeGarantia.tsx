@@ -710,7 +710,7 @@ export default function AlmoxarifeGarantia({
   }, {} as Record<string, number>);
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6" id="almoxarife-garantia-view">
+    <div className="w-full max-w-full space-y-6" id="almoxarife-garantia-view">
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -988,7 +988,7 @@ export default function AlmoxarifeGarantia({
       <div className="py-2 border-t border-slate-100 mt-4"></div>
 
       {/* MONTHLY SUMMARY CARD PANEL - REPOSITIONED BELOW THE TABLE */}
-      <div className="bg-white border border-slate-150 rounded-xl p-6 shadow-sm max-w-2xl font-sans" id="resumo-da-garantia">
+      <div className="bg-white border border-slate-150 rounded-xl p-6 shadow-sm w-full font-sans" id="resumo-da-garantia">
         <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4">
           <span className="material-symbols-outlined text-[#1B2A4A] text-[20px] select-none">analytics</span>
           <h4 className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">
@@ -1020,7 +1020,7 @@ export default function AlmoxarifeGarantia({
           </p>
 
           {Object.keys(itemCounts).length > 0 ? (
-            <div className="border border-slate-150 rounded-lg overflow-hidden bg-white max-w-xl shadow-3xs">
+            <div className="border border-slate-150 rounded-lg overflow-hidden bg-white w-full shadow-3xs">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 uppercase tracking-[0.05em] text-[9px] border-b border-slate-150">

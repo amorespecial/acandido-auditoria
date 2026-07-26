@@ -291,7 +291,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
   };
 
   return (
-    <div className="max-w-xl mx-auto space-y-6" id="almoxarife-nivel-servico-unificado">
+    <div className="w-full max-w-full space-y-6" id="almoxarife-nivel-servico-unificado">
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-slate-100 audit-card-shadow">
         <div className="flex items-center gap-3">

@@ -2398,7 +2398,11 @@ export default function App() {
 
         {/* ================= ALMOXARIFE VIEW CONTENT ================= */}
         {user.role === "ALMOXARIFE" && (
-          <div className="max-w-md mx-auto relative">
+          <div className={
+            (activeSubscreen === "NIVEL_SERVICO" || activeSubscreen === "CONTROLE_GARANTIA" || activeSubscreen === "HISTORICO" || (!activeSubscreen && (almoxarifeTab === "NIVEL_SERVICO" || almoxarifeTab === "GARANTIA" || almoxarifeTab === "HISTORICO")))
+              ? "w-full max-w-full relative"
+              : "max-w-md mx-auto relative"
+          }>
             {activeSubscreen ? (
               <>
                 {activeSubscreen === "CONTAGEM_TOP10" && (
