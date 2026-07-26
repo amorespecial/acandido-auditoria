@@ -1487,7 +1487,7 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   const spaceParts = (garantia.monthYear || `${garantia.mes || ''} ${garantia.ano || ''}`).trim().split(' ');
   const mesName = spaceParts[0] || "Janeiro";
   const anoNum = parseInt(spaceParts[1] || "2026", 10) || 2026;
-  const mesNum = garantiaMonthToNum(mesName);
+  const mesNum = typeof garantia.mes === "number" ? garantia.mes : garantiaMonthToNum(mesName);
 
   const fullItem = (garantia.itemCode || garantia.item_code)
     ? `${garantia.itemCode || garantia.item_code} - ${garantia.itemDescription || garantia.item_description || ''}`
@@ -1521,14 +1521,48 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   }
 
   let { data, error } = await supabase.from('garantias').upsert(payload).select();
-  if (error && error.message && error.message.toLowerCase().includes("column")) {
-    delete payload.anexo_base64;
-    delete payload.arquivo_base64;
-    const retry = await supabase.from('garantias').upsert(payload).select();
+
+  if (error) {
+    console.warn("Retrying dbSalvarGarantia with safe payload without heavy base64/optional columns:", error.message);
+    const safePayload = { ...payload };
+    delete safePayload.anexo_base64;
+    delete safePayload.arquivo_base64;
+    delete safePayload.anexo_url;
+    delete safePayload.veiculo;
+    delete safePayload.localizacao;
+
+    const retry = await supabase.from('garantias').upsert(safePayload).select();
     data = retry.data;
     error = retry.error;
+
+    if (error) {
+      console.warn("Retrying dbSalvarGarantia with core minimal fields:", error.message);
+      const corePayload: any = {
+        almoxarifado: garantia.almoxarifado || "",
+        mes: mesNum,
+        ano: anoNum,
+        item: fullItem,
+        fabricante: garantia.fabricante || garantia.manufacturer || "",
+        garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
+        registrado_por: garantia.registrado_por || garantia.registeredBy || null,
+        data_emissao_nf: garantia.data_emissao_nf || garantia.nfEmissionDate || null,
+        referencia_item: garantia.referencia_item || garantia.reference || null,
+        nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
+        observacao_peca: garantia.observacao_peca || garantia.pieceObservation || null,
+        observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null
+      };
+      if (payload.id) corePayload.id = payload.id;
+      const retryCore = await supabase.from('garantias').upsert(corePayload).select();
+      data = retryCore.data;
+      error = retryCore.error;
+    }
   }
-  if (error) throw error;
+
+  if (error) {
+    console.error("Erro fatal ao salvar garantia no Supabase:", error);
+    throw new Error(error.message || "Erro de conexão ao salvar garantia");
+  }
+
   return data?.[0];
 }
 
@@ -1547,10 +1581,16 @@ export async function dbBuscarGarantias(almoxarifado: string, mes: string | numb
 
 export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('garantias')
     .select('*')
     .order('registrado_em', { ascending: false });
+
+  if (error) {
+    const retry = await supabase.from('garantias').select('*');
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error || !data) {
     console.error("Error fetching warranties from Supabase:", error);
@@ -1558,19 +1598,21 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   }
 
   return data.map((item) => {
-    let itemCode = item.item_code || "";
-    let itemDescription = item.item || item.item_description || "";
+    let itemCode = item.item_code || item.item_codigo || "";
+    let itemDescription = item.item || item.item_description || item.item_nome || "";
     if (item.item && item.item.includes(" - ")) {
       const parts = item.item.split(" - ");
       itemCode = parts[0].trim();
       itemDescription = parts.slice(1).join(" - ").trim();
     }
 
-    const monthName = garantiaNumToMonth(item.mes);
+    const monthName = item.mes ? (typeof item.mes === "number" ? garantiaNumToMonth(item.mes) : item.mes) : "Janeiro";
     const monthYear = item.mes && item.ano ? `${monthName} ${item.ano}` : (item.monthYear || "");
 
     const obsPeca = item.observacao_peca || item.pieceObservation || item.observacao || "";
     const obsSucata = item.observacao_sucata || item.scrap_observation || item.scrapObservation || "";
+
+    const branchName = item.almoxarifado || item.almoxarifado_id || "";
 
     return {
       ...item,
@@ -1579,11 +1621,11 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       itemDescription,
       manufacturer: item.fabricante || item.manufacturer || "",
       expiryDate: item.garantia_ate || item.warranty_expiry || "",
-      almoxarifado: item.almoxarifado || "",
-      nfEmissionDate: item.data_emissao_nf || item.nf_emission_date || "",
-      data_emissao_nf: item.data_emissao_nf || item.nf_emission_date || "",
-      reference: item.referencia_item || item.reference || "",
-      referencia_item: item.referencia_item || item.reference || "",
+      almoxarifado: branchName,
+      nfEmissionDate: item.data_emissao_nf || item.data_nf || item.nf_emission_date || "",
+      data_emissao_nf: item.data_emissao_nf || item.data_nf || item.nf_emission_date || "",
+      reference: item.referencia_item || item.referencia || item.reference || "",
+      referencia_item: item.referencia_item || item.referencia || item.reference || "",
       notaFiscal: item.nota_fiscal || item.notaFiscal || "",
       nota_fiscal: item.nota_fiscal || item.notaFiscal || "",
       veiculo: item.veiculo || "",
@@ -1597,8 +1639,8 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       arquivo_base64: item.arquivo_base64 || item.anexo_base64 || item.anexo_url || "",
       registeredBy: item.registrado_por || item.registeredBy || "",
       monthYear,
-      lastUpdateDate: item.registrado_em ? item.registrado_em.split("T")[0] : "",
-      createdAt: item.registrado_em ? new Date(item.registrado_em).toLocaleString("pt-BR") : ""
+      lastUpdateDate: item.registrado_em ? String(item.registrado_em).split("T")[0] : (item.created_at ? String(item.created_at).split("T")[0] : ""),
+      createdAt: item.registrado_em ? new Date(item.registrado_em).toLocaleString("pt-BR") : (item.created_at ? new Date(item.created_at).toLocaleString("pt-BR") : "")
     };
   });
 };

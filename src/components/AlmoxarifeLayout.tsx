@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CriterionState } from "../types";
 import { dbFetchLayoutConfig, dbFetchLayoutFieldConfig, isSupabaseReady } from "../supabaseService";
-import { getOrderedFields, BUILTIN_LAYOUT_FIELDS } from "../utils/fieldOrdering";
+import { getOrderedFields, BUILTIN_LAYOUT_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeLayoutProps {
   onBack: () => void;
@@ -138,16 +138,25 @@ export default function AlmoxarifeLayout({
     };
   }, []);
 
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+
   const handleConfirmSubmission = (e: React.FormEvent) => {
     e.preventDefault();
-    if (layoutFieldsConfig.fotos !== false && photos.length === 0) {
-      alert("Por favor, adicione pelo menos 1 foto antes de enviar.");
+    setShowFieldErrors(true);
+
+    const isFotosReq = isFieldRequired({ id: "fotos", name: "Evidência Fotográfica", builtIn: true }, layoutFieldsConfig);
+    if (isFotosReq && photos.length === 0) {
       return;
     }
+
+    const isComentarioReq = isFieldRequired({ id: "comentario", name: "Comentários do Almoxarife", builtIn: true }, layoutFieldsConfig);
+    if (isComentarioReq && !commentInput.trim()) {
+      return;
+    }
+
     if (layoutFieldsConfig.customFields && layoutFieldsConfig.customFields.length > 0) {
-      const missingReq = layoutFieldsConfig.customFields.find((cf: any) => cf.required && !customFormValues[cf.id]?.trim());
+      const missingReq = layoutFieldsConfig.customFields.find((cf: any) => isFieldRequired(cf, layoutFieldsConfig) && !customFormValues[cf.id]?.trim());
       if (missingReq) {
-        alert(`O campo "${missingReq.name}" é obrigatório.`);
         return;
       }
     }
@@ -222,10 +231,14 @@ export default function AlmoxarifeLayout({
 
           if (field.id === "fotos") {
             if (layoutFieldsConfig.fotos === false) return null;
+            const isFotosReq = isFieldRequired({ id: "fotos", name: "Anexar Foto de Evidência", builtIn: true }, layoutFieldsConfig);
+            const hasFotosErr = isFotosReq && photos.length === 0 && showFieldErrors;
             return (
               <div key="fotos" className="space-y-3 font-sans">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 uppercase tracking-wider">Mídia Enviada</span>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider">
+                    Mídia Enviada{isFotosReq && <span className="text-[#F11E26]"> *</span>}
+                  </span>
                   <span className="font-black text-[#1B2A4A] bg-slate-100 px-2.5 py-1 rounded-full font-mono text-[10px]">
                     {photos.length} de 5 fotos anexadas
                   </span>
@@ -259,7 +272,7 @@ export default function AlmoxarifeLayout({
                   {/* "+ Adicionar Foto" button as slot */}
                   {photos.length < 5 && (
                     <div className="flex flex-col gap-2">
-                      <label className="bg-white border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#1B2A4A] hover:bg-slate-50/50 transition-all select-none aspect-square p-2 min-h-[140px]">
+                      <label className={`bg-white border-2 border-dashed ${hasFotosErr ? "border-[#F11E26]" : "border-slate-300"} rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#1B2A4A] hover:bg-slate-50/50 transition-all select-none aspect-square p-2 min-h-[140px]`}>
                         <input
                           type="file"
                           multiple
@@ -278,39 +291,50 @@ export default function AlmoxarifeLayout({
                     </div>
                   )}
                 </div>
+                {hasFotosErr && (
+                  <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
+                )}
               </div>
             );
           }
 
           if (field.id === "comentario") {
             if (layoutFieldsConfig.comentario === false) return null;
+            const isComentarioReq = isFieldRequired({ id: "comentario", name: "Comentários do Almoxarife", builtIn: true }, layoutFieldsConfig);
+            const hasComentarioErr = isComentarioReq && !commentInput.trim() && showFieldErrors;
             return (
               <div key="comentario" className="space-y-2 font-sans">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                  Comentários do Almoxarife
+                  Comentários do Almoxarife{isComentarioReq && <span className="text-[#F11E26]"> *</span>}
                 </label>
                 <textarea
                   rows={3}
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
                   placeholder="Descreva o status da sua organização física ou informe caso precise de porta-etiquetas ou fitas demarcadoras..."
-                  className="w-full border border-slate-200 bg-white rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700"
+                  className={`w-full border ${hasComentarioErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-3 text-xs focus:outline-none focus:border-[#1B2A4A] text-slate-700`}
                 ></textarea>
+                {hasComentarioErr && (
+                  <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
+                )}
               </div>
             );
           }
 
           if (!field.builtIn) {
+            const isCFReq = isFieldRequired(field, layoutFieldsConfig);
+            const val = customFormValues[field.id] || "";
+            const hasCFErr = isCFReq && !val.trim() && showFieldErrors;
             return (
               <div key={field.id} className="space-y-1 font-sans">
                 <label className="text-xs font-bold text-[#1B2A4A] block">
-                  {field.name} {field.required && "*"}
+                  {field.name}{isCFReq && <span className="text-[#F11E26]"> *</span>}
                 </label>
                 {field.type === "select" ? (
                   <select
-                    value={customFormValues[field.id] || ""}
+                    value={val}
                     onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
-                    className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                    className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                   >
                     <option value="">— Selecione —</option>
                     {(field.options || []).map((opt: string) => (
@@ -320,11 +344,14 @@ export default function AlmoxarifeLayout({
                 ) : (
                   <input
                     type={field.type === "number" ? "number" : "text"}
-                    value={customFormValues[field.id] || ""}
+                    value={val}
                     onChange={(e) => setCustomFormValues(prev => ({ ...prev, [field.id]: e.target.value }))}
                     placeholder={`Digite ${field.name}`}
-                    className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]"
+                    className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1B2A4A]`}
                   />
+                )}
+                {hasCFErr && (
+                  <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
                 )}
               </div>
             );

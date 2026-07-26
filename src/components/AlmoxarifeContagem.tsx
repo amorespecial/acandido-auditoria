@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
 import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady } from "../supabaseService";
-import { getOrderedFields, BUILTIN_TOP10_FIELDS } from "../utils/fieldOrdering";
+import { getOrderedFields, BUILTIN_TOP10_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeContagemProps {
   onBack: () => void;
@@ -170,15 +170,19 @@ export default function AlmoxarifeContagem({
   // Drag and drop states per item code
   const [isDragging, setIsDragging] = useState<Record<string, boolean>>({});
 
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+
   const filledPhotosCount = items.filter((it: any) => !!uploadedPhotos[it.code]).length;
   const isSubmitBtnAllowed = totalItemsCount > 0 && 
     items.every((it: any) => {
-      const photoOk = top10Config.foto === false || !!uploadedPhotos[it.code];
-      const qtyOk = top10Config.quantidade === false || (quantities[it.code] !== undefined && quantities[it.code].trim() !== "");
+      const isPhotoReq = isFieldRequired({ id: "foto", name: "Anexar Foto de Evidência", builtIn: true }, top10Config);
+      const photoOk = !isPhotoReq || !!uploadedPhotos[it.code];
+      const isQtyReq = isFieldRequired({ id: "quantidade", name: "Quantidade Física Encontrada", builtIn: true }, top10Config);
+      const qtyOk = !isQtyReq || (quantities[it.code] !== undefined && quantities[it.code].trim() !== "");
       let customOk = true;
       if (top10Config.customFields && top10Config.customFields.length > 0) {
         const itemVals = customFormValues[it.code] || {};
-        const missingReq = top10Config.customFields.find((cf: any) => cf.required && !itemVals[cf.id]?.trim());
+        const missingReq = top10Config.customFields.find((cf: any) => isFieldRequired(cf, top10Config) && !itemVals[cf.id]?.trim());
         if (missingReq) customOk = false;
       }
       return photoOk && qtyOk && customOk;
@@ -508,46 +512,55 @@ export default function AlmoxarifeContagem({
                         {getOrderedFields(top10Config, BUILTIN_TOP10_FIELDS).map((field) => {
                           if (field.id === "quantidade") {
                             if (top10Config.quantidade === false) return null;
+                            const isQtyReq = isFieldRequired({ id: "quantidade", name: "Quantidade Física Encontrada", builtIn: true }, top10Config);
+                            const val = quantities[item.code] || "";
+                            const hasQtyErr = isQtyReq && !val.trim() && showFieldErrors;
                             return (
                               <div key="quantidade" className="space-y-1 mt-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                                  Qtd Física no Estoque:
+                                  Qtd Física no Estoque{isQtyReq && <span className="text-[#F11E26]"> *</span>}:
                                 </label>
                                 <input
                                   type="number"
                                   min="0"
                                   placeholder="Digite a quantidade encontrada"
-                                  value={quantities[item.code] || ""}
+                                  value={val}
                                   onChange={(e) => {
-                                    const val = e.target.value;
+                                    const value = e.target.value;
                                     setQuantities((prev) => ({
                                       ...prev,
-                                      [item.code]: val
+                                      [item.code]: value
                                     }));
                                   }}
-                                  className="w-full border border-slate-200 bg-white rounded-lg p-2 text-xs focus:outline-none focus:border-[#1B2A4A] font-bold"
+                                  className={`w-full border ${hasQtyErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-2 text-xs focus:outline-none focus:border-[#1B2A4A] font-bold`}
                                 />
+                                {hasQtyErr && (
+                                  <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
+                                )}
                               </div>
                             );
                           }
 
                           if (!field.builtIn) {
+                            const isCFReq = isFieldRequired(field, top10Config);
+                            const val = customFormValues[item.code]?.[field.id] || "";
+                            const hasCFErr = isCFReq && !val.trim() && showFieldErrors;
                             return (
                               <div key={field.id} className="space-y-1 mt-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                                  {field.name} {field.required && "*"}
+                                  {field.name}{isCFReq && <span className="text-[#F11E26]"> *</span>}
                                 </label>
                                 {field.type === "select" ? (
                                   <select
-                                    value={customFormValues[item.code]?.[field.id] || ""}
+                                    value={val}
                                     onChange={(e) => {
-                                      const val = e.target.value;
+                                      const value = e.target.value;
                                       setCustomFormValues(prev => ({
                                         ...prev,
-                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: val }
+                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: value }
                                       }));
                                     }}
-                                    className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                                    className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-1.5 text-xs font-bold`}
                                   >
                                     <option value="">— Selecione —</option>
                                     {(field.options || []).map((opt: string) => (
@@ -557,17 +570,20 @@ export default function AlmoxarifeContagem({
                                 ) : (
                                   <input
                                     type={field.type === "number" ? "number" : "text"}
-                                    value={customFormValues[item.code]?.[field.id] || ""}
+                                    value={val}
                                     onChange={(e) => {
-                                      const val = e.target.value;
+                                      const value = e.target.value;
                                       setCustomFormValues(prev => ({
                                         ...prev,
-                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: val }
+                                        [item.code]: { ...(prev[item.code] || {}), [field.id]: value }
                                       }));
                                     }}
                                     placeholder={`Digite ${field.name}`}
-                                    className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                                    className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-1.5 text-xs font-bold`}
                                   />
+                                )}
+                                {hasCFErr && (
+                                  <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
                                 )}
                               </div>
                             );
@@ -578,39 +594,46 @@ export default function AlmoxarifeContagem({
                       </div>
 
                       {/* Right panel - Photo Upload Slot */}
-                      {top10Config.foto !== false && (
-                        <div className="shrink-0 pt-1">
-                          {photoData ? (
-                            <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-250 bg-slate-50 group shadow-xs">
-                              <img src={photoData} alt="Thumb" className="w-full h-full object-cover" />
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePhoto(item.code)}
-                                className="absolute inset-0 bg-red-800/80 hover:bg-red-900/90 text-white flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition duration-150 select-none"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">delete</span>
-                                Remover
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-end gap-1.5">
-                              <label className="h-9 px-3.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 cursor-pointer rounded-lg text-[10.5px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1 relative shadow-3xs active:scale-95 transition-all select-none">
-                                <span className="material-symbols-outlined text-[15px]">add_a_photo</span>
-                                Anexar
-                                <input
-                                  type="file"
-                                  accept="image/*,application/pdf"
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) processFile(item.code, f);
-                                  }}
-                                  className="hidden"
-                                />
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {top10Config.foto !== false && (() => {
+                        const isFotoReq = isFieldRequired({ id: "foto", name: "Anexar Foto de Evidência", builtIn: true }, top10Config);
+                        const hasFotoErr = isFotoReq && !photoData && showFieldErrors;
+                        return (
+                          <div className="shrink-0 pt-1">
+                            {photoData ? (
+                              <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-250 bg-slate-50 group shadow-xs">
+                                <img src={photoData} alt="Thumb" className="w-full h-full object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePhoto(item.code)}
+                                  className="absolute inset-0 bg-red-800/80 hover:bg-red-900/90 text-white flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition duration-150 select-none"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">delete</span>
+                                  Remover
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-end gap-1">
+                                <label className={`h-9 px-3.5 bg-indigo-50 border ${hasFotoErr ? "border-[#F11E26]" : "border-indigo-200"} hover:bg-indigo-100 cursor-pointer rounded-lg text-[10.5px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1 relative shadow-3xs active:scale-95 transition-all select-none`}>
+                                  <span className="material-symbols-outlined text-[15px]">add_a_photo</span>
+                                  Anexar{isFotoReq && <span className="text-[#F11E26]"> *</span>}
+                                  <input
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) processFile(item.code, f);
+                                    }}
+                                    className="hidden"
+                                  />
+                                </label>
+                                {hasFotoErr && (
+                                  <p className="text-[10px] text-[#F11E26] font-medium text-right">Este campo é obrigatório</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );

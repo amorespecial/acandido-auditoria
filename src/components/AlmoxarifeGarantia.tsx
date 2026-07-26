@@ -489,20 +489,26 @@ export default function AlmoxarifeGarantia({
     : `${activeMonth} ${activeYear}`;
 
   const persistChange = async (updated: WarrantyItem[]) => {
-    setWarranties(updated);
-    localStorage.setItem("acandido_warranties", JSON.stringify(updated));
     if (isSupabaseReady()) {
       try {
         await dbSaveWarranties(updated);
         const freshData = await dbFetchWarranties();
-        if (Array.isArray(freshData)) {
+        if (Array.isArray(freshData) && freshData.length > 0) {
           setWarranties(freshData);
           localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
+        } else {
+          setWarranties(updated);
+          localStorage.setItem("acandido_warranties", JSON.stringify(updated));
         }
         window.dispatchEvent(new Event("realtime-garantias-update"));
-      } catch (err) {
-        console.error("Error saving warranties to Supabase in AlmoxarifeGarantia:", err);
+      } catch (err: any) {
+        console.error("Erro ao salvar garantia no Supabase:", err);
+        alert("Erro ao salvar garantia no Supabase: " + (err?.message || "Erro de conexão ao banco de dados"));
+        return;
       }
+    } else {
+      setWarranties(updated);
+      localStorage.setItem("acandido_warranties", JSON.stringify(updated));
     }
   };
 
@@ -621,8 +627,7 @@ export default function AlmoxarifeGarantia({
       }
 
       if (!val || !val.trim() || val === "— Selecione uma opção —") {
-        const fieldName = f.name || "campo";
-        newErrors[f.id] = `O campo ${fieldName} é obrigatório`;
+        newErrors[f.id] = "Este campo é obrigatório";
         hasError = true;
       }
     });
@@ -1162,7 +1167,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="fabricante" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Fabricante{isReq ? " *" : ""}
+                        Fabricante{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <select
                         value={selectedManufacturer}
@@ -1190,7 +1195,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="nfEmissionDate" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Data de Emissão da NF{isReq ? " *" : ""}
+                        Data de Emissão da NF{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <input
                         type="date"
@@ -1218,7 +1223,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="reference" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Referência do Item{isReq ? " *" : ""}
+                        Referência do Item{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <input
                         type="text"
@@ -1240,7 +1245,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="pieceObservation" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Observação da Peça{isReq ? " *" : ""}
+                        Observação da Peça{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <textarea
                         rows={2}
@@ -1262,7 +1267,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key="scrapObservation" className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        Observação de Sucata{isReq ? " *" : ""}
+                        Observação de Sucata{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       <input
                         type="text"
@@ -1284,7 +1289,7 @@ export default function AlmoxarifeGarantia({
                   return (
                     <div key={field.id} className="flex flex-col gap-1">
                       <label className="text-xs font-bold text-[#1B2A4A]">
-                        {field.name}{isReq ? " *" : ""}
+                        {field.name}{isReq && <span className="text-[#F11E26]"> *</span>}
                       </label>
                       {field.type === "select" ? (
                         <select

@@ -38,6 +38,7 @@ import {
   BUILTIN_TOP10_FIELDS,
   BUILTIN_LAYOUT_FIELDS,
   BUILTIN_UNIMOBIN_FIELDS,
+  isFieldRequired,
 } from "../utils/fieldOrdering";
 
 const ALMOXARIFADOS_LIST = [
@@ -587,6 +588,33 @@ export default function AdminConfiguracoes({
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("field-configs-updated"));
   }, [unimobinConfig]);
+
+  useEffect(() => {
+    const buildCriterioObj = (config: any, builtinFields: any[]) => {
+      const fields = getOrderedFields(config, builtinFields);
+      const obj: Record<string, { exibir: boolean; obrigatorio: boolean }> = {};
+      fields.forEach((f: any) => {
+        let exibir = true;
+        if (config && f.id in config) {
+          exibir = config[f.id] !== false;
+        } else if (f.enabled !== undefined) {
+          exibir = f.enabled !== false;
+        }
+        const obrigatorio = isFieldRequired(f, config);
+        obj[f.id] = { exibir, obrigatorio };
+      });
+      return obj;
+    };
+
+    const camposConfig = {
+      garantia: buildCriterioObj(garantiaConfig, BUILTIN_GARANTIA_FIELDS),
+      top10: buildCriterioObj(top10Config, BUILTIN_TOP10_FIELDS),
+      layout: buildCriterioObj(layoutConfig, BUILTIN_LAYOUT_FIELDS),
+      unimobin: buildCriterioObj(unimobinConfig, BUILTIN_UNIMOBIN_FIELDS),
+    };
+
+    localStorage.setItem("acandido_campos_config", JSON.stringify(camposConfig));
+  }, [garantiaConfig, top10Config, layoutConfig, unimobinConfig]);
 
   // ================= STATE: USERS =================
   const [users, setUsers] = useState<AppUser[]>(() => {
@@ -2405,6 +2433,22 @@ export default function AdminConfiguracoes({
                   onToggleField={(fieldId, checked) =>
                     setTop10Config((prev: any) => ({ ...prev, [fieldId]: checked }))
                   }
+                  onToggleRequired={(fieldId, checked) =>
+                    setTop10Config((prev: any) => {
+                      const nextRequired = { ...(prev.requiredFields || {}), [fieldId]: checked };
+                      const nextCustom = (prev.customFields || []).map((cf: any) =>
+                        cf.id === fieldId ? { ...cf, required: checked, obrigatorio: checked } : cf
+                      );
+                      return {
+                        ...prev,
+                        requiredFields: nextRequired,
+                        customFields: nextCustom,
+                        [`${fieldId}_required`]: checked,
+                        ...(fieldId === "quantidade" ? { quantidadeRequired: checked } : {}),
+                        ...(fieldId === "foto" ? { fotoRequired: checked } : {}),
+                      };
+                    })
+                  }
                   onDeleteCustomField={(field) =>
                     setTop10Config((prev: any) => ({
                       ...prev,
@@ -2438,6 +2482,20 @@ export default function AdminConfiguracoes({
                   configState={layoutConfig}
                   onToggleField={(fieldId, checked) =>
                     setLayoutConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
+                  }
+                  onToggleRequired={(fieldId, checked) =>
+                    setLayoutConfig((prev: any) => {
+                      const nextRequired = { ...(prev.requiredFields || {}), [fieldId]: checked };
+                      const nextCustom = (prev.customFields || []).map((cf: any) =>
+                        cf.id === fieldId ? { ...cf, required: checked, obrigatorio: checked } : cf
+                      );
+                      return {
+                        ...prev,
+                        requiredFields: nextRequired,
+                        customFields: nextCustom,
+                        [`${fieldId}_required`]: checked,
+                      };
+                    })
                   }
                   onDeleteCustomField={(field) =>
                     setLayoutConfig((prev: any) => ({
@@ -2477,6 +2535,20 @@ export default function AdminConfiguracoes({
                   configState={unimobinConfig}
                   onToggleField={(fieldId, checked) =>
                     setUnimobinConfig((prev: any) => ({ ...prev, [fieldId]: checked }))
+                  }
+                  onToggleRequired={(fieldId, checked) =>
+                    setUnimobinConfig((prev: any) => {
+                      const nextRequired = { ...(prev.requiredFields || {}), [fieldId]: checked };
+                      const nextCustom = (prev.customFields || []).map((cf: any) =>
+                        cf.id === fieldId ? { ...cf, required: checked, obrigatorio: checked } : cf
+                      );
+                      return {
+                        ...prev,
+                        requiredFields: nextRequired,
+                        customFields: nextCustom,
+                        [`${fieldId}_required`]: checked,
+                      };
+                    })
                   }
                   onDeleteCustomField={(field) =>
                     setUnimobinConfig((prev: any) => ({

@@ -156,26 +156,37 @@ export function DraggableFieldList({
                   </label>
                 )}
 
-                {/* Required toggle checkbox */}
+                {/* Required toggle checkbox / badge */}
                 {onToggleRequired && (
-                  <label className={`flex items-center gap-1.5 cursor-pointer select-none px-2 py-1 rounded border transition-colors ${
-                    isReq
-                      ? "bg-amber-50 border-amber-200 text-amber-900"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={isReq}
-                      onChange={(e) => onToggleRequired(field.id, e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  <button
+                    type="button"
+                    disabled={!isEnabled}
+                    onClick={() => {
+                      if (isEnabled) {
+                        onToggleRequired(field.id, !isReq);
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-extrabold transition-all select-none ${
+                      !isEnabled
+                        ? "opacity-40 cursor-not-allowed bg-slate-100 border-slate-200 text-[#94A3B8]"
+                        : isReq
+                        ? "bg-emerald-50 border-[#16A34A] text-[#16A34A] hover:bg-emerald-100 cursor-pointer shadow-3xs"
+                        : "bg-slate-50 border-slate-200 text-[#94A3B8] hover:bg-slate-100 cursor-pointer"
+                    }`}
+                    title={
+                      !isEnabled
+                        ? "Habilite 'Exibir' para alterar se é obrigatório"
+                        : isReq
+                        ? "Clique para tornar Opcional"
+                        : "Clique para tornar Obrigatório"
+                    }
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: !isEnabled ? "#94A3B8" : isReq ? "#16A34A" : "#94A3B8" }}
                     />
-                    <span className="text-[9.5px] font-extrabold uppercase tracking-wider font-sans flex items-center gap-1">
-                      <span className={isReq ? "text-amber-600 font-black text-xs" : "text-slate-400 font-black text-xs"}>
-                        {isReq ? "●" : "○"}
-                      </span>
-                      Obrigatório
-                    </span>
-                  </label>
+                    <span>{isReq ? "Obrigatório" : "Opcional"}</span>
+                  </button>
                 )}
 
                 {/* Move Up / Down Buttons */}

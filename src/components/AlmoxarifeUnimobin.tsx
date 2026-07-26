@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
 import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, isSupabaseReady } from "../supabaseService";
-import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS } from "../utils/fieldOrdering";
+import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeUnimobinProps {
   onBack: () => void;
@@ -319,7 +319,28 @@ export default function AlmoxarifeUnimobin({
     }
   };
 
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+
   const handleCompleteSend = async () => {
+    setShowFieldErrors(true);
+
+    const isCertReq = isFieldRequired({ id: "certificado", name: "Certificado", builtIn: true }, unimobinConfig);
+    if (isCertReq) {
+      const missingCert = certs.some((c) => c.status !== "Certificado enviado" || !c.fileName);
+      if (missingCert) {
+        return;
+      }
+    }
+
+    if (unimobinConfig.customFields && unimobinConfig.customFields.length > 0) {
+      const missingCustom = certs.some((c) =>
+        unimobinConfig.customFields.some((cf: any) => isFieldRequired(cf, unimobinConfig) && !customFormValues[c.id]?.[cf.id]?.trim())
+      );
+      if (missingCustom) {
+        return;
+      }
+    }
+
     setIsSending(true);
     try {
       if (isSupabaseReady() && branchId) {
@@ -410,6 +431,8 @@ export default function AlmoxarifeUnimobin({
                 {getOrderedFields(unimobinConfig, BUILTIN_UNIMOBIN_FIELDS).map((field) => {
                   if (field.id === "certificado") {
                     if (unimobinConfig.certificado === false) return null;
+                    const isCertReq = isFieldRequired({ id: "certificado", name: "Certificado", builtIn: true }, unimobinConfig);
+                    const hasCertErr = isCertReq && !hasFile && showFieldErrors;
                     return (
                       <React.Fragment key="certificado">
                         {hasFile ? (
@@ -424,7 +447,7 @@ export default function AlmoxarifeUnimobin({
                               <button
                                 type="button"
                                 onClick={() => handleViewFile(c)}
-                                className="py-1 px-2.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-200 rounded text-[9.5px] font-bold transition-all transition-all"
+                                className="py-1 px-2.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-200 rounded text-[9.5px] font-bold transition-all"
                               >
                                 Visualizar
                               </button>
@@ -460,10 +483,10 @@ export default function AlmoxarifeUnimobin({
                         ) : (
                           <div>
                             {!isFinalized ? (
-                              <div className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-lg p-4 bg-slate-50 transition-all text-center flex flex-col items-center justify-center space-y-1.5">
+                              <div className={`border-2 border-dashed ${hasCertErr ? "border-[#F11E26]" : "border-slate-200"} hover:border-indigo-400 rounded-lg p-4 bg-slate-50 transition-all text-center flex flex-col items-center justify-center space-y-1.5`}>
                                 <span className="material-symbols-outlined text-[20px] text-slate-400">attach_file</span>
                                 <div className="text-[10px] text-slate-500 font-semibold leading-normal">
-                                  <p className="font-bold text-[#1B2A4A]">Anexar certificado do colaborador</p>
+                                  <p className="font-bold text-[#1B2A4A]">Anexar certificado do colaborador{isCertReq && <span className="text-[#F11E26]"> *</span>}</p>
                                   <p className="text-slate-400 text-[9px]">JPG, PNG ou PDF • máx. 10 MB</p>
                                 </div>
                                 <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-200 text-[#1B2A4A] py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block">
@@ -484,6 +507,9 @@ export default function AlmoxarifeUnimobin({
                                 Item bloqueado para edição (Auditado/Enviado)
                               </div>
                             )}
+                            {hasCertErr && (
+                              <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
+                            )}
                           </div>
                         )}
                       </React.Fragment>
@@ -491,22 +517,25 @@ export default function AlmoxarifeUnimobin({
                   }
 
                   if (!field.builtIn) {
+                    const isCFReq = isFieldRequired(field, unimobinConfig);
+                    const val = customFormValues[c.id]?.[field.id] || "";
+                    const hasCFErr = isCFReq && !val.trim() && showFieldErrors;
                     return (
                       <div key={field.id} className="space-y-1 mt-2">
                         <label className="text-[10px] font-extrabold text-[#1B2A4A] uppercase tracking-wider block">
-                          {field.name} {field.required && "*"}
+                          {field.name}{isCFReq && <span className="text-[#F11E26]"> *</span>}
                         </label>
                         {field.type === "select" ? (
                           <select
-                            value={customFormValues[c.id]?.[field.id] || ""}
+                            value={val}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const value = e.target.value;
                               setCustomFormValues(prev => ({
                                 ...prev,
-                                [c.id]: { ...(prev[c.id] || {}), [field.id]: val }
+                                [c.id]: { ...(prev[c.id] || {}), [field.id]: value }
                               }));
                             }}
-                            className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                            className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-1.5 text-xs font-bold`}
                           >
                             <option value="">— Selecione —</option>
                             {(field.options || []).map((opt: string) => (
@@ -516,17 +545,20 @@ export default function AlmoxarifeUnimobin({
                         ) : (
                           <input
                             type={field.type === "number" ? "number" : "text"}
-                            value={customFormValues[c.id]?.[field.id] || ""}
+                            value={val}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const value = e.target.value;
                               setCustomFormValues(prev => ({
                                 ...prev,
-                                [c.id]: { ...(prev[c.id] || {}), [field.id]: val }
+                                [c.id]: { ...(prev[c.id] || {}), [field.id]: value }
                               }));
                             }}
                             placeholder={`Digite ${field.name}`}
-                            className="w-full border border-slate-200 bg-white rounded-lg p-1.5 text-xs font-bold"
+                            className={`w-full border ${hasCFErr ? "border-[#F11E26]" : "border-slate-200"} bg-white rounded-lg p-1.5 text-xs font-bold`}
                           />
+                        )}
+                        {hasCFErr && (
+                          <p className="text-[11px] text-[#F11E26] font-medium mt-0.5">Este campo é obrigatório</p>
                         )}
                       </div>
                     );
