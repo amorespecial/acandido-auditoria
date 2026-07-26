@@ -11,6 +11,8 @@ import {
   dbFetchSchedules,
   dbFetchOccurrences,
   dbSaveOccurrences,
+  dbFetchWarranties,
+  dbSaveWarranties,
   dbMigrateUsersPasswords,
   MigrationReport,
   dbCleanupLegacyPlainPasswords,
@@ -629,13 +631,13 @@ export default function AdminConfiguracoes({
         // Fallback
       }
     }
-    // Prefill with OFFICIAL_CREDENTIALS
+    // Prefill initial system profiles
     return [
       {
         name: "Fernando Silva",
         role: "ADMIN" as const,
         email: "estoque01jp@gmail.com",
-        password: "33911386Fe@",
+        password: "",
         ownerName: "Fernando",
         group: "A" as const,
         cargo: "Auditor Geral",
@@ -646,7 +648,7 @@ export default function AdminConfiguracoes({
         name: "Natalice Oliveira",
         role: "ADMIN" as const,
         email: "estoquejp@acandidotransportes.com.br",
-        password: "Nathalia1",
+        password: "",
         ownerName: "Natalice Oliveira",
         group: "A" as const,
         cargo: "Auditor Geral",
@@ -657,7 +659,7 @@ export default function AdminConfiguracoes({
         name: "Robson",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadojp@acandidotransportes.com.br",
-        password: "almoxarifadojp",
+        password: "",
         ownerName: "Robson",
         group: "A" as const,
         cargo: "Almoxarife",
@@ -668,7 +670,7 @@ export default function AdminConfiguracoes({
         name: "Robson",
         role: "ALMOXARIFE" as const,
         email: "robson.almoxarife@acandidogrupo.com.br",
-        password: "Robson@Almox2026",
+        password: "",
         ownerName: "Robson Jaboatão",
         group: "A" as const,
         cargo: "Almoxarife Jaboatão",
@@ -679,7 +681,7 @@ export default function AdminConfiguracoes({
         name: "Muniz",
         role: "SUPERVISOR" as const,
         email: "muniz.jabo@acandidotransportes.com.br",
-        password: "jaboatão@2026",
+        password: "",
         ownerName: "Muniz",
         group: "A" as const,
         cargo: "Supervisor de Manutenção",
@@ -690,7 +692,7 @@ export default function AdminConfiguracoes({
         name: "Glebson",
         role: "SUPERVISOR" as const,
         email: "glebson.jabo@acandidotransportes.com.br",
-        password: "jab#2026",
+        password: "",
         ownerName: "Glebson",
         group: "A" as const,
         cargo: "Supervisor de Manutenção",
@@ -701,7 +703,7 @@ export default function AdminConfiguracoes({
         name: "Paulo",
         role: "ALMOXARIFE" as const,
         email: "comprascg@acandidotransportes.com.br",
-        password: "almoxarifadocg",
+        password: "",
         ownerName: "Paulo",
         group: "A" as const,
         cargo: "Almoxarife",
@@ -712,7 +714,7 @@ export default function AdminConfiguracoes({
         name: "Ezequiel",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadogo@transnacionalfretamento.com.br",
-        password: "almoxarifadogo",
+        password: "",
         ownerName: "Ezequiel",
         group: "A" as const,
         cargo: "Almoxarife",
@@ -723,7 +725,7 @@ export default function AdminConfiguracoes({
         name: "Sérgio",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadope01@transnacionalfretamento.com.br",
-        password: "fretamentope",
+        password: "",
         ownerName: "Sérgio",
         group: "A" as const,
         cargo: "Almoxarife",
@@ -734,7 +736,7 @@ export default function AdminConfiguracoes({
         name: "Raimundo",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadorn@acandidotransportes.com.br",
-        password: "almoxarifadorn",
+        password: "",
         ownerName: "Raimundo",
         group: "B" as const,
         cargo: "Almoxarife",
@@ -745,7 +747,7 @@ export default function AdminConfiguracoes({
         name: "Joel",
         role: "ALMOXARIFE" as const,
         email: "ti02rn@acandidotransportes.com.br",
-        password: "almoxarifado02",
+        password: "",
         ownerName: "Joel",
         group: "B" as const,
         cargo: "Almoxarife",
@@ -756,7 +758,7 @@ export default function AdminConfiguracoes({
         name: "Lucas",
         role: "ALMOXARIFE" as const,
         email: "fretamentojoaopessoa@gmail.com",
-        password: "fretamentojp@",
+        password: "",
         ownerName: "Lucas",
         group: "B" as const,
         cargo: "Almoxarife",
@@ -767,7 +769,7 @@ export default function AdminConfiguracoes({
         name: "Matheus",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadobayeux@rodoviarionordestino.com.br",
-        password: "almoxarifadorodo",
+        password: "",
         ownerName: "Matheus",
         group: "B" as const,
         cargo: "Almoxarife",
@@ -778,7 +780,7 @@ export default function AdminConfiguracoes({
         name: "Arline",
         role: "ALMOXARIFE" as const,
         email: "almoxarifadoce@transnacionalfretamento.com.br",
-        password: "fretamentoce",
+        password: "",
         ownerName: "Arline",
         group: "B" as const,
         cargo: "Almoxarife",
@@ -1098,7 +1100,7 @@ export default function AdminConfiguracoes({
         name: userForm.name.trim(),
         role: userForm.role,
         email: editingUser.email.toLowerCase().trim(),
-        password: userForm.password ? userForm.password : editingUser.password,
+        password: userForm.password || "",
         ownerName: userForm.name.trim().split(" ")[0],
         group: userForm.role === "ADMIN" ? "A" : userForm.group,
         almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
@@ -1308,62 +1310,46 @@ export default function AdminConfiguracoes({
     await dbSaveSchedules(updatedCal);
 
     // 3. Cascade rename inside active registered warranties list
-    const savedWarranties = localStorage.getItem("acandido_warranties");
-    if (savedWarranties) {
+    if (isSupabaseReady()) {
       try {
-        const warranties = JSON.parse(savedWarranties);
-        const updatedW = warranties.map((w: any) => {
-          if (w.almoxarifado && w.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
-            return { ...w, almoxarifado: newName };
-          }
-          return w;
-        });
-        localStorage.setItem("acandido_warranties", JSON.stringify(updatedW));
-      } catch (e) {}
+        const warranties = await dbFetchWarranties();
+        if (Array.isArray(warranties) && warranties.length > 0) {
+          const updatedW = warranties.map((w: any) => {
+            if (w.almoxarifado && w.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
+              return { ...w, almoxarifado: newName };
+            }
+            return w;
+          });
+          await dbSaveWarranties(updatedW);
+        }
+      } catch (e) {
+        console.error("Failed to update warranties on branch rename:", e);
+      }
     }
 
     // 4. Cascade rename inside supervisor occurrences list
-    let occurrencesList: any[] = [];
     if (isSupabaseReady()) {
       try {
-        occurrencesList = await dbFetchOccurrences();
-      } catch (err) {
-        console.error("Failed to fetch occurrences for cascade rename in AdminConfiguracoes:", err);
-      }
-    }
-    if (!occurrencesList || occurrencesList.length === 0) {
-      const savedOccs = localStorage.getItem("acandido_occurrences");
-      if (savedOccs) {
-        try {
-          occurrencesList = JSON.parse(savedOccs);
-        } catch (e) {}
-      }
-    }
-
-    if (occurrencesList && occurrencesList.length > 0) {
-      try {
-        const updatedO = occurrencesList.map((o: any) => {
-          let updatedItem = { ...o };
-          if (o.branchName?.toLowerCase() === oldName.toLowerCase()) {
-            updatedItem.branchName = newName;
-          }
-          if (o.filial?.toLowerCase() === oldName.toLowerCase()) {
-            updatedItem.filial = newName;
-          }
-          if (o.branchId?.toLowerCase() === oldName.toLowerCase()) {
-            updatedItem.branchId = newName;
-          }
-          return updatedItem;
-        });
-        localStorage.setItem("acandido_occurrences", JSON.stringify(updatedO));
-        if (isSupabaseReady()) {
-          try {
-            await dbSaveOccurrences(updatedO);
-          } catch (e) {
-            console.error("Failed to save updated occurrences on rename:", e);
-          }
+        const occurrencesList = await dbFetchOccurrences();
+        if (Array.isArray(occurrencesList) && occurrencesList.length > 0) {
+          const updatedO = occurrencesList.map((o: any) => {
+            let updatedItem = { ...o };
+            if (o.branchName?.toLowerCase() === oldName.toLowerCase()) {
+              updatedItem.branchName = newName;
+            }
+            if (o.filial?.toLowerCase() === oldName.toLowerCase()) {
+              updatedItem.filial = newName;
+            }
+            if (o.branchId?.toLowerCase() === oldName.toLowerCase()) {
+              updatedItem.branchId = newName;
+            }
+            return updatedItem;
+          });
+          await dbSaveOccurrences(updatedO);
         }
-      } catch (e) {}
+      } catch (err) {
+        console.error("Failed to update occurrences on branch rename:", err);
+      }
     }
 
     // Notify all listeners

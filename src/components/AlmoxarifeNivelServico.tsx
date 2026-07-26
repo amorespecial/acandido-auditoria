@@ -28,17 +28,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
   const isPresencial = isCriterionPresencial();
 
   // Load occurrences from localStorage of the shared state
-  const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(() => {
-    const saved = localStorage.getItem("acandido_occurrences");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return initialOccurrences;
-      }
-    }
-    return initialOccurrences;
-  });
+  const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(initialOccurrences);
 
   const [fields, setFields] = useState<any[]>(() => {
     try {
@@ -99,14 +89,6 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
     const handleStorageChange = () => {
       loadRemoteFields();
-      const saved = localStorage.getItem("acandido_occurrences");
-      if (saved) {
-        try {
-          setOccurrences(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to parse occurrences:", e);
-        }
-      }
 
       const savedFields = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
       if (savedFields) {
@@ -138,8 +120,6 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
           const dbOccs = await dbFetchOccurrences();
           if (dbOccs && dbOccs.length > 0) {
             setOccurrences(dbOccs);
-            localStorage.setItem("acandido_occurrences", JSON.stringify(dbOccs));
-            window.dispatchEvent(new Event("storage"));
           }
         } catch (e) {
           console.error("Failed to fetch occurrences from Supabase:", e);
@@ -167,7 +147,6 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   const persistChange = async (updated: MaterialOccurrence[]) => {
     setOccurrences(updated);
-    localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
     if (isSupabaseReady()) {
       try {
         await dbSaveOccurrences(updated);
@@ -274,7 +253,6 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
       onConfirm: async () => {
         const updated = occurrences.filter((o) => o.id !== id);
         setOccurrences(updated);
-        localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
 
         if (isSupabaseReady()) {
           try {

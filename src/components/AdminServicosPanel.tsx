@@ -53,33 +53,6 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
     };
   }, []);
 
-  // Listen to other tab changes, branch switching, or supervisor panel updates
-  useEffect(() => {
-    const handleStorageChange = () => {
-      const saved = localStorage.getItem("acandido_occurrences");
-      if (saved) {
-        try {
-          setOccurrences(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to parse occurrences:", e);
-        }
-      }
-    };
-    
-    // Trigger initially if stored in localStorage
-    const saved = localStorage.getItem("acandido_occurrences");
-    if (saved) {
-      try {
-        setOccurrences(JSON.parse(saved));
-      } catch {}
-    }
-
-    window.addEventListener("storage", handleStorageChange);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, []);
-
   const monthsList = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"

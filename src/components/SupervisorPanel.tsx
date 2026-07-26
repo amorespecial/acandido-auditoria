@@ -11,17 +11,7 @@ interface SupervisorPanelProps {
 
 export default function SupervisorPanel({ user, branches, onLogout }: SupervisorPanelProps) {
   // Load occurrences from localStorage to enable real-time coordination
-  const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(() => {
-    const saved = localStorage.getItem("acandido_occurrences");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return initialOccurrences;
-      }
-    }
-    return initialOccurrences;
-  });
+  const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(initialOccurrences);
 
   // Dynamic fields configured by Auditor
   const [fields, setFields] = useState<any[]>(() => {
@@ -76,14 +66,6 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
     const handleStorageChange = () => {
       loadRemoteFields();
-      const saved = localStorage.getItem("acandido_occurrences");
-      if (saved) {
-        try {
-          setOccurrences(JSON.parse(saved));
-        } catch (e) {
-          // ignore
-        }
-      }
 
       const savedFields = localStorage.getItem("acandido_supervisor_form_fields") || localStorage.getItem("acandido_supervisor_fields");
       if (savedFields) {
@@ -115,8 +97,6 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
           const dbOccs = await dbFetchOccurrences();
           if (dbOccs && dbOccs.length > 0) {
             setOccurrences(dbOccs);
-            localStorage.setItem("acandido_occurrences", JSON.stringify(dbOccs));
-            window.dispatchEvent(new Event("storage"));
           }
         } catch (e) {
           console.error("Failed to fetch occurrences from Supabase in SupervisorPanel:", e);
@@ -141,7 +121,6 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
 
   const saveOccurrences = async (updated: MaterialOccurrence[]) => {
     setOccurrences(updated);
-    localStorage.setItem("acandido_occurrences", JSON.stringify(updated));
     if (isSupabaseReady()) {
       try {
         await dbSaveOccurrences(updated);

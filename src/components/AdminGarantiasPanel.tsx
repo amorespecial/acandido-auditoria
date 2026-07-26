@@ -49,7 +49,6 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
       try {
         await dbDeleteWarranty(id);
         setWarranties((prev) => prev.filter((w) => w.id !== id));
-        localStorage.setItem("acandido_warranties", JSON.stringify(warranties.filter((w) => w.id !== id)));
         window.dispatchEvent(new Event("realtime-garantias-update"));
       } catch (e) {
         console.error("Erro ao excluir garantia:", e);
@@ -97,10 +96,6 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
       await dbSalvarGarantia(updatedItem);
 
       setWarranties((prev) => prev.map((w) => (w.id === editingWarranty.id ? updatedItem : w)));
-      localStorage.setItem(
-        "acandido_warranties",
-        JSON.stringify(warranties.map((w) => (w.id === editingWarranty.id ? updatedItem : w)))
-      );
       window.dispatchEvent(new Event("realtime-garantias-update"));
       setEditingWarranty(null);
       alert("Garantia atualizada com sucesso!");

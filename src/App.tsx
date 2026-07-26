@@ -81,7 +81,6 @@ export default function App() {
       
       // Clear all mock data keys
       localStorage.removeItem("acandido_cycle_configs3");
-      localStorage.removeItem("acandido_warranties");
       localStorage.removeItem("acandido_cycle_state_manual");
       localStorage.removeItem("acandido_all_cycles_list");
       localStorage.removeItem("acandido_calendario_inventarios");

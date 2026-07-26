@@ -251,10 +251,7 @@ export default function AlmoxarifeGarantia({
 
   const [presetItems, setPresetItems] = useState<Array<{ code: string; description: string }>>(() => getPresetItems());
   const [presetManufacturers, setPresetManufacturers] = useState<string[]>(() => getManufacturers());
-  const [warranties, setWarranties] = useState<WarrantyItem[]>(() => {
-    const saved = localStorage.getItem("acandido_warranties");
-    return saved ? JSON.parse(saved) : initialWarranties;
-  });
+  const [warranties, setWarranties] = useState<WarrantyItem[]>(initialWarranties);
 
   useEffect(() => {
     const loadWarrantiesData = async () => {
@@ -263,7 +260,6 @@ export default function AlmoxarifeGarantia({
           const dbData = await dbFetchWarranties();
           if (Array.isArray(dbData)) {
             setWarranties(dbData);
-            localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
           }
         } catch (e) {
           console.error("Error fetching warranties from Supabase in AlmoxarifeGarantia:", e);
@@ -277,11 +273,7 @@ export default function AlmoxarifeGarantia({
       if (customEvent.detail && customEvent.detail.table === "garantias") {
         if (customEvent.detail.eventType === "DELETE" && customEvent.detail.old?.id) {
           const deletedId = customEvent.detail.old.id;
-          setWarranties((prev) => {
-            const updated = prev.filter((g) => g.id !== deletedId);
-            localStorage.setItem("acandido_warranties", JSON.stringify(updated));
-            return updated;
-          });
+          setWarranties((prev) => prev.filter((g) => g.id !== deletedId));
         }
         loadWarrantiesData();
       }
@@ -498,10 +490,8 @@ export default function AlmoxarifeGarantia({
         const freshData = await dbFetchWarranties();
         if (Array.isArray(freshData) && freshData.length > 0) {
           setWarranties(freshData);
-          localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
         } else {
           setWarranties(updated);
-          localStorage.setItem("acandido_warranties", JSON.stringify(updated));
         }
         window.dispatchEvent(new Event("realtime-garantias-update"));
       } catch (err: any) {
@@ -511,7 +501,6 @@ export default function AlmoxarifeGarantia({
       }
     } else {
       setWarranties(updated);
-      localStorage.setItem("acandido_warranties", JSON.stringify(updated));
     }
   };
 
@@ -755,13 +744,11 @@ export default function AlmoxarifeGarantia({
       onConfirm: async () => {
         const updated = warranties.filter((w) => w.id !== id);
         setWarranties(updated);
-        localStorage.setItem("acandido_warranties", JSON.stringify(updated));
         if (isSupabaseReady()) {
           try {
             await dbDeleteWarranty(id);
             const freshData = await dbFetchWarranties();
             setWarranties(freshData);
-            localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
             window.dispatchEvent(new Event("realtime-garantias-update"));
           } catch (e) {
             console.error("Error deleting warranty:", e);

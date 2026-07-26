@@ -402,14 +402,7 @@ export default function AdminEvaluationDetail({
   const [searchQuery, setSearchQuery] = useState("");
   const [top10AuditorQuantitiesInput, setTop10AuditorQuantitiesInput] = useState<Record<string, string>>({});
 
-  const [warranties, setWarranties] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem("acandido_warranties");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [warranties, setWarranties] = useState<any[]>([]);
 
   useEffect(() => {
     const loadWarrantiesData = async () => {
@@ -418,7 +411,6 @@ export default function AdminEvaluationDetail({
           const dbData = await dbFetchWarranties();
           if (Array.isArray(dbData)) {
             setWarranties(dbData);
-            localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
           }
         } catch (e) {
           console.error("Error fetching warranties from Supabase in AdminEvaluationDetail:", e);
@@ -432,11 +424,7 @@ export default function AdminEvaluationDetail({
       if (customEvent.detail && customEvent.detail.table === "garantias") {
         if (customEvent.detail.eventType === "DELETE" && customEvent.detail.old?.id) {
           const deletedId = customEvent.detail.old.id;
-          setWarranties((prev) => {
-            const updated = prev.filter((g) => g.id !== deletedId);
-            localStorage.setItem("acandido_warranties", JSON.stringify(updated));
-            return updated;
-          });
+          setWarranties((prev) => prev.filter((g) => g.id !== deletedId));
         }
         loadWarrantiesData();
       }

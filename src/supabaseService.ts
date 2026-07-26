@@ -1,7 +1,6 @@
 import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
 import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus, CollaboratorCertificate } from "./types";
-import { OFFICIAL_CREDENTIALS } from "./components/Login";
 import bcrypt from "bcryptjs";
 
 const STORAGE_PREFIX = "acandido_";
@@ -165,27 +164,27 @@ export const seedDatabaseIfEmpty = async () => {
     const { data: existingUsers, error: usersError } = await supabase.from('usuarios').select('email');
     const hasFernando = existingUsers && existingUsers.some(u => u.email.toLowerCase().trim() === "estoque01jp@gmail.com");
     
-    if (usersError || !existingUsers || existingUsers.length < OFFICIAL_CREDENTIALS.length || !hasFernando) {
+    if (usersError || !existingUsers || existingUsers.length === 0 || !hasFernando) {
       console.log("Seeding system users table ('usuarios') with complete profiles...");
-      const usersToInsert = OFFICIAL_CREDENTIALS.map(u => {
-        const salt = bcrypt.genSaltSync(10);
-        const hash = bcrypt.hashSync(u.password, salt);
-        return {
-          nome: u.name,
-          email: u.email.toLowerCase().trim(),
-          perfil: u.role === "ADMIN" ? "auditor" : u.role === "SUPERVISOR" ? "supervisor" : "almoxarife",
-          senha_hash: hash,
-          almoxarifado: JSON.stringify({
-            password: "",
-            cargo: (u as any).cargo || "",
-            group: u.group || "A",
-            ownerName: u.ownerName || u.name.split(" ")[0],
-            almoxarifados: (u as any).almoxarifados || []
-          }),
-          ativo: true
-        };
-      });
-      await supabase.from('usuarios').upsert(usersToInsert, { onConflict: 'email' });
+      const defaultSalt = bcrypt.genSaltSync(10);
+      const defaultHash = bcrypt.hashSync("123456", defaultSalt);
+      const INITIAL_SEED_USERS = [
+        { nome: "Fernando Silva", email: "estoque01jp@gmail.com", perfil: "auditor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Auditor Geral", group: "A", ownerName: "Fernando", almoxarifados: [] }), ativo: true },
+        { nome: "Natalice Oliveira", email: "estoquejp@acandidotransportes.com.br", perfil: "auditor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Auditor Geral", group: "A", ownerName: "Natalice Oliveira", almoxarifados: [] }), ativo: true },
+        { nome: "Robson", email: "almoxarifadojp@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Robson", almoxarifados: ["unitrans-jp", "santa-maria-jp"] }), ativo: true },
+        { nome: "Robson Jaboatão", email: "robson.almoxarife@acandidogrupo.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife Jaboatão", group: "A", ownerName: "Robson Jaboatão", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Muniz", email: "muniz.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Muniz", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Glebson", email: "glebson.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Glebson", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Paulo", email: "comprascg@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Paulo", almoxarifados: ["expresso-nacional", "acandido-cg"] }), ativo: true },
+        { nome: "Ezequiel", email: "almoxarifadogo@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Ezequiel", almoxarifados: ["fretamento-goiana"] }), ativo: true },
+        { nome: "Sérgio", email: "almoxarifadope01@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Sérgio", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Raimundo", email: "almoxarifadorn@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Raimundo", almoxarifados: ["unissana-rn"] }), ativo: true },
+        { nome: "Joel", email: "ti02rn@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Joel", almoxarifados: ["reunidas-nat"] }), ativo: true },
+        { nome: "Lucas", email: "fretamentojoaopessoa@gmail.com", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Lucas", almoxarifados: ["fretamento-pb"] }), ativo: true },
+        { nome: "Matheus", email: "almoxarifadobayeux@rodoviarionordestino.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Matheus", almoxarifados: ["trans-cg-bayeux", "rodoviario-cabedelo"] }), ativo: true },
+        { nome: "Arline", email: "almoxarifadoce@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Arline", almoxarifados: ["fretamento-maracanau", "rodoviario-fortaleza"] }), ativo: true }
+      ];
+      await supabase.from('usuarios').upsert(INITIAL_SEED_USERS, { onConflict: 'email' });
     }
 
     const { data: existingCal, error: calError } = await supabase.from('calendario_inventarios').select('id').limit(1);
@@ -280,20 +279,13 @@ export const dbMigrateUsersPasswords = async (requesterRole?: string): Promise<M
         continue;
       }
 
-      // Recover plain password
+      // Recover plain password from almoxarifado JSON if any legacy exists
       let plainPassword = "";
       if (u.almoxarifado && typeof u.almoxarifado === "string" && u.almoxarifado.trim().startsWith("{")) {
         try {
           const parsed = JSON.parse(u.almoxarifado);
           plainPassword = parsed.password || "";
         } catch (e) {}
-      }
-
-      if (!plainPassword) {
-        const official = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === email);
-        if (official) {
-          plainPassword = official.password;
-        }
       }
 
       if (!plainPassword) {
@@ -460,12 +452,10 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
       }
     }
 
-    // Match with OFFICIAL_CREDENTIALS for robust fallback definitions
-    const official = OFFICIAL_CREDENTIALS.find(o => o.email.toLowerCase().trim() === u.email.toLowerCase().trim());
-    const cargo = extra.cargo || (official ? (official as any).cargo : "");
-    const almoxarifados = extra.almoxarifados || (official ? (official as any).almoxarifados : []);
-    const group = extra.group || (official ? official.group : "A");
-    const ownerName = extra.ownerName || (official ? official.ownerName : u.nome.split(" ")[0]);
+    const cargo = extra.cargo || "";
+    const almoxarifados = extra.almoxarifados || [];
+    const group = extra.group || "A";
+    const ownerName = extra.ownerName || u.nome.split(" ")[0];
 
     return {
       id: u.id,
@@ -515,7 +505,6 @@ export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
   }
 
   const extraPayload = {
-    password: "", // ALWAYS empty, no plain text password ever stored in JSON
     cargo: (user as any).cargo || "",
     group: user.group || "A",
     ownerName: user.ownerName || user.name.split(" ")[0],

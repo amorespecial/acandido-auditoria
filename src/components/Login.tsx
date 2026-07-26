@@ -6,135 +6,6 @@ interface LoginProps {
   onLogin: (user: AppUser) => void;
 }
 
-export const OFFICIAL_CREDENTIALS = [
-  {
-    name: "Fernando Silva",
-    role: "ADMIN" as const,
-    email: "estoque01jp@gmail.com",
-    password: "33911386Fe@",
-    ownerName: "Fernando",
-    group: "A" as const,
-    cargo: "Auditor de Estoque"
-  },
-  {
-    name: "Natalice Oliveira",
-    role: "ADMIN" as const,
-    email: "estoquejp@acandidotransportes.com.br",
-    password: "Nathalia1",
-    ownerName: "Natalice Oliveira",
-    group: "A" as const,
-    cargo: "Auditor de Estoque"
-  },
-  {
-    name: "Robson",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadojp@acandidotransportes.com.br",
-    password: "almoxarifadojp",
-    ownerName: "Robson",
-    group: "A" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Robson",
-    role: "ALMOXARIFE" as const,
-    email: "robson.almoxarife@acandidogrupo.com.br",
-    password: "Robson@Almox2026",
-    ownerName: "Robson Jaboatão",
-    group: "A" as const,
-    cargo: "Almoxarife Jaboatão"
-  },
-  {
-    name: "Muniz",
-    role: "SUPERVISOR" as const,
-    email: "muniz.jabo@acandidotransportes.com.br",
-    password: "jaboatão@2026",
-    ownerName: "Muniz",
-    group: "A" as const,
-    cargo: "Supervisor de Manutenção"
-  },
-  {
-    name: "Glebson",
-    role: "SUPERVISOR" as const,
-    email: "glebson.jabo@acandidotransportes.com.br",
-    password: "jab#2026",
-    ownerName: "Glebson",
-    group: "A" as const,
-    cargo: "Supervisor de Manutenção"
-  },
-  {
-    name: "Paulo",
-    role: "ALMOXARIFE" as const,
-    email: "comprascg@acandidotransportes.com.br",
-    password: "almoxarifadocg",
-    ownerName: "Paulo",
-    group: "A" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Ezequiel",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadogo@transnacionalfretamento.com.br",
-    password: "almoxarifadogo",
-    ownerName: "Ezequiel",
-    group: "A" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Sérgio",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadope01@transnacionalfretamento.com.br",
-    password: "fretamentope",
-    ownerName: "Sérgio",
-    group: "A" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Raimundo",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadorn@acandidotransportes.com.br",
-    password: "almoxarifadorn",
-    ownerName: "Raimundo",
-    group: "B" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Joel",
-    role: "ALMOXARIFE" as const,
-    email: "ti02rn@acandidotransportes.com.br",
-    password: "almoxarifado02",
-    ownerName: "Joel",
-    group: "B" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Lucas",
-    role: "ALMOXARIFE" as const,
-    email: "fretamentojoaopessoa@gmail.com",
-    password: "fretamentojp@",
-    ownerName: "Lucas",
-    group: "B" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Matheus",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadobayeux@rodoviarionordestino.com.br",
-    password: "almoxarifadorodo",
-    ownerName: "Matheus",
-    group: "B" as const,
-    cargo: "Almoxarife"
-  },
-  {
-    name: "Arline",
-    role: "ALMOXARIFE" as const,
-    email: "almoxarifadoce@transnacionalfretamento.com.br",
-    password: "fretamentoce",
-    ownerName: "Arline",
-    group: "B" as const,
-    cargo: "Almoxarife"
-  }
-];
-
 export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -156,10 +27,6 @@ export default function Login({ onLogin }: LoginProps) {
     setIsLoading(true);
     setErrorMsg("");
 
-    console.log("=== DEBUG LOGIN ===");
-    console.log("Email digitado:", email);
-    console.log("Senha digitada:", password);
-
     try {
       // Dynamic loading/validation of database users
       let currentUsersList: any[] = [];
@@ -174,29 +41,22 @@ export default function Login({ onLogin }: LoginProps) {
         }
       }
 
-      // Se não trouxe nenhum usuário do banco, usa OFFICIAL_CREDENTIALS direto
       if (!currentUsersList || currentUsersList.length === 0) {
-        console.warn("Banco vazio ou inacessível — usando credenciais oficiais locais");
-        currentUsersList = OFFICIAL_CREDENTIALS;
+        setErrorMsg("Não foi possível carregar os usuários do sistema. Verifique a conexão.");
+        setIsLoading(false);
+        return;
       }
-
-      console.log("Usuários carregados do banco / fallback:", currentUsersList.length);
-      console.log("Lista de emails carregada:", currentUsersList.map(u => u.email));
 
       // Busca por email (case insensitive, sem espaços)
       const matchedUser = currentUsersList.find(
         (u) => u.email.toLowerCase().trim() === email.toLowerCase().trim()
       );
 
-      console.log("Usuário encontrado pelo email:", matchedUser ? "SIM" : "NÃO");
-
       if (!matchedUser) {
         setErrorMsg("E-mail não encontrado no sistema.");
         setIsLoading(false);
         return;
       }
-
-      console.log("Senha hash:", matchedUser.senha_hash ? "[PRESENT]" : "[EMPTY]");
 
       // Compara senha usando validador bcrypt (senha_hash)
       const isPasswordCorrect = validateUserPassword(
