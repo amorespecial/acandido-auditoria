@@ -1489,9 +1489,20 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   const anoNum = parseInt(spaceParts[1] || "2026", 10) || 2026;
   const mesNum = typeof garantia.mes === "number" ? garantia.mes : garantiaMonthToNum(mesName);
 
-  const fullItem = (garantia.itemCode || garantia.item_code)
-    ? `${garantia.itemCode || garantia.item_code} - ${garantia.itemDescription || garantia.item_description || ''}`
-    : (garantia.itemDescription || garantia.item_description || garantia.item || '');
+  const itemCode = garantia.itemCode || garantia.item_code || garantia.item_codigo || "";
+  const itemDesc = garantia.itemDescription || garantia.item_description || garantia.item_nome || "";
+  
+  let fullItem = garantia.item || "";
+  if (!fullItem) {
+    if (itemCode && itemDesc) {
+      fullItem = `${itemCode} - ${itemDesc}`;
+    } else {
+      fullItem = itemCode || itemDesc || "";
+    }
+  }
+
+  const obsPeca = garantia.observacao || garantia.observacao_peca || garantia.pieceObservation || null;
+  const anexo = garantia.anexo_url || garantia.anexo_base64 || garantia.arquivo_base64 || null;
 
   const payload: any = {
     almoxarifado: garantia.almoxarifado || garantia.almoxarifado_id || "",
@@ -1501,20 +1512,15 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     fabricante: garantia.fabricante || garantia.manufacturer || "",
     garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
     registrado_por: garantia.registrado_por || garantia.registeredBy || null,
-    data_emissao_nf: garantia.data_emissao_nf || garantia.nfEmissionDate || null,
-    referencia_item: garantia.referencia_item || garantia.reference || null,
+    data_emissao_nf: garantia.data_emissao_nf || garantia.data_nf || garantia.nfEmissionDate || null,
+    referencia_item: garantia.referencia_item || garantia.referencia || garantia.reference || null,
     nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
     veiculo: garantia.veiculo || null,
     localizacao: garantia.localizacao || null,
-    observacao_peca: garantia.observacao_peca || garantia.pieceObservation || null,
+    observacao: obsPeca,
     observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null,
-    anexo_url: garantia.anexo_url || garantia.anexo_base64 || garantia.arquivo_base64 || null
+    anexo_url: anexo
   };
-
-  if (garantia.anexo_base64 || garantia.arquivo_base64) {
-    payload.anexo_base64 = garantia.anexo_base64 || garantia.arquivo_base64;
-    payload.arquivo_base64 = garantia.arquivo_base64 || garantia.anexo_base64;
-  }
 
   if (garantia.id && !garantia.id.startsWith("war-") && !garantia.id.startsWith("tmp")) {
     payload.id = garantia.id;
@@ -1523,10 +1529,8 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   let { data, error } = await supabase.from('garantias').upsert(payload).select();
 
   if (error) {
-    console.warn("Retrying dbSalvarGarantia with safe payload without heavy base64/optional columns:", error.message);
+    console.warn("Retrying dbSalvarGarantia with safe payload without optional/large attachment columns:", error.message);
     const safePayload = { ...payload };
-    delete safePayload.anexo_base64;
-    delete safePayload.arquivo_base64;
     delete safePayload.anexo_url;
     delete safePayload.veiculo;
     delete safePayload.localizacao;
@@ -1545,10 +1549,10 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
         fabricante: garantia.fabricante || garantia.manufacturer || "",
         garantia_ate: garantia.garantia_ate || garantia.expiryDate || null,
         registrado_por: garantia.registrado_por || garantia.registeredBy || null,
-        data_emissao_nf: garantia.data_emissao_nf || garantia.nfEmissionDate || null,
-        referencia_item: garantia.referencia_item || garantia.reference || null,
+        data_emissao_nf: garantia.data_emissao_nf || garantia.data_nf || garantia.nfEmissionDate || null,
+        referencia_item: garantia.referencia_item || garantia.referencia || garantia.reference || null,
         nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
-        observacao_peca: garantia.observacao_peca || garantia.pieceObservation || null,
+        observacao: obsPeca,
         observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null
       };
       if (payload.id) corePayload.id = payload.id;
@@ -1609,7 +1613,7 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
     const monthName = item.mes ? (typeof item.mes === "number" ? garantiaNumToMonth(item.mes) : item.mes) : "Janeiro";
     const monthYear = item.mes && item.ano ? `${monthName} ${item.ano}` : (item.monthYear || "");
 
-    const obsPeca = item.observacao_peca || item.pieceObservation || item.observacao || "";
+    const obsPeca = item.observacao || item.observacao_peca || item.pieceObservation || "";
     const obsSucata = item.observacao_sucata || item.scrap_observation || item.scrapObservation || "";
 
     const branchName = item.almoxarifado || item.almoxarifado_id || "";
@@ -1634,9 +1638,10 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       observacao_sucata: obsSucata,
       pieceObservation: obsPeca,
       observacao_peca: obsPeca,
+      observacao: obsPeca,
       anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64 || "",
-      anexo_base64: item.anexo_base64 || item.arquivo_base64 || item.anexo_url || "",
-      arquivo_base64: item.arquivo_base64 || item.anexo_base64 || item.anexo_url || "",
+      anexo_base64: item.anexo_url || item.anexo_base64 || item.arquivo_base64 || "",
+      arquivo_base64: item.anexo_url || item.anexo_base64 || item.arquivo_base64 || "",
       registeredBy: item.registrado_por || item.registeredBy || "",
       monthYear,
       lastUpdateDate: item.registrado_em ? String(item.registrado_em).split("T")[0] : (item.created_at ? String(item.created_at).split("T")[0] : ""),
@@ -1660,16 +1665,14 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
         itemDescription: item.itemDescription,
         manufacturer: item.manufacturer || item.fabricante,
         expiryDate: item.expiryDate || item.garantia_ate,
-        data_emissao_nf: item.nfEmissionDate || item.data_emissao_nf,
-        referencia_item: item.reference || item.referencia_item,
+        data_emissao_nf: item.nfEmissionDate || item.data_emissao_nf || (item as any).data_nf,
+        referencia_item: item.reference || item.referencia_item || (item as any).referencia,
         nota_fiscal: item.notaFiscal || item.nota_fiscal,
         veiculo: item.veiculo,
         localizacao: item.localizacao,
-        observacao_peca: item.pieceObservation || item.observacao_peca,
+        observacao: item.pieceObservation || item.observacao_peca || (item as any).observacao,
         observacao_sucata: item.scrapObservation || item.observacao_sucata,
         anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64,
-        anexo_base64: item.anexo_base64 || item.arquivo_base64,
-        arquivo_base64: item.arquivo_base64 || item.anexo_base64,
         registeredBy: item.registeredBy || item.registrado_por,
         ...item
       }, requesterRole);
