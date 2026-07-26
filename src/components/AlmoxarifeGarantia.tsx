@@ -116,7 +116,7 @@ export const getWarrantyFieldValue = (
   if (!wAny) return "—";
 
   if (fieldType === "dataNf") {
-    const val = w.nfEmissionDate || wAny.data_nf || wAny.dataNf;
+    const val = w.nfEmissionDate || wAny.data_emissao_nf || wAny.data_nf || wAny.dataNf;
     if (val && val !== "—") {
       try {
         return new Date(val + 'T00:00:00').toLocaleDateString("pt-BR");
@@ -140,71 +140,95 @@ export const getWarrantyFieldValue = (
   }
 
   if (fieldType === "notaFiscal") {
-    if (wAny.notaFiscal && wAny.notaFiscal !== "—") return String(wAny.notaFiscal);
-    if (wAny.nota_fiscal && wAny.nota_fiscal !== "—") return String(wAny.nota_fiscal);
-    if (wAny.nfNumber && wAny.nfNumber !== "—") return String(wAny.nfNumber);
+    if (wAny.nota_fiscal !== undefined && wAny.nota_fiscal !== null && wAny.nota_fiscal !== "" && wAny.nota_fiscal !== "—") return String(wAny.nota_fiscal);
+    if (wAny.notaFiscal !== undefined && wAny.notaFiscal !== null && wAny.notaFiscal !== "" && wAny.notaFiscal !== "—") return String(wAny.notaFiscal);
+    if (wAny.nota !== undefined && wAny.nota !== null && wAny.nota !== "" && wAny.nota !== "—") return String(wAny.nota);
+    if (wAny.nfNumber !== undefined && wAny.nfNumber !== null && wAny.nfNumber !== "" && wAny.nfNumber !== "—") return String(wAny.nfNumber);
     if (customFields) {
       const found = customFields.find((f: any) => f.name?.toLowerCase().includes("nota fiscal") || f.name?.toLowerCase().includes("nota"));
       if (found && wAny[found.id]) return String(wAny[found.id]);
     }
     for (const k of Object.keys(wAny)) {
       if (k.toLowerCase().includes("nota") || k.toLowerCase().includes("fiscal")) {
-        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+        if (wAny[k] !== undefined && wAny[k] !== null && wAny[k] !== "" && wAny[k] !== "—") return String(wAny[k]);
       }
     }
     return "—";
   }
 
   if (fieldType === "referencia") {
-    if (w.reference && w.reference !== "—") return w.reference;
-    if (wAny.referencia && wAny.referencia !== "—") return wAny.referencia;
+    if (wAny.referencia_item !== undefined && wAny.referencia_item !== null && wAny.referencia_item !== "" && wAny.referencia_item !== "—") return String(wAny.referencia_item);
+    if (w.reference !== undefined && w.reference !== null && w.reference !== "" && w.reference !== "—") return String(w.reference);
+    if (wAny.referencia !== undefined && wAny.referencia !== null && wAny.referencia !== "" && wAny.referencia !== "—") return String(wAny.referencia);
+    if (wAny.referenciaItem !== undefined && wAny.referenciaItem !== null && wAny.referenciaItem !== "" && wAny.referenciaItem !== "—") return String(wAny.referenciaItem);
     if (customFields) {
       const found = customFields.find((f: any) => f.name?.toLowerCase().includes("referência") || f.name?.toLowerCase().includes("referencia"));
       if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    for (const k of Object.keys(wAny)) {
+      if (k.toLowerCase().includes("referenc") || k.toLowerCase().includes("referência")) {
+        if (wAny[k] !== undefined && wAny[k] !== null && wAny[k] !== "" && wAny[k] !== "—") return String(wAny[k]);
+      }
     }
     return "—";
   }
 
   if (fieldType === "veiculo") {
-    if (wAny.veiculo && wAny.veiculo !== "—") return String(wAny.veiculo);
+    if (wAny.veiculo !== undefined && wAny.veiculo !== null && wAny.veiculo !== "" && wAny.veiculo !== "—") return String(wAny.veiculo);
+    if (wAny.vehicle !== undefined && wAny.vehicle !== null && wAny.vehicle !== "" && wAny.vehicle !== "—") return String(wAny.vehicle);
     if (customFields) {
       const found = customFields.find((f: any) => f.name?.toLowerCase().includes("veículo") || f.name?.toLowerCase().includes("veiculo"));
       if (found && wAny[found.id]) return String(wAny[found.id]);
     }
     for (const k of Object.keys(wAny)) {
       if (k.toLowerCase().includes("veiculo") || k.toLowerCase().includes("veículo")) {
-        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+        if (wAny[k] !== undefined && wAny[k] !== null && wAny[k] !== "" && wAny[k] !== "—") return String(wAny[k]);
       }
     }
     return "—";
   }
 
   if (fieldType === "localizacao") {
-    if (wAny.localizacao && wAny.localizacao !== "—") return String(wAny.localizacao);
-    if (wAny.localizacao_id && wAny.localizacao_id !== "—") return String(wAny.localizacao_id);
+    if (wAny.localizacao !== undefined && wAny.localizacao !== null && wAny.localizacao !== "" && wAny.localizacao !== "—") return String(wAny.localizacao);
+    if (wAny.location !== undefined && wAny.location !== null && wAny.location !== "" && wAny.location !== "—") return String(wAny.location);
+    if (wAny.localizacao_id !== undefined && wAny.localizacao_id !== null && wAny.localizacao_id !== "" && wAny.localizacao_id !== "—") return String(wAny.localizacao_id);
     if (customFields) {
       const found = customFields.find((f: any) => f.name?.toLowerCase().includes("localiza"));
       if (found && wAny[found.id]) return String(wAny[found.id]);
     }
     for (const k of Object.keys(wAny)) {
       if (k.toLowerCase().includes("localiza")) {
-        if (wAny[k] && typeof wAny[k] === "string" && wAny[k] !== "—") return wAny[k];
+        if (wAny[k] !== undefined && wAny[k] !== null && wAny[k] !== "" && wAny[k] !== "—") return String(wAny[k]);
       }
     }
     return "—";
   }
 
   if (fieldType === "observacao") {
-    if (w.pieceObservation || w.scrapObservation) {
-      const parts = [];
-      if (w.pieceObservation) parts.push(w.pieceObservation);
-      if (w.scrapObservation) parts.push(`Sucata: ${w.scrapObservation}`);
+    const obsPeca = wAny.observacao_peca || w.pieceObservation || wAny.observacaoPeca;
+    const obsSucata = w.scrapObservation || wAny.observacao_sucata || wAny.observacaoSucata;
+
+    if (obsPeca && obsPeca !== "—" && obsPeca !== "Nenhuma observação") {
+      const parts = [obsPeca];
+      if (obsSucata && obsSucata !== "—") parts.push(`Sucata: ${obsSucata}`);
       return parts.join(" | ");
     }
-    if (wAny.observacao) return wAny.observacao;
+    if (obsPeca === "Nenhuma observação") {
+      if (obsSucata && obsSucata !== "—") return `Sucata: ${obsSucata}`;
+      return "Nenhuma observação";
+    }
+    if (obsSucata && obsSucata !== "—") {
+      return `Sucata: ${obsSucata}`;
+    }
+    if (wAny.observacao && wAny.observacao !== "—") return String(wAny.observacao);
     if (customFields) {
       const found = customFields.find((f: any) => f.name?.toLowerCase().includes("observa"));
       if (found && wAny[found.id]) return String(wAny[found.id]);
+    }
+    for (const k of Object.keys(wAny)) {
+      if (k.toLowerCase().includes("observa")) {
+        if (wAny[k] !== undefined && wAny[k] !== null && wAny[k] !== "" && wAny[k] !== "—") return String(wAny[k]);
+      }
     }
     return "—";
   }
@@ -237,7 +261,7 @@ export default function AlmoxarifeGarantia({
       if (isSupabaseReady()) {
         try {
           const dbData = await dbFetchWarranties();
-          if (dbData && dbData.length > 0) {
+          if (Array.isArray(dbData)) {
             setWarranties(dbData);
             localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
           }
@@ -248,9 +272,26 @@ export default function AlmoxarifeGarantia({
     };
     loadWarrantiesData();
 
+    const handleGlobalRealtime = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.table === "garantias") {
+        if (customEvent.detail.eventType === "DELETE" && customEvent.detail.old?.id) {
+          const deletedId = customEvent.detail.old.id;
+          setWarranties((prev) => {
+            const updated = prev.filter((g) => g.id !== deletedId);
+            localStorage.setItem("acandido_warranties", JSON.stringify(updated));
+            return updated;
+          });
+        }
+        loadWarrantiesData();
+      }
+    };
+
     window.addEventListener("realtime-garantias-update", loadWarrantiesData);
+    window.addEventListener("realtime-global-update", handleGlobalRealtime);
     return () => {
       window.removeEventListener("realtime-garantias-update", loadWarrantiesData);
+      window.removeEventListener("realtime-global-update", handleGlobalRealtime);
     };
   }, []);
 
@@ -454,7 +495,7 @@ export default function AlmoxarifeGarantia({
       try {
         await dbSaveWarranties(updated);
         const freshData = await dbFetchWarranties();
-        if (freshData && freshData.length > 0) {
+        if (Array.isArray(freshData)) {
           setWarranties(freshData);
           localStorage.setItem("acandido_warranties", JSON.stringify(freshData));
         }

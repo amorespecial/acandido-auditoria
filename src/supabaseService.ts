@@ -1506,6 +1506,7 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     nota_fiscal: garantia.nota_fiscal || garantia.notaFiscal || null,
     veiculo: garantia.veiculo || null,
     localizacao: garantia.localizacao || null,
+    observacao_peca: garantia.observacao_peca || garantia.pieceObservation || null,
     observacao_sucata: garantia.observacao_sucata || garantia.scrapObservation || null,
     anexo_url: garantia.anexo_url || garantia.anexo_base64 || garantia.arquivo_base64 || null
   };
@@ -1568,7 +1569,11 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
     const monthName = garantiaNumToMonth(item.mes);
     const monthYear = item.mes && item.ano ? `${monthName} ${item.ano}` : (item.monthYear || "");
 
+    const obsPeca = item.observacao_peca || item.pieceObservation || item.observacao || "";
+    const obsSucata = item.observacao_sucata || item.scrap_observation || item.scrapObservation || "";
+
     return {
+      ...item,
       id: item.id,
       itemCode,
       itemDescription,
@@ -1583,9 +1588,10 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       nota_fiscal: item.nota_fiscal || item.notaFiscal || "",
       veiculo: item.veiculo || "",
       localizacao: item.localizacao || "",
-      scrapObservation: item.observacao_sucata || item.scrap_observation || "",
-      observacao_sucata: item.observacao_sucata || item.scrap_observation || "",
-      pieceObservation: "",
+      scrapObservation: obsSucata,
+      observacao_sucata: obsSucata,
+      pieceObservation: obsPeca,
+      observacao_peca: obsPeca,
       anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64 || "",
       anexo_base64: item.anexo_base64 || item.arquivo_base64 || item.anexo_url || "",
       arquivo_base64: item.arquivo_base64 || item.anexo_base64 || item.anexo_url || "",
@@ -1617,11 +1623,13 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
         nota_fiscal: item.notaFiscal || item.nota_fiscal,
         veiculo: item.veiculo,
         localizacao: item.localizacao,
+        observacao_peca: item.pieceObservation || item.observacao_peca,
         observacao_sucata: item.scrapObservation || item.observacao_sucata,
         anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64,
         anexo_base64: item.anexo_base64 || item.arquivo_base64,
         arquivo_base64: item.arquivo_base64 || item.anexo_base64,
-        registeredBy: item.registeredBy || item.registrado_por
+        registeredBy: item.registeredBy || item.registrado_por,
+        ...item
       }, requesterRole);
     }
   } catch (err) {

@@ -13,6 +13,14 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   const [warranties, setWarranties] = useState<WarrantyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [garantiaConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("acandido_garantia_fields_config");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
   // Edit Modal State
   const [editingWarranty, setEditingWarranty] = useState<WarrantyItem | null>(null);
   const [editForm, setEditForm] = useState({
@@ -447,12 +455,12 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-semibold bg-white">
                 {filteredWarranties.map((w) => {
                   const status = getWarrantyStatus(w.expiryDate);
-                  const dataNf = getWarrantyFieldValue(w, "dataNf");
-                  const notaFiscal = getWarrantyFieldValue(w, "notaFiscal");
-                  const referencia = getWarrantyFieldValue(w, "referencia");
-                  const veiculo = getWarrantyFieldValue(w, "veiculo");
-                  const localizacao = getWarrantyFieldValue(w, "localizacao");
-                  const observacao = getWarrantyFieldValue(w, "observacao");
+                  const dataNf = getWarrantyFieldValue(w, "dataNf", garantiaConfig?.customFields);
+                  const notaFiscal = getWarrantyFieldValue(w, "notaFiscal", garantiaConfig?.customFields);
+                  const referencia = getWarrantyFieldValue(w, "referencia", garantiaConfig?.customFields);
+                  const veiculo = getWarrantyFieldValue(w, "veiculo", garantiaConfig?.customFields);
+                  const localizacao = getWarrantyFieldValue(w, "localizacao", garantiaConfig?.customFields);
+                  const observacao = getWarrantyFieldValue(w, "observacao", garantiaConfig?.customFields);
                   const hasAnexo = Boolean((w as any).anexo_base64 || (w as any).arquivo_base64);
 
                   return (

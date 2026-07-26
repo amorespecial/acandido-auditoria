@@ -416,7 +416,7 @@ export default function AdminEvaluationDetail({
       if (isSupabaseReady()) {
         try {
           const dbData = await dbFetchWarranties();
-          if (dbData && dbData.length > 0) {
+          if (Array.isArray(dbData)) {
             setWarranties(dbData);
             localStorage.setItem("acandido_warranties", JSON.stringify(dbData));
           }
@@ -427,9 +427,26 @@ export default function AdminEvaluationDetail({
     };
     loadWarrantiesData();
 
+    const handleGlobalRealtime = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.table === "garantias") {
+        if (customEvent.detail.eventType === "DELETE" && customEvent.detail.old?.id) {
+          const deletedId = customEvent.detail.old.id;
+          setWarranties((prev) => {
+            const updated = prev.filter((g) => g.id !== deletedId);
+            localStorage.setItem("acandido_warranties", JSON.stringify(updated));
+            return updated;
+          });
+        }
+        loadWarrantiesData();
+      }
+    };
+
     window.addEventListener("realtime-garantias-update", loadWarrantiesData);
+    window.addEventListener("realtime-global-update", handleGlobalRealtime);
     return () => {
       window.removeEventListener("realtime-garantias-update", loadWarrantiesData);
+      window.removeEventListener("realtime-global-update", handleGlobalRealtime);
     };
   }, []);
   const [auditorMonthFilter, setAuditorMonthFilter] = useState("Junho 2026");
