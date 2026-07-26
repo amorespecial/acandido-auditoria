@@ -260,6 +260,27 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
     return true;
   });
 
+  // Resumo do Período Calculations
+  const periodoLabel = selectedMonth === "TODOS"
+    ? (selectedYear === "TODOS" ? "TODOS OS MESES" : `TODOS OS MESES — ${selectedYear}`)
+    : (selectedYear === "TODOS" ? `${selectedMonth.toUpperCase()}` : `${selectedMonth.toUpperCase()} ${selectedYear}`);
+
+  const activeWarranties = filteredWarranties.filter((w) => {
+    if (!w.expiryDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(w.expiryDate + "T00:00:00");
+    return expiry >= today;
+  });
+
+  const activeItemCount = activeWarranties.length;
+
+  const activeItemCounts = activeWarranties.reduce((acc: Record<string, number>, w) => {
+    const itemKey = w.itemDescription || w.itemCode || "Sem descrição";
+    acc[itemKey] = (acc[itemKey] || 0) + 1;
+    return acc;
+  }, {});
+
   // Export CSV Functionality
   const exportToCSV = () => {
     if (filteredWarranties.length === 0) {
@@ -563,6 +584,106 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
           <span className="text-[10px] font-medium text-slate-400">
             * Dados sincronizados diretamente com o banco de dados principal de auditoria.
           </span>
+        </div>
+      )}
+
+      {/* RESUMO DO PERÍODO CARD BLOCK */}
+      {!isLoading && (
+        <div
+          className="bg-white font-sans shadow-sm mt-6"
+          style={{
+            border: "1px solid #E2E8F0",
+            borderRadius: "12px",
+            padding: "20px"
+          }}
+          id="resumo-do-periodo"
+        >
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4">
+            <span className="material-symbols-outlined text-[#00194C] text-[20px] select-none">analytics</span>
+            <h4
+              className="uppercase tracking-wider"
+              style={{
+                color: "#00194C",
+                fontSize: "14px",
+                fontWeight: 600
+              }}
+            >
+              📊 RESUMO DO PERÍODO — {periodoLabel}
+            </h4>
+          </div>
+
+          <div className="p-4 bg-[#F8FAFC] border border-slate-200/80 rounded-xl flex items-center justify-between shadow-3xs mb-4">
+            <div>
+              <p className="text-[11px] uppercase font-bold tracking-wider leading-none" style={{ color: "#64748B" }}>
+                TOTAL DE ITENS REGISTRADOS NO PERÍODO:
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium mt-1">
+                Filtro atual aplicado
+              </p>
+            </div>
+            <div className="text-right">
+              <span
+                className="font-mono leading-none"
+                style={{
+                  fontSize: "32px",
+                  fontWeight: 700,
+                  color: "#00194C"
+                }}
+              >
+                {filteredWarranties.length}
+              </span>
+              <span
+                className="uppercase font-bold block mt-1"
+                style={{
+                  fontSize: "11px",
+                  color: "#64748B"
+                }}
+              >
+                ITENS
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-[12px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-100 pb-2 flex justify-between items-center">
+              <span>CONTAGEM POR ITEM (APENAS ITENS ATIVOS):</span>
+              <span
+                className="font-mono text-[11px] font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+                style={{ color: "#D97706" }}
+              >
+                ({activeItemCount} {activeItemCount === 1 ? "item ativo" : "itens ativos"})
+              </span>
+            </div>
+
+            {Object.keys(activeItemCounts).length > 0 ? (
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white w-full shadow-3xs">
+                <table className="w-full text-left border-collapse text-[13px]">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] text-slate-600 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
+                      <th className="p-3 font-bold text-left">ITEM</th>
+                      <th className="p-3 font-bold text-center w-28">QUANTIDADE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {Object.entries(activeItemCounts).map(([item, count], idx) => (
+                      <tr key={item} className={idx % 2 === 0 ? "bg-white hover:bg-slate-50/50" : "bg-[#F8FAFC]/50 hover:bg-slate-50/50"}>
+                        <td className="p-3 font-bold text-[#00194C] truncate max-w-md" title={item}>
+                          {item}
+                        </td>
+                        <td className="p-3 text-center font-mono text-slate-900 font-bold">
+                          {count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-slate-400 text-xs italic font-medium border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                Nenhum item ativo registrado para o período filtrado.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
