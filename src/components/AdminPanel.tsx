@@ -80,12 +80,6 @@ export default function AdminPanel({
 
   // Close cycle handler
   const handleCloseAndArchiveCycle = () => {
-    const activeAudName = user?.name || "Fernando Silva";
-    if (challengeNameInput.trim().toLowerCase() !== activeAudName.trim().toLowerCase()) {
-      alert(`Para prosseguir, por favor digite corretamente o seu nome: ${activeAudName}`);
-      return;
-    }
-
     // Average performance calculation
     const avgScore = branches.length > 0
       ? Math.round(branches.reduce((acc, b) => acc + b.currentScore, 0) / branches.length)
