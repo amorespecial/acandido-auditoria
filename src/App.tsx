@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
+import { getCurrentUser, requireAdmin, requireSupervisor, requireAdminOrSupervisor, requireAlmoxarife, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
 
 // View components
 import Login from "./components/Login";
@@ -280,26 +281,23 @@ export default function App() {
     top10: Array<{ code: string; name: string }>;
     layoutLocation: string;
     materialParadoUploaded: boolean;
-  }>>(() => {
-    const saved = localStorage.getItem("acandido_cycle_configs3");
-    return saved ? JSON.parse(saved) : {
-      "Maio_2026": {
-        configured: true,
-        top10: [
-          { code: "1080571", name: "BATERIA 180 AMP" },
-          { code: "1050177", name: "KIT EMBREAGEM 1722" },
-          { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
-          { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
-          { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
-          { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
-          { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
-          { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
-          { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
-        ],
-        layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
-        materialParadoUploaded: true
-      }
-    };
+  }>>({
+    "Maio_2026": {
+      configured: true,
+      top10: [
+        { code: "1080571", name: "BATERIA 180 AMP" },
+        { code: "1050177", name: "KIT EMBREAGEM 1722" },
+        { code: "1081086", name: "ALTERNADOR BOSCH 24V 150AMP" },
+        { code: "1080901", name: "ALTERNADOR 24V 80 AMP" },
+        { code: "1140356", name: "COMPRESSOR AR CONDICIONADO TM" },
+        { code: "1091094", name: "TENSOR CORREIA ALTERNADOR MB O500" },
+        { code: "1090604", name: "TURBINA 1721 EURO 5 NOVA" },
+        { code: "1090667", name: "BOMBA DO ARLA EURO 5" },
+        { code: "1091730", name: "BOMBA DO ARLA EURO 6" }
+      ],
+      layoutLocation: "Área de Peças Hidráulicas e Conectores de Ar (Prateleira C-H)",
+      materialParadoUploaded: true
+    }
   });
 
   // Almoxarife routing states
@@ -315,14 +313,7 @@ export default function App() {
   const [dbConnectionError, setDbConnectionError] = useState(false);
   const [showLiveUpdateToast, setShowLiveUpdateToast] = useState(false);
 
-  const [allNonMovingSummaries, setAllNonMovingSummaries] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [allNonMovingSummaries, setAllNonMovingSummaries] = useState<any[]>([]);
 
   useEffect(() => {
     // Database seeding
@@ -386,7 +377,7 @@ export default function App() {
                 const cicloAtivo = {
                   activeMonth: monthStr,
                   activeYear: String(data.ano),
-                  status: String(data.status).toUpperCase() as any,
+                  status: normalizeCycleStatus(data.status),
                   openedAt: data.iniciado_em || data.aberto_em,
                   openedBy: data.iniciado_por || data.aberto_por
                 };
@@ -417,7 +408,7 @@ export default function App() {
                 const cicloLatest = {
                   activeMonth: monthStr,
                   activeYear: String(latest.ano),
-                  status: String(latest.status).toUpperCase() as any,
+                  status: normalizeCycleStatus(latest.status),
                   openedAt: latest.iniciado_em || latest.aberto_em,
                   openedBy: latest.iniciado_por || latest.aberto_por
                 };
@@ -541,15 +532,7 @@ export default function App() {
     ) {
       setRefetchTrigger((prev) => prev + 1);
     } else if (table === "usuarios") {
-      try {
-        const dbUsers = await dbFetchUsers();
-        if (dbUsers) {
-          localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
-          window.dispatchEvent(new Event("storage"));
-        }
-      } catch (err) {
-        console.error("Error reloading users on database change:", err);
-      }
+      setRefetchTrigger((prev) => prev + 1);
     }
   }, [activeMonth, activeYear]);
 
@@ -578,7 +561,6 @@ export default function App() {
         const dbData = await dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre);
         if (dbData) {
           setAllNonMovingSummaries(dbData);
-          localStorage.setItem("acandido_material_sem_movimentacao", JSON.stringify(dbData));
         }
       } catch (e) {
         console.error("Failed to fetch non moving summaries active period trigger:", e);
@@ -595,11 +577,7 @@ export default function App() {
   useEffect(() => {
     const updateHistoryFromDb = async () => {
       try {
-        const dbHistory = await dbFetchHistory();
-        if (dbHistory) {
-          localStorage.setItem("acandido_history", JSON.stringify(dbHistory));
-          window.dispatchEvent(new Event("storage"));
-        }
+        await dbFetchHistory();
       } catch (e) {
         console.error("Failed to fetch history on realtime trigger:", e);
       }

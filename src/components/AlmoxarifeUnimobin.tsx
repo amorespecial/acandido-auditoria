@@ -84,18 +84,6 @@ export default function AlmoxarifeUnimobin({
   }, []);
 
   const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
-    const storageKey = branchId 
-      ? `acandido_certificates_${branchId}_${currentMonth}_${currentYear}` 
-      : `acandido_certificates_default_${currentMonth}_${currentYear}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {}
-    }
     const baseCerts = getCollaboratorsForBranch(branchId, branchName);
     const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
     return baseCerts.map((baseC) => ({
@@ -108,7 +96,6 @@ export default function AlmoxarifeUnimobin({
     let active = true;
     const loadCerts = async () => {
       if (!branchId) return;
-      const storageKey = `acandido_certificates_${branchId}_${currentMonth}_${currentYear}`;
       
       let dbCerts: any[] = [];
       if (isSupabaseReady()) {
@@ -122,14 +109,14 @@ export default function AlmoxarifeUnimobin({
       if (dbCerts && dbCerts.length > 0 && active) {
         const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
         setCerts((prev) => {
-          const updated = prev.map((c) => {
+          return prev.map((c) => {
             const match = dbCerts.find(
               (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
             );
             if (match) {
               return {
                 ...c,
-                status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
+                status: (isSentGlobal ? "Certificado enviado" : match.status) as CollaboratorCertificate['status'],
                 fileName: match.file_name,
                 fileType: match.file_type,
                 fileData: match.file_data,
@@ -138,19 +125,7 @@ export default function AlmoxarifeUnimobin({
             }
             return c;
           });
-          localStorage.setItem(storageKey, JSON.stringify(updated));
-          return updated;
         });
-      } else {
-        const saved = localStorage.getItem(storageKey);
-        if (saved && active) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setCerts(parsed);
-            }
-          } catch (e) {}
-        }
       }
     };
     loadCerts();
@@ -160,13 +135,7 @@ export default function AlmoxarifeUnimobin({
   }, [branchId, currentMonth, currentYear, criterionState]);
 
   React.useEffect(() => {
-    if (!branchId) return;
-    const storageKey = `acandido_certificates_${branchId}_${currentMonth}_${currentYear}`;
-    
-    // Save to local storage cache immediately (Bug 4)
-    localStorage.setItem(storageKey, JSON.stringify(certs));
-    
-    if (!isSupabaseReady()) return;
+    if (!branchId || !isSupabaseReady()) return;
     try {
       certs.forEach((c) => {
         dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
@@ -197,7 +166,7 @@ export default function AlmoxarifeUnimobin({
               if (match) {
                 return {
                   ...c,
-                  status: (isSentGlobal ? "Certificado enviado" : match.status) as any,
+                  status: (isSentGlobal ? "Certificado enviado" : match.status) as CollaboratorCertificate['status'],
                   fileName: match.file_name,
                   fileType: match.file_type,
                   fileData: match.file_data,

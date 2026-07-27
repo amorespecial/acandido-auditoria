@@ -1,8 +1,43 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
-import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM } from "../supabaseService";
+import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM, dbBuscarCertificados, isSupabaseReady } from "../supabaseService";
+import { getCollaboratorsForBranch } from "../mockData";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase } from "../supabaseClient";
+
+function UnimobinSummary({ branchId, branchName, month, year }: { branchId: string; branchName: string; month: string; year: string }) {
+  const [certInfo, setCertInfo] = useState<{ total: number; sent: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!branchId) return;
+      const baseCerts = getCollaboratorsForBranch(branchId, branchName);
+      let sentCount = 0;
+      if (isSupabaseReady()) {
+        try {
+          const dbCerts = await dbBuscarCertificados(branchId, month, year);
+          if (dbCerts && dbCerts.length > 0) {
+            sentCount = dbCerts.filter(c => c.status === "Certificado enviado").length;
+          }
+        } catch (e) {}
+      }
+      if (active) {
+        setCertInfo({ total: baseCerts.length, sent: sentCount });
+      }
+    }
+    load();
+    return () => { active = false; };
+  }, [branchId, branchName, month, year]);
+
+  if (!certInfo || certInfo.total === 0) return null;
+  return (
+    <div className="text-[10px] text-indigo-700 font-bold bg-[#eff6ff] p-2 rounded border border-blue-100 flex items-center gap-1">
+      <span className="material-symbols-outlined text-[13px] text-blue-600">verified</span>
+      <span>{certInfo.sent} de {certInfo.total} certificados enviados.</span>
+    </div>
+  );
+}
 
 interface AlmoxarifeHomeProps {
   branch: Branch;
@@ -611,27 +646,14 @@ export default function AlmoxarifeHome({
                       </div>
                     )}
 
-                    {crit.id === "6" && (() => {
-                      const storageKey = branch.id 
-                        ? `acandido_certificates_${branch.id}_${displayMonth}_${displayYear}` 
-                        : `acandido_certificates_default_${displayMonth}_${displayYear}`;
-                      const saved = localStorage.getItem(storageKey);
-                      if (saved) {
-                        try {
-                          const certsList = JSON.parse(saved);
-                          if (Array.isArray(certsList)) {
-                            const uploaded = certsList.filter(c => c.status === "Certificado enviado");
-                            return (
-                              <div className="text-[10px] text-indigo-700 font-bold bg-[#eff6ff] p-2 rounded border border-blue-100 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[13px] text-blue-600">verified</span>
-                                <span>{uploaded.length} de {certsList.length} certificados enviados.</span>
-                              </div>
-                            );
-                          }
-                        } catch (e) {}
-                      }
-                      return null;
-                    })()}
+                    {crit.id === "6" && (
+                      <UnimobinSummary
+                        branchId={branch.id}
+                        branchName={branch.name}
+                        month={displayMonth}
+                        year={displayYear}
+                      />
+                    )}
                   </div>
                 )}
 

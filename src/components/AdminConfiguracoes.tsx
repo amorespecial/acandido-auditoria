@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getAnosDisponiveis, getAnosCalendario } from "../utils/dateUtils";
 import { AppUser, Branch, WarrantyItem } from "../types";
+import { canManageUsers, canEditSettings, canCloseCycle, canDeleteHistory, requireAdmin } from "../authorization";
 import {
   isSupabaseReady,
   dbFetchUsers,
@@ -620,17 +621,6 @@ export default function AdminConfiguracoes({
 
   // ================= STATE: USERS =================
   const [users, setUsers] = useState<AppUser[]>(() => {
-    const saved = localStorage.getItem("acandido_users");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        // Fallback
-      }
-    }
     // Prefill initial system profiles
     return [
       {
@@ -830,16 +820,22 @@ export default function AdminConfiguracoes({
   }, []);
 
   useEffect(() => {
+    if (isSupabaseReady()) {
+      dbFetchUsers().then(remoteUsers => {
+        if (remoteUsers && remoteUsers.length > 0) {
+          setUsers(remoteUsers);
+        }
+      }).catch(err => console.error("Error loading users from Supabase:", err));
+    }
+  }, []);
+
+  useEffect(() => {
     // Filter out Natalice if she remains in the local state, ensuring permanent deletion
     const filteredUsers = users.filter(u => u.email.toLowerCase().trim() !== "natalice.auditora@acandidogrupo.com.br");
     if (filteredUsers.length !== users.length) {
       setUsers(filteredUsers);
       dbDeleteUser("natalice.auditora@acandidogrupo.com.br").catch(e => console.warn(e));
-      return;
     }
-
-    localStorage.setItem("acandido_users", JSON.stringify(users));
-    window.dispatchEvent(new Event("storage"));
   }, [users]);
 
   // Modals for Users
@@ -876,14 +872,6 @@ export default function AdminConfiguracoes({
   // ================= STATE: COLABORADORES =================
   const [selectedCollabBranchId, setSelectedCollabBranchId] = useState<string>(branches[0]?.id || "");
   const [collabList, setCollabList] = useState<MiniCollaborator[]>(() => {
-    const saved = localStorage.getItem("acandido_all_collab_profiles");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // Safe catch
-      }
-    }
     // Prefill with some default collaborations from mapIdToNames in mockData
     const defaultCollabProfiles: MiniCollaborator[] = [];
     const baseMapping: Record<string, string[]> = {
@@ -913,11 +901,6 @@ export default function AdminConfiguracoes({
     });
     return defaultCollabProfiles;
   });
-
-  useEffect(() => {
-    localStorage.setItem("acandido_all_collab_profiles", JSON.stringify(collabList));
-    window.dispatchEvent(new Event("storage"));
-  }, [collabList]);
 
   const [newCollabName, setNewCollabName] = useState("");
 
@@ -1382,12 +1365,10 @@ export default function AdminConfiguracoes({
       return u;
     });
     setUsers(updatedUsers);
-    localStorage.setItem("acandido_users", JSON.stringify(updatedUsers));
 
     // 3. Cleanup branch collaborators lists
     const updatedCollabs = collabList.filter((c) => c.branchId !== branchId);
     setCollabList(updatedCollabs);
-    localStorage.setItem("acandido_all_collab_profiles", JSON.stringify(updatedCollabs));
 
     // 4. Cleanup its dynamic calendar references
     const itemsToDelete = calendarData.filter((c) => c.almoxarifado.toLowerCase() === branchName.toLowerCase());
@@ -1414,23 +1395,6 @@ export default function AdminConfiguracoes({
     };
 
     setCollabList(prev => [...prev, profile]);
-
-    // Also sync the local certificates key for this branch to instantly show
-    const currentMonth = cycleState?.activeMonth || "Janeiro";
-    const currentYear = cycleState?.activeYear || "2026";
-    const storageKey = `acandido_certificates_${selectedCollabBranchId}_${currentMonth}_${currentYear}`;
-    const existingCertsRaw = localStorage.getItem(storageKey);
-    let existingCerts = [];
-    if (existingCertsRaw) {
-      try { existingCerts = JSON.parse(existingCertsRaw); } catch (e) {}
-    }
-    const newCert = {
-      id: `collab-${existingCerts.length}-${profile.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`,
-      name: profile.name,
-      status: "Aguardando envio" as const
-    };
-    localStorage.setItem(storageKey, JSON.stringify([...existingCerts, newCert]));
-
     setNewCollabName("");
     alert("Colaborador cadastrado com sucesso para o curso Unimobin!");
   };
@@ -1442,22 +1406,6 @@ export default function AdminConfiguracoes({
       message: `Deseja remover permanentemente o colaborador ${name} da lista de treinamento do Unimobin?`,
       onConfirm: () => {
         setCollabList(prev => prev.filter((c) => c.id !== id));
-
-        // Also clean up local certificados file if applicable
-        const currentMonth = cycleState?.activeMonth || "Janeiro";
-        const currentYear = cycleState?.activeYear || "2026";
-        const storageKey = `acandido_certificates_${selectedCollabBranchId}_${currentMonth}_${currentYear}`;
-        const existingCertsRaw = localStorage.getItem(storageKey);
-        if (existingCertsRaw) {
-          try {
-            const parsed = JSON.parse(existingCertsRaw);
-            if (Array.isArray(parsed)) {
-              const updated = parsed.filter((c) => c.name.toLowerCase() !== name.toLowerCase());
-              localStorage.setItem(storageKey, JSON.stringify(updated));
-            }
-          } catch (e) {}
-        }
-
         setCustomConfirm(null);
         alert(`Colaborador ${name} removido com sucesso.`);
       }

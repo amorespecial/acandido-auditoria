@@ -112,11 +112,11 @@ export const getWarrantyFieldValue = (
   fieldType: "dataNf" | "notaFiscal" | "referencia" | "veiculo" | "localizacao" | "observacao",
   customFields?: any[]
 ): string => {
-  const wAny = w as any;
-  if (!wAny) return "—";
+  if (!w) return "—";
+  const wAny = w as Record<string, any>;
 
   if (fieldType === "dataNf") {
-    const val = w.nfEmissionDate || wAny.data_emissao_nf || wAny.data_nf || wAny.dataNf;
+    const val = w.nfEmissionDate || w.data_emissao_nf || w.data_nf || w.dataNf;
     if (val && val !== "—") {
       try {
         return new Date(val + 'T00:00:00').toLocaleDateString("pt-BR");
@@ -128,11 +128,11 @@ export const getWarrantyFieldValue = (
       const found = customFields.find((f: any) =>
         f.name?.toLowerCase().includes("emissão") || f.name?.toLowerCase().includes("data")
       );
-      if (found && wAny[found.id]) {
+      if (found && (w as Record<string, any>)[found.id]) {
         try {
-          return new Date(wAny[found.id] + 'T00:00:00').toLocaleDateString("pt-BR");
+          return new Date((w as Record<string, any>)[found.id] + 'T00:00:00').toLocaleDateString("pt-BR");
         } catch {
-          return wAny[found.id];
+          return (w as Record<string, any>)[found.id];
         }
       }
     }
@@ -548,21 +548,21 @@ export default function AlmoxarifeGarantia({
     setSelectedManufacturer(item.manufacturer);
     setExpiryDate(item.expiryDate);
     setSelectedAlmoxarifado(item.almoxarifado);
-    setNotaFiscal(item.notaFiscal || (item as any).nota_fiscal || "");
-    setNfEmissionDate(item.nfEmissionDate || (item as any).data_emissao_nf || "");
-    setReference(item.reference || (item as any).referencia_item || "");
+    setNotaFiscal(item.notaFiscal || item.nota_fiscal || "");
+    setNfEmissionDate(item.nfEmissionDate || item.data_emissao_nf || "");
+    setReference(item.reference || item.referencia_item || "");
     setVeiculo(item.veiculo || "");
     setLocalizacao(item.localizacao || "");
     setLastUpdateDate(item.lastUpdateDate);
-    setPieceObservation(item.pieceObservation === "Nenhuma observação" ? "" : (item.pieceObservation || (item as any).observacao || ""));
-    setScrapObservation(item.scrapObservation || (item as any).observacao_sucata || "");
+    setPieceObservation(item.pieceObservation === "Nenhuma observação" ? "" : (item.pieceObservation || item.observacao || ""));
+    setScrapObservation(item.scrapObservation || item.observacao_sucata || "");
 
     setFieldErrors({});
     setAttachmentError("");
-    if ((item as any).anexo_base64 || (item as any).arquivo_base64) {
+    if (item.anexo_base64 || item.arquivo_base64 || item.anexo_url) {
       setAttachmentFile({
-        name: (item as any).anexo_nome || "Arquivo Anexado",
-        base64: (item as any).anexo_base64 || (item as any).arquivo_base64 || "",
+        name: item.anexo_nome || "Arquivo Anexado",
+        base64: item.anexo_base64 || item.arquivo_base64 || item.anexo_url || "",
         size: 0
       });
     } else {

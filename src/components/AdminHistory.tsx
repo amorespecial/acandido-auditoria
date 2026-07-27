@@ -364,15 +364,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
           console.error("Failed to load history list in AdminHistory:", e);
         }
       }
-      // Fallback
-      try {
-        const saved = localStorage.getItem("acandido_history");
-        if (saved) {
-          setRawHistoryList(JSON.parse(saved));
-        }
-      } catch (e) {
-        setRawHistoryList([]);
-      }
+      setRawHistoryList([]);
     };
     loadAdminHist();
     window.addEventListener("realtime-historico-update", loadAdminHist);
@@ -922,14 +914,13 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             doc.setFontSize(7.5);
             doc.setTextColor(127, 29, 29);
             
-            const cAny = c as any;
-            const desvioText = cAny.nokEvidenceDescription ? `Desvio: ${cAny.nokEvidenceDescription}` : `Desvio: ${evidence.reasonNok}`;
+            const desvioText = c.nokEvidenceDescription ? `Desvio: ${c.nokEvidenceDescription}` : `Desvio: ${evidence.reasonNok}`;
             doc.text(doc.splitTextToSize(desvioText, 172)[0] || "", 18, y + 9);
             
-            const validPdfLinks = Array.isArray(cAny.nokEvidenceLinks)
-              ? cAny.nokEvidenceLinks.filter((l: any) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder"))
+            const validPdfLinks = Array.isArray((c as any).nokEvidenceLinks)
+              ? (c as any).nokEvidenceLinks.filter((l: string) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder"))
               : [];
-            const singlePdfLink = cAny.nokEvidenceLink && typeof cAny.nokEvidenceLink === "string" && !cAny.nokEvidenceLink.includes("mock-nok-folder") && cAny.nokEvidenceLink.trim() !== "" ? cAny.nokEvidenceLink : null;
+            const singlePdfLink = (c as any).nokEvidenceLink && typeof (c as any).nokEvidenceLink === "string" && !(c as any).nokEvidenceLink.includes("mock-nok-folder") && (c as any).nokEvidenceLink.trim() !== "" ? (c as any).nokEvidenceLink : null;
             const linksStr = validPdfLinks.length > 0 
               ? `Evidências: ${validPdfLinks.join(" | ")}` 
               : (singlePdfLink ? `Evidência: ${singlePdfLink}` : `Nota: "${evidence.obsNok}"`);
@@ -1343,8 +1334,8 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                               </span>
                               {c.status === "NOK" && (
                                 <div className="flex flex-wrap gap-1.5 items-center justify-start font-sans">
-                                  {(c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0 ? (
-                                    (c as any).nokEvidenceLinks.map((link: string, lIdx: number) => (
+                                  {c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0 ? (
+                                    c.nokEvidenceLinks.map((link: string, lIdx: number) => (
                                       <a
                                         key={lIdx}
                                         href={link}
@@ -1356,27 +1347,27 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
                                         <span>🔗 Ver evidência {lIdx + 1}</span>
                                       </a>
                                     ))
-                                  ) : ((c as any).nokEvidenceLink || (c as any).nokEvidenceFileData) ? (
+                                  ) : (c.nokEvidenceLink || c.nokEvidenceFileData) ? (
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if ((c as any).nokEvidenceFileData) {
+                                        if (c.nokEvidenceFileData) {
                                           const newTab = window.open();
                                           if (newTab) {
                                             newTab.document.write(
                                               `<html><head><title>Visualizar Evidência - NOK</title></head>` +
                                               `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                              `${(c as any).nokEvidenceFileType?.startsWith("image/") 
-                                                  ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                                  : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
+                                              `${c.nokEvidenceFileType?.startsWith("image/") 
+                                                  ? `<img src="${c.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                                  : `<iframe src="${c.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
                                                }` +
                                               `</body></html>`
                                             );
                                             newTab.document.close();
                                           }
-                                        } else if ((c as any).nokEvidenceLink) {
-                                          window.open((c as any).nokEvidenceLink, "_blank", "noopener,noreferrer");
+                                        } else if (c.nokEvidenceLink) {
+                                          window.open(c.nokEvidenceLink, "_blank", "noopener,noreferrer");
                                         }
                                       }}
                                       className="inline-flex items-center gap-1 text-xs bg-rose-100/60 hover:bg-rose-100/90 text-rose-800 border border-[#F7C1C1] px-2.5 py-1 rounded font-black transition-all shadow-3xs"

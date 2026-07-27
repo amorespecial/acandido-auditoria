@@ -1,6 +1,7 @@
 import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
 import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus, CollaboratorCertificate } from "./types";
+import { getCurrentUser, requirePermission } from "./authorization";
 import bcrypt from "bcryptjs";
 
 const STORAGE_PREFIX = "acandido_";
@@ -115,34 +116,31 @@ export const uploadFile = async (
 // ROLE AND PERMISSION VALIDATION HELPERS (FASE 7)
 // ==========================================
 export const getRequesterRole = (): string | null => {
-  if (typeof window !== "undefined" && window.sessionStorage) {
-    const raw = window.sessionStorage.getItem("acandido_app_user");
-    if (raw) {
-      try {
-        const u = JSON.parse(raw);
-        return u.role || null;
-      } catch (e) {
-        return null;
-      }
-    }
-  }
-  return null;
+  const user = getCurrentUser();
+  return user?.role || null;
 };
 
 export const checkPermission = (allowedRoles: string[], requesterRole?: string) => {
-  // If we are in the browser, always prioritize the true localStorage session role
-  // to prevent spoofing via manually passed parameters in developer tools.
-  const sessionRole = getRequesterRole();
-  const role = sessionRole || requesterRole;
-  if (!role) {
+  const user = getCurrentUser();
+  if (user) {
+    requirePermission(allowedRoles, user);
+  } else if (requesterRole) {
+    if (!allowedRoles.includes(requesterRole)) {
+      throw new Error(`Acesso negado: O perfil '${requesterRole}' não possui permissão para executar esta operação.`);
+    }
+  } else {
     throw new Error("Acesso negado: Usuário não autenticado no sistema.");
-  }
-  if (!allowedRoles.includes(role)) {
-    throw new Error(`Acesso negado: O perfil '${role}' não possui permissão para executar esta operação.`);
   }
 };
 
-// UUID helper generator
+export const normalizeCycleStatus = (val: any): CycleState['status'] => {
+  const s = String(val || "").toUpperCase().trim();
+  if (s === "ABERTO") return "ABERTO";
+  if (s === "AGUARDANDO_FECHAMENTO") return "AGUARDANDO_FECHAMENTO";
+  if (s === "FECHADO") return "FECHADO";
+  if (s === "ARQUIVADO") return "ARQUIVADO";
+  return "ABERTO";
+};
 const generateUUID = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -432,14 +430,12 @@ export const validateUserPassword = (
 
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_users");
-    return saved ? JSON.parse(saved) : [];
+    return [];
   }
 
   const { data, error } = await supabase.from('usuarios').select('*');
   if (error || !data) {
-    const saved = localStorage.getItem("acandido_users");
-    return saved ? JSON.parse(saved) : [];
+    return [];
   }
 
   return data.map(u => {
@@ -505,7 +501,7 @@ export const dbSaveUser = async (user: AppUser, requesterRole?: string) => {
   }
 
   const extraPayload = {
-    cargo: (user as any).cargo || "",
+    cargo: user.cargo || "",
     group: user.group || "A",
     ownerName: user.ownerName || user.name.split(" ")[0],
     almoxarifados: user.almoxarifados || []
@@ -671,7 +667,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   return {
     activeMonth: monthStr,
     activeYear: String(current.ano),
-    status: String(current.status).toUpperCase() as any,
+    status: normalizeCycleStatus(current.status),
     openedAt: current.iniciado_em || current.aberto_em,
     openedBy: current.iniciado_por || current.aberto_por
   };
@@ -739,7 +735,7 @@ export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
     return {
       activeMonth: monthStr,
       activeYear: String(item.ano),
-      status: String(item.status).toUpperCase() as any,
+      status: normalizeCycleStatus(item.status),
       openedAt: item.iniciado_em || item.aberto_em,
       openedBy: item.iniciado_por || item.aberto_por
     };
@@ -1143,6 +1139,7 @@ export const dbSaveEvaluation = async (
   evaluation: Partial<CriterionState>,
   evaluatedBy: string
 ) => {
+  checkPermission(["ADMIN", "SUPERVISOR"]);
   if (!isSupabaseReady()) {
     return;
   }
@@ -1239,6 +1236,7 @@ export const dbSubmitAlmoxarifeEvidence = async (
   storageUrls: string[],
   top10Quantities?: number[]
 ) => {
+  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"]);
   if (!isSupabaseReady()) return;
 
   const mesNum = monthNameToNum(mesName);
@@ -1654,12 +1652,12 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
         itemDescription: item.itemDescription,
         manufacturer: item.manufacturer || item.fabricante,
         expiryDate: item.expiryDate || item.garantia_ate,
-        data_emissao_nf: item.nfEmissionDate || item.data_emissao_nf || (item as any).data_nf,
-        referencia_item: item.reference || item.referencia_item || (item as any).referencia,
+        data_emissao_nf: item.nfEmissionDate || item.data_emissao_nf || item.data_nf,
+        referencia_item: item.reference || item.referencia_item || item.referencia,
         nota_fiscal: item.notaFiscal || item.nota_fiscal,
         veiculo: item.veiculo,
         localizacao: item.localizacao,
-        observacao: item.pieceObservation || item.observacao_peca || (item as any).observacao,
+        observacao: item.pieceObservation || item.observacao_peca || item.observacao,
         observacao_sucata: item.scrapObservation || item.observacao_sucata,
         anexo_url: item.anexo_url || item.anexo_base64 || item.arquivo_base64,
         registeredBy: item.registeredBy || item.registrado_por,
@@ -1674,7 +1672,8 @@ export const dbSaveWarranties = async (warranties: WarrantyItem[], requesterRole
   }
 };
 
-export const dbDeleteWarranty = async (id: string) => {
+export const dbDeleteWarranty = async (id: string, requesterRole?: string) => {
+  checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
   if (!isSupabaseReady() || !id) return;
   if (id.startsWith("war-") || id.startsWith("tmp")) return;
   const { error } = await supabase.from('garantias').delete().eq('id', id);
@@ -1756,11 +1755,12 @@ export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
     const rawBranch = o.almoxarifado_id || "";
     const bId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
     const bName = getBranchNameById(bId) || rawBranch;
+    const validStatus = (o.status as MaterialOccurrence['status']) || "EM ABERTO";
     return {
       id: o.id,
       material: o.material_falta,
       date: o.data_ocorrencia || "",
-      status: o.status as any,
+      status: validStatus,
       branchId: bId,
       branchName: bName,
       veiculo: o.veiculo || "",
@@ -1769,7 +1769,8 @@ export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
       filial: bName,
       obs: o.observacao || "",
       dias_aberto: o.dias_aberto || 0,
-      resolvedAt: o.data_resolucao || ""
+      resolvedAt: o.data_resolucao || "",
+      registrado_por: o.registrado_por || ""
     };
   });
 };
@@ -2208,8 +2209,7 @@ export async function dbBuscarCertificados(almoxarifado_id: string, mes: string,
 
 export const dbFetchColaboradoresUnimobin = async () => {
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_all_collab_profiles");
-    return saved ? JSON.parse(saved) : [];
+    return [];
   }
 
   // Fallback map colaboradores_unimobin from unimobin_certificados or returning base profiles
@@ -2218,7 +2218,7 @@ export const dbFetchColaboradoresUnimobin = async () => {
   return data.map(item => ({
     id: item.id,
     name: item.colaborador_nome,
-    status: item.status as any,
+    status: (item.status as CollaboratorCertificate['status']) || "Aguardando envio",
     cargo: "Motorista/Colaborador"
   }));
 };

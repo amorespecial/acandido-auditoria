@@ -48,7 +48,7 @@ export interface MaterialOccurrence {
   id: string;
   material: string;
   date: string;
-  status: "Comprado - Aguardando" | "Chegou" | "Sem Estoque Mín/Máx" | "Outro" | "RESOLVIDO" | "MATERIAL NO ALMOXARIFADO" | "COMPRADO, ESPERANDO CHEGAR" | "CIENTE";
+  status: "Comprado - Aguardando" | "Chegou" | "Sem Estoque Mín/Máx" | "Outro" | "RESOLVIDO" | "MATERIAL NO ALMOXARIFADO" | "COMPRADO, ESPERANDO CHEGAR" | "CIENTE" | "EM ABERTO" | "SOLICITADO" | "CANCELADO";
   obs?: string;
   branchId?: string;
   branchName?: string;
@@ -58,7 +58,8 @@ export interface MaterialOccurrence {
   filial?: string;
   timestamp?: number;
   resolvedAt?: string;
-  [key: string]: any;
+  dias_aberto?: number;
+  registrado_por?: string;
 }
 
 export interface WarrantyItem {
@@ -69,20 +70,32 @@ export interface WarrantyItem {
   expiryDate: string;
   almoxarifado: string;
   nfEmissionDate: string;
+  data_emissao_nf?: string;
+  data_nf?: string;
+  dataNf?: string;
   reference: string;
+  referencia_item?: string;
+  referencia?: string;
   lastUpdateDate: string;
   pieceObservation: string;
   scrapObservation: string;
+  observacao_peca?: string;
+  observacao_sucata?: string;
+  observacao?: string;
   monthYear: string;
   createdAt?: string;
   registeredBy?: string;
+  registrado_por?: string;
+  anexo_url?: string;
   anexo_base64?: string;
   arquivo_base64?: string;
   anexo_nome?: string;
   notaFiscal?: string;
+  nota_fiscal?: string;
   veiculo?: string;
   localizacao?: string;
-  [key: string]: any;
+  fabricante?: string;
+  garantia_ate?: string;
 }
 
 export interface CollaboratorCertificate {
@@ -121,11 +134,23 @@ export type AppUserRole = "ROBSON" | "ADMIN";
 
 export interface AuditHistoryEntry {
   id: string;
+  almoxarifado_id?: string;
+  branchId?: string;
+  branchName?: string;
+  mes?: string;
+  ano?: string;
   monthYear: string;
-  type: "Mensal" | "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral" | "Bom";
+  type?: "Mensal" | "Excelente" | "Alerta" | "Atenção" | "Avaliação Semestral" | "Bom";
   score: number;
+  pontuacao_total?: number;
+  scoreCategory?: string;
+  status_ciclo?: string;
+  status?: string;
+  fechado_em?: string;
+  dateEvaluated?: string;
+  auditorName?: string;
   nokItems: string[];
   auditedDetails?: string;
+  criterios?: any[];
   criteriaState?: CriterionState[];
-  branchId?: string;
 }

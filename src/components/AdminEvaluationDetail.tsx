@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Branch, CriterionState, EvaluationStatus } from "../types";
+import { Branch, CriterionState, EvaluationStatus, CollaboratorCertificate } from "../types";
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
@@ -241,7 +241,7 @@ export default function AdminEvaluationDetail({
             if (savedMatch) {
               return {
                 ...baseC,
-                status: isSentGlobal ? ("Certificado enviado" as const) : (savedMatch.status as any),
+                status: isSentGlobal ? ("Certificado enviado" as const) : ((savedMatch.status as CollaboratorCertificate['status']) || "Aguardando envio"),
                 uploadedAt: savedMatch.uploaded_at,
                 fileName: savedMatch.file_name,
                 fileSize: 0,
@@ -959,7 +959,7 @@ export default function AdminEvaluationDetail({
           if (c.id === "2") {
             return {
               ...c,
-              status: computedStatus as any,
+              status: computedStatus as EvaluationStatus,
               pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
               top10AuditorQuantities: finalQuantitiesList,
               notes: notesInput,
@@ -1019,7 +1019,7 @@ export default function AdminEvaluationDetail({
           if (c.id === "1") {
             return {
               ...c,
-              status: finalStatus as any,
+              status: finalStatus as EvaluationStatus,
               pointsObtained: pointsObtained,
               notes: notesInput || `Média semestral: ${okCount} de ${totalCount} OK.`,
               isAguardandoRealizacao: totalCount > 0 && branchCalendar.every(b => !b.status || b.status === "PENDENTE"),

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppUser, Branch, CriterionState } from "../types";
-import { dbFetchHistory, isSupabaseReady, dbFetchYearEvaluations, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
+import { dbFetchHistory, isSupabaseReady, dbFetchYearEvaluations, dbFetchAllNonMovingSummaries, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 
 const s = (v: any): string => (v == null ? "" : String(v));
@@ -149,26 +149,12 @@ function AdminRankingContent({
           console.error("Failed to load history list in AdminRanking:", e);
         }
       }
-      // Fallback
-      try {
-        const saved = localStorage.getItem("acandido_history");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            setHistoryList(parsed);
-            return;
-          }
-        }
-      } catch (e) {
-        setHistoryList([]);
-      }
+      setHistoryList([]);
     };
     loadRankingHist();
     window.addEventListener("realtime-historico-update", loadRankingHist);
-    window.addEventListener("storage", loadRankingHist);
     return () => {
       window.removeEventListener("realtime-historico-update", loadRankingHist);
-      window.removeEventListener("storage", loadRankingHist);
     };
   }, []);
 
@@ -200,14 +186,25 @@ function AdminRankingContent({
   const [localRankingMonth, setLocalRankingMonth] = useState<string>(activeMonth || "Janeiro");
   const [localAccumulatedFilter, setLocalAccumulatedFilter] = useState<"1_SEMESTRE" | "2_SEMESTRE" | "ANO_TODO">("1_SEMESTRE");
 
-  const localCalendar = calendarData || (() => {
-    try {
-      const saved = localStorage.getItem("acandido_calendario_inventarios");
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  })();
+  const [localMatSemMov, setLocalMatSemMov] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadNonMoving = async () => {
+      if (isSupabaseReady()) {
+        try {
+          const yearNum = parseInt(activeYear) || 2026;
+          const sem = (MONTH_NAME_TO_NUM[localRankingMonth.toLowerCase()] || 1) <= 6 ? 1 : 2;
+          const data = await dbFetchAllNonMovingSummaries(yearNum, sem);
+          if (data) setLocalMatSemMov(data);
+        } catch (e) {
+          console.error("Error loading non moving summaries in AdminRanking:", e);
+        }
+      }
+    };
+    loadNonMoving();
+  }, [activeYear, localRankingMonth]);
+
+  const localCalendar = calendarData || [];
 
   const isAwaitingPair = (entry: UnifiedEntry | null) => {
     if (!entry || !entry.branches || entry.branches.length !== 2) return false;
@@ -450,11 +447,6 @@ function AdminRankingContent({
 
           // Compute dynamic material sem mov
           let matStatus = "PENDENTE";
-          let localMatSemMov: any[] = [];
-          try {
-            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-            localMatSemMov = saved ? JSON.parse(saved) : [];
-          } catch (e) {}
           const branchMatSem = (localMatSemMov || []).find(item => 
             matchBranch(item.almoxarifado || "", b.id, b.name) &&
             Number(item.ano) === Number(activeYear) &&
@@ -641,11 +633,6 @@ function AdminRankingContent({
 
           // Compute dynamic material sem mov
           let matStatus = "PENDENTE";
-          let localMatSemMov: any[] = [];
-          try {
-            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-            localMatSemMov = saved ? JSON.parse(saved) : [];
-          } catch (e) {}
           const branchMatSem = (localMatSemMov || []).find(item => 
             matchBranch(item.almoxarifado || "", b.id, b.name) &&
             Number(item.ano) === Number(activeYear) &&
@@ -782,11 +769,6 @@ function AdminRankingContent({
           return { status: invStatus, points: pts };
         } else if (criterionId === "10") {
           const semester = monthNum <= 6 ? 1 : 2;
-          let localMatSemMov: any[] = [];
-          try {
-            const saved = localStorage.getItem("acandido_material_sem_movimentacao");
-            localMatSemMov = saved ? JSON.parse(saved) : [];
-          } catch (e) {}
           const branchMatSem = (localMatSemMov || []).find(item => 
             matchBranch(item.almoxarifado || "", b.id, b.name) &&
             Number(item.ano) === Number(activeYear) &&
@@ -942,26 +924,12 @@ function AdminRankingContent({
   const currentLeaderboard = activeGroupTab === "A" ? groupAEntries : groupBEntries;
 
   const hasRealHistory = (() => {
-    // 1. Check if we have archived records in acandido_history
+    // 1. Check if we have archived records in history
     if (historyList && historyList.filter((h: any) => h.monthYear).length > 0) {
       return true;
     }
 
-    // 2. Check if there are active / closed / blocked cycle structures initialized
-    try {
-      const savedCycles = localStorage.getItem("acandido_all_cycles_list");
-      if (savedCycles) {
-        const parsed = JSON.parse(savedCycles);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasActiveOrClosedCycle = parsed.some((c: any) => 
-            c.status === "FECHADO" || c.status === "AGUARDANDO_FECHAMENTO" || c.status === "ABERTO"
-          );
-          if (hasActiveOrClosedCycle) return true;
-        }
-      }
-    } catch (e) {}
-
-    // 3. Check if there is any evaluated score currently greater than zero
+    // 2. Check if there is any evaluated score currently greater than zero
     const anyScore = currentLeaderboard.some((item) => item.displayScore > 0);
     if (anyScore) return true;
 

@@ -455,7 +455,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
                   const veiculo = getWarrantyFieldValue(w, "veiculo", garantiaConfig?.customFields);
                   const localizacao = getWarrantyFieldValue(w, "localizacao", garantiaConfig?.customFields);
                   const observacao = getWarrantyFieldValue(w, "observacao", garantiaConfig?.customFields);
-                  const hasAnexo = Boolean((w as any).anexo_base64 || (w as any).arquivo_base64);
+                  const hasAnexo = Boolean(w.anexo_base64 || w.arquivo_base64 || w.anexo_url);
 
                   return (
                     <tr key={w.id} className="hover:bg-slate-50/40 transition-colors">
@@ -484,7 +484,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
                         {hasAnexo ? (
                           <button
                             type="button"
-                            onClick={() => handleOpenAnexo((w as any).anexo_base64 || (w as any).arquivo_base64, (w as any).anexo_nome)}
+                            onClick={() => handleOpenAnexo(w.anexo_base64 || w.arquivo_base64 || w.anexo_url, w.anexo_nome)}
                             title="Visualizar / Baixar Anexo"
                             className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[#00194C] transition inline-flex items-center justify-center cursor-pointer active:scale-95 border border-slate-200"
                           >

@@ -279,14 +279,7 @@ export default function AlmoxarifeHistorico({
           console.error("Failed to load history list in AlmoxarifeHistorico:", e);
         }
       }
-      try {
-        const saved = localStorage.getItem("acandido_history");
-        if (saved) {
-          setHistoryList(JSON.parse(saved));
-        }
-      } catch (e) {
-        setHistoryList([]);
-      }
+      setHistoryList([]);
     };
 
     loadAlmoxarifeHist();

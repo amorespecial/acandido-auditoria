@@ -261,28 +261,6 @@ export function getCollaboratorsForBranch(branchId?: string, branchName?: string
   const bId = (branchId || "").toLowerCase().trim();
   const bName = (branchName || "").toLowerCase().trim();
 
-  // Try retrieving from custom managed list first!
-  if (typeof window !== "undefined" && window.localStorage) {
-    const saved = localStorage.getItem("acandido_all_collab_profiles");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const match = parsed.filter((c: any) => c.branchId === branchId);
-          if (match.length > 0) {
-            return match.map((profile: any, index: number) => ({
-              id: profile.id || `collab-${index}-${profile.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`,
-              name: profile.name,
-              status: "Aguardando envio" as const
-            }));
-          }
-        }
-      } catch (e) {
-        // Safe catch
-      }
-    }
-  }
-
   let names: string[] = [];
 
   if (mapIdToNames[bId]) {
