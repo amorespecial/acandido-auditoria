@@ -73,43 +73,48 @@ export const uploadFile = async (
   filePath: string,
   fileSource: File | Blob | string // string means base64
 ): Promise<string> => {
-  let blob: Blob;
-  if (typeof fileSource === 'string') {
-    blob = base64ToBlob(fileSource);
-  } else {
-    blob = fileSource;
-  }
-
-  const cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
-
-  if (!isSupabaseReady()) {
-    console.warn(`[Supabase Storage Offline] Simulating upload of ${cleanPath} to bucket: ${bucket}`);
-    if (typeof fileSource === 'string' && fileSource.startsWith('data:')) {
-      return fileSource;
+  try {
+    let blob: Blob;
+    if (typeof fileSource === 'string') {
+      blob = base64ToBlob(fileSource);
+    } else {
+      blob = fileSource;
     }
-    return `https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600`;
+
+    const cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
+
+    if (!isSupabaseReady()) {
+      console.warn(`[Supabase Storage Offline] Simulating upload of ${cleanPath} to bucket: ${bucket}`);
+      if (typeof fileSource === 'string' && fileSource.startsWith('data:')) {
+        return fileSource;
+      }
+      return `https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600`;
+    }
+
+    const { error } = await supabase.storage.from(bucket).upload(cleanPath, blob, {
+      cacheControl: '3600',
+      upsert: true
+    });
+
+    if (error) {
+      console.error(`Error uploading to Supabase Storage (${bucket}):`, error);
+      throw new Error(`Falha no upload do arquivo: ${error.message || "Erro de envio no Storage"}`);
+    }
+
+    const { data, error: signedError } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(cleanPath, 3600);
+
+    if (signedError || !data?.signedUrl) {
+      console.error("Error creating signed URL:", signedError);
+      throw signedError || new Error("Falha ao gerar URL assinada do arquivo");
+    }
+
+    return data.signedUrl;
+  } catch (err: any) {
+    console.error(`[uploadFile Exception] Bucket: ${bucket}, Path: ${filePath}:`, err);
+    throw err instanceof Error ? err : new Error(String(err?.message || "Erro ao realizar upload do arquivo."));
   }
-
-  const { error } = await supabase.storage.from(bucket).upload(cleanPath, blob, {
-    cacheControl: '3600',
-    upsert: true
-  });
-
-  if (error) {
-    console.error(`Error uploading to Supabase Storage:`, error);
-    throw error;
-  }
-
-  const { data, error: signedError } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(cleanPath, 3600);
-
-  if (signedError || !data?.signedUrl) {
-    console.error("Error creating signed URL:", signedError);
-    throw signedError || new Error("Signed URL generation failed");
-  }
-
-  return data.signedUrl;
 };
 
 // ==========================================
@@ -250,7 +255,7 @@ export const dbMigrateUsersPasswords = async (requesterRole?: string): Promise<M
   }
 
   try {
-    const { data: users, error } = await supabase.from("usuarios").select("*");
+    const { data: users, error } = await supabase.from("usuarios").select("id, email, nome, perfil, senha_hash, almoxarifado, ativo");
     if (error) {
       throw error;
     }
@@ -340,7 +345,7 @@ export const dbCleanupLegacyPlainPasswords = async (requesterRole?: string): Pro
   }
 
   try {
-    const { data: users, error } = await supabase.from("usuarios").select("*");
+    const { data: users, error } = await supabase.from("usuarios").select("id, email, nome, senha_hash, almoxarifado");
     if (error) {
       throw error;
     }
@@ -433,7 +438,7 @@ export const dbFetchUsers = async (): Promise<AppUser[]> => {
     return [];
   }
 
-  const { data, error } = await supabase.from('usuarios').select('*');
+  const { data, error } = await supabase.from('usuarios').select('id, nome, email, perfil, almoxarifado, ativo');
   if (error || !data) {
     return [];
   }
@@ -538,7 +543,8 @@ export const dbDeleteUser = async (email: string, id?: any, requesterRole?: stri
     } else {
       query = query.eq('email', email.toLowerCase().trim());
     }
-    await query;
+    const { error } = await query;
+    if (error) throw error;
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
@@ -556,7 +562,7 @@ export interface CycleState {
 export async function dbGetCicloAtivo() {
   const { data } = await supabase
     .from('ciclos')
-    .select('*')
+    .select('id, mes, ano, status, iniciado_em, iniciado_por')
     .eq('status', 'ABERTO')
     .single();
   return data;
@@ -567,7 +573,7 @@ export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string,
   const { data, error } = await supabase
     .from('ciclos')
     .upsert({ mes, ano, status: 'ABERTO', iniciado_por: aberto_por, iniciado_em: new Date().toISOString() })
-    .select().single();
+    .select('id, mes, ano, status, iniciado_em, iniciado_por').single();
   if (error) throw error;
   return data;
 }
@@ -603,7 +609,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   // Fetch the active cycle (ABERTO or aberto) from the database
   let { data, error } = await supabase
     .from('ciclos')
-    .select('*')
+    .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
     .in('status', ['ABERTO', 'aberto'])
     .order('iniciado_em', { ascending: false })
     .limit(1);
@@ -612,7 +618,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     // Fetch critical locked cycle (AGUARDANDO_FECHAMENTO or aguardando_fechamento)
     const resBloq = await supabase
       .from('ciclos')
-      .select('*')
+      .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
       .in('status', ['AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
       .order('iniciado_em', { ascending: false })
       .limit(1);
@@ -623,7 +629,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
       // Fetch the latest cycle of all (e.g. FECHADO or fechado)
       const resLatest = await supabase
         .from('ciclos')
-        .select('*')
+        .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
         .order('iniciado_em', { ascending: false })
         .limit(1);
         
@@ -716,7 +722,7 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
 
 export const dbFetchAllCycles = async (): Promise<CycleState[]> => {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase.from('ciclos').select('*');
+  const { data, error } = await supabase.from('ciclos').select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por');
   if (error || !data) return [];
   return data.map(item => {
     let monthStr = "Janeiro";
@@ -786,7 +792,7 @@ export async function dbBuscarAvaliacoes(almoxarifado_id: string, mes: string | 
 
   const { data, error } = await supabase
     .from('avaliacoes')
-    .select('*')
+    .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
     .eq('almoxarifado', almoxarifado_id)
     .eq('mes', mesNum)
     .eq('ano', anoNum);
@@ -801,7 +807,7 @@ export async function dbBuscarTodasAvaliacoes(mes: string | number, ano: string 
 
   const { data, error } = await supabase
     .from('avaliacoes')
-    .select('*')
+    .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
     .eq('mes', mesNum)
     .eq('ano', anoNum);
 
@@ -866,7 +872,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
 
   const { data, error } = await supabase
     .from('avaliacoes')
-    .select('*')
+    .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
     .eq('almoxarifado', almoxarifado)
     .eq('mes', mesNum)
     .eq('ano', anoNum);
@@ -881,7 +887,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     const branchId = getBranchIdByName(almoxarifado);
     const { data: modes, error: modesErr } = await supabase
       .from('audit_modes')
-      .select('*')
+      .select('criterio_id, modo')
       .eq('almoxarifado_id', branchId)
       .eq('mes', mesName)
       .eq('ano', anoStr);
@@ -1003,12 +1009,12 @@ export const dbFetchAllEvaluationsForPeriod = async (
   const [evaluationsResult, auditModesResult] = await Promise.all([
     supabase
       .from('avaliacoes')
-      .select('*')
+      .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
       .eq('mes', mesNum)
       .eq('ano', anoNum),
     supabase
       .from('audit_modes')
-      .select('*')
+      .select('almoxarifado_id, criterio_id, modo')
       .eq('mes', mesName)
       .eq('ano', anoStr)
   ]);
@@ -1219,7 +1225,7 @@ export const dbFetchAlmoxarifeSubmissions = async (almoxarifado: string, mesName
   // Fallback map envios_almoxarife to top10_envios
   const { data } = await supabase
     .from('top10_envios')
-    .select('*')
+    .select('id, almoxarifado_id, mes, ano, enviado_por, enviado_em, fotos, quantidades')
     .eq('almoxarifado_id', almoxarifado)
     .eq('mes', mesName)
     .eq('ano', anoStr);
@@ -1332,7 +1338,7 @@ export const dbFetchSchedules = async (): Promise<any[]> => {
     return [];
   }
 
-  const { data, error } = await supabase.from('calendario_inventarios').select('*').order('id', { ascending: true });
+  const { data, error } = await supabase.from('calendario_inventarios').select('id, almoxarifado, ano, semestre, indice, data_agendada, status, nokEvidenceLink').order('id', { ascending: true });
   if (error || !data) {
     return [];
   }
@@ -1387,7 +1393,7 @@ export const dbSaveSchedules = async (schedules: any[], forceYear?: number, requ
 export const dbFetchBranchSchedules = async (branchId: string, options?: { ano?: number; semestre?: number }): Promise<any[]> => {
   if (!isSupabaseReady()) return [];
 
-  let query = supabase.from('calendario_inventarios').select('*').eq('almoxarifado', branchId);
+  let query = supabase.from('calendario_inventarios').select('id, almoxarifado, ano, semestre, indice, data_agendada, status, nokEvidenceLink').eq('almoxarifado', branchId);
   if (options?.ano) query = query.eq('ano', options.ano);
   if (options?.semestre) query = query.eq('semestre', options.semestre);
 
@@ -1431,7 +1437,8 @@ export const dbSaveSingleSchedule = async (item: any, userEmailOrName?: string, 
       nokEvidenceLink: item.nokEvidenceLink || null,
       sequencia: item.sequencia || `#${ind}`
     };
-    await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'almoxarifado,ano,semestre,indice' });
+    const { error } = await supabase.from('calendario_inventarios').upsert(record, { onConflict: 'almoxarifado,ano,semestre,indice' });
+    if (error) throw error;
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
@@ -1442,7 +1449,8 @@ export const dbDeleteSchedule = async (id: string, requesterRole?: string) => {
   if (!isSupabaseReady()) return;
   try {
     realtimeFlags.isLocalUpdate = true;
-    await supabase.from('calendario_inventarios').delete().eq('id', id);
+    const { error } = await supabase.from('calendario_inventarios').delete().eq('id', id);
+    if (error) throw error;
   } finally {
     realtimeFlags.isLocalUpdate = false;
   }
@@ -1561,7 +1569,7 @@ export async function dbBuscarGarantias(almoxarifado: string, mes: string | numb
   const mesNum = typeof mes === "number" ? mes : garantiaMonthToNum(mes);
   const anoNum = typeof ano === "number" ? ano : (parseInt(String(ano), 10) || 2026);
 
-  let query = supabase.from('garantias').select('*').eq('mes', mesNum).eq('ano', anoNum);
+  let query = supabase.from('garantias').select('id, almoxarifado, mes, ano, item, item_code, item_description, quantidade, fabricante, nota_fiscal, status, registrado_em, registrado_por, observacao, evidencias_urls, veiculo, localizacao, garantia_ate, data_emissao_nf, referencia_item, observacao_sucata').eq('mes', mesNum).eq('ano', anoNum);
   if (almoxarifado && almoxarifado !== "TODOS") {
     query = query.ilike('almoxarifado', `%${almoxarifado.replace("ALMOXARIFADO ", "").trim()}%`);
   }
@@ -1574,11 +1582,11 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
   let { data, error } = await supabase
     .from('garantias')
-    .select('*')
+    .select('id, almoxarifado, mes, ano, item, item_code, item_description, quantidade, fabricante, nota_fiscal, status, registrado_em, registrado_por, observacao, evidencias_urls, veiculo, localizacao, garantia_ate, data_emissao_nf, referencia_item, observacao_sucata')
     .order('registrado_em', { ascending: false });
 
   if (error) {
-    const retry = await supabase.from('garantias').select('*');
+    const retry = await supabase.from('garantias').select('id, almoxarifado, mes, ano, item, item_code, item_description, quantidade, fabricante, nota_fiscal, status, registrado_em, registrado_por, observacao, evidencias_urls, veiculo, localizacao, garantia_ate, data_emissao_nf, referencia_item, observacao_sucata');
     data = retry.data;
     error = retry.error;
   }
@@ -1712,7 +1720,7 @@ export async function dbSalvarNivelServico(registro: any, requesterRole?: string
 export async function dbBuscarNivelServico(almoxarifado_id: string) {
   const { data, error } = await supabase
     .from('nivel_servico')
-    .select('*')
+    .select('id, almoxarifado_id, veiculo, codigo_material, material_falta, solicitante, data_ocorrencia, status, observacao, dias_aberto, data_resolucao, registrado_por, created_at')
     .eq('almoxarifado_id', almoxarifado_id)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -1749,7 +1757,7 @@ export async function dbFetchNivelServicioEntries() {
 
 export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase.from('nivel_servico').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('nivel_servico').select('id, almoxarifado_id, almoxarifado, status, material_falta, data_ocorrencia, veiculo, solicitante, codigo_material, observacao, dias_aberto, data_resolucao, registrado_por, created_at').order('created_at', { ascending: false });
   if (error || !data) return [];
   return data.map(o => {
     const rawBranch = o.almoxarifado_id || "";
@@ -1808,11 +1816,16 @@ export const dbSaveOccurrences = async (occs: MaterialOccurrence[], requesterRol
 // ======================= MATERIAIS PARADOS =======================
 export async function dbSalvarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number, materiais: any[], requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
-  await supabase.from('materiais_parados')
+  const { error: delError } = await supabase.from('materiais_parados')
     .delete()
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('semestre', semestre)
     .eq('ano', ano);
+
+  if (delError) {
+    console.error("[dbSalvarMateriaisParados Delete Error]:", delError);
+    throw delError;
+  }
 
   if (materiais.length > 0) {
     const { error } = await supabase.from('materiais_parados')
@@ -1832,7 +1845,7 @@ export async function dbSalvarMateriaisParados(almoxarifado_id: string, semestre
 export async function dbBuscarMateriaisParados(almoxarifado_id: string, semestre: number, ano: number) {
   const { data, error } = await supabase
     .from('materiais_parados')
-    .select('*')
+    .select('id, almoxarifado_id, semestre, ano, inserted_em, codigo, descricao, ultimo_movimento, status')
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('semestre', semestre)
     .eq('ano', ano);
@@ -2030,7 +2043,7 @@ export async function dbSalvarTop10Config(almoxarifado_id: string, mes: string, 
 export async function dbBuscarTop10Config(almoxarifado_id: string, mes: string, ano: string) {
   const { data } = await supabase
     .from('top10_config')
-    .select('*')
+    .select('itens, configurado_por, updated_at')
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mes)
     .eq('ano', ano)
@@ -2068,7 +2081,7 @@ export async function dbSalvarTop10Envio(almoxarifado_id: string, mes: string, a
 export async function dbBuscarTop10Envio(almoxarifado_id: string, mes: string, ano: string) {
   const { data } = await supabase
     .from('top10_envios')
-    .select('*')
+    .select('id, almoxarifado_id, mes, ano, quantidades, fotos, enviado_por, uploaded_at')
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mes)
     .eq('ano', ano)
@@ -2113,7 +2126,7 @@ export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string,
 
   const { data } = await supabase
     .from('layout_config')
-    .select('*')
+    .select('localizacao, instrucoes, configurado_por, updated_at')
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mesInt)
     .eq('ano', anoInt)
@@ -2199,7 +2212,7 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
 export async function dbBuscarCertificados(almoxarifado_id: string, mes: string, ano: string) {
   const { data, error } = await supabase
     .from('unimobin_certificados')
-    .select('*')
+    .select('id, almoxarifado_id, mes, ano, colaborador_nome, status, anexo_url, enviado_por, enviado_em')
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mes)
     .eq('ano', ano);
@@ -2213,7 +2226,7 @@ export const dbFetchColaboradoresUnimobin = async () => {
   }
 
   // Fallback map colaboradores_unimobin from unimobin_certificados or returning base profiles
-  const { data, error } = await supabase.from('unimobin_certificados').select('*');
+  const { data, error } = await supabase.from('unimobin_certificados').select('id, colaborador_nome, status');
   if (error || !data) return [];
   return data.map(item => ({
     id: item.id,
@@ -2373,7 +2386,7 @@ export async function dbFetchYearEvaluations(ano: string | number): Promise<any[
   if (!isSupabaseReady()) return [];
   const { data, error } = await supabase
     .from('avaliacoes')
-    .select('*')
+    .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
     .eq('ano', Number(ano));
   if (error || !data) {
     console.warn("Error in dbFetchYearEvaluations:", error);

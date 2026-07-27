@@ -107,15 +107,16 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
 
   // Fetch warranties
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
-      setIsLoading(true);
+      if (isMounted) setIsLoading(true);
       try {
         const data = await dbFetchWarranties();
-        setWarranties(data || []);
+        if (isMounted) setWarranties(data || []);
       } catch (error) {
         console.error("Erro ao buscar garantias para auditor:", error);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     }
     loadData();
@@ -127,6 +128,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
 
     window.addEventListener("realtime-garantias-update", handleRealtime);
     return () => {
+      isMounted = false;
       window.removeEventListener("realtime-garantias-update", handleRealtime);
     };
   }, []);

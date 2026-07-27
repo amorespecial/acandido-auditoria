@@ -159,16 +159,17 @@ function AdminRankingContent({
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchAllEvals = async () => {
       if (isSupabaseReady()) {
         try {
-          setLoadingAllEvals(true);
+          if (isMounted) setLoadingAllEvals(true);
           const data = await dbFetchYearEvaluations(activeYear);
-          setAllEvaluationsOfYear(data);
+          if (isMounted) setAllEvaluationsOfYear(data);
         } catch (e) {
           console.error("Failed to load all evaluations of year in AdminRanking:", e);
         } finally {
-          setLoadingAllEvals(false);
+          if (isMounted) setLoadingAllEvals(false);
         }
       }
     };
@@ -177,6 +178,7 @@ function AdminRankingContent({
     // Refresh ranking state on external change too
     window.addEventListener("realtime-avaliacoes-update", fetchAllEvals);
     return () => {
+      isMounted = false;
       window.removeEventListener("realtime-avaliacoes-update", fetchAllEvals);
     };
   }, [activeYear, branches]);

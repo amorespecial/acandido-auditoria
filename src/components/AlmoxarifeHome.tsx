@@ -110,7 +110,7 @@ export default function AlmoxarifeHome({
       try {
         const { data, error } = await supabase
           .from('ciclos')
-          .select('*')
+          .select('mes, ano, status, iniciado_em')
           .in('status', ['ABERTO', 'aberto'])
           .order('iniciado_em', { ascending: false })
           .limit(1)
@@ -133,7 +133,7 @@ export default function AlmoxarifeHome({
         } else {
           const { data: latest, error: latestErr } = await supabase
             .from('ciclos')
-            .select('*')
+            .select('mes, ano, status, iniciado_em')
             .order('iniciado_em', { ascending: false })
             .limit(1)
             .maybeSingle();

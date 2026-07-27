@@ -4,7 +4,7 @@ import { initialBranches } from "./mockData";
 import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
-import { getCurrentUser, requireAdmin, requireSupervisor, requireAdminOrSupervisor, requireAlmoxarife, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
+import { getCurrentUser, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
 
 // View components
 import Login from "./components/Login";
@@ -359,7 +359,7 @@ export default function App() {
               // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou aberto)
               const { data, error } = await supabase
                 .from('ciclos')
-                .select('*')
+                .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
                 .in('status', ['ABERTO', 'aberto'])
                 .order('iniciado_em', { ascending: false })
                 .limit(1)
@@ -391,7 +391,7 @@ export default function App() {
               // PASSO 2 — Se não encontrou ciclo ABERTO, buscar o mais recente de todos
               const { data: latest, error: latestErr } = await supabase
                 .from('ciclos')
-                .select('*')
+                .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
                 .order('iniciado_em', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -751,7 +751,7 @@ export default function App() {
         
         const { data: data2, error: error2 } = await supabase
           .from('ciclos')
-          .select('*')
+          .select('id, mes, ano, status')
           .eq('status', 'ABERTO')
           .limit(1);
         console.log('[PROD DEBUG] Ciclo ativo:', { data2, error2 });
@@ -2503,11 +2503,24 @@ export default function App() {
                       <p className="text-[11px] text-slate-500 leading-relaxed">
                         O ciclo de <strong className="text-slate-800">{activeMonth} {activeYear}</strong> ainda não foi aberto de forma oficial pelo Auditor Geral Fernando Silva.
                       </p>
-                      <div className="p-3 bg-rose-50/50 border border-rose-100/50 rounded-xl text-left text-[10px] text-rose-800 leading-normal space-y-1">
-                        <span className="font-bold block mb-1">Passos pendentes:</span>
-                        <p>• Parametrização dos 9 itens críticos do relatório TOP 10.</p>
-                        <p>• Especificação da prateleira/layout físico a ser auditado.</p>
-                        <p>• Transmissão do relatório de saldos da TransNet.</p>
+                      <div 
+                        className="text-left leading-relaxed space-y-2"
+                        style={{
+                          backgroundColor: "#E8EDF5",
+                          border: "1px solid #CBD5E1",
+                          borderRadius: "8px",
+                          padding: "12px 16px"
+                        }}
+                      >
+                        <p style={{ color: "#00194C", fontWeight: 600, fontSize: "13px" }}>
+                          Fique atento ao comunicado de abertura do ciclo pelo Auditor Geral.<br />
+                          Enquanto isso, certifique-se que:
+                        </p>
+                        <div className="space-y-1" style={{ color: "#475569", fontSize: "13px" }}>
+                          <p>• Seus certificados Unimobin estão atualizados</p>
+                          <p>• O estoque está organizado para as auditorias do mês</p>
+                          <p>• As garantias de peças estão registradas no sistema</p>
+                        </div>
                       </div>
                       <button
                         type="button"

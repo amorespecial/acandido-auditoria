@@ -29,15 +29,16 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
 
   // Fetch from DB
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
-      setIsLoading(true);
+      if (isMounted) setIsLoading(true);
       try {
         const data = await dbFetchOccurrences();
-        setOccurrences(data || []);
+        if (isMounted) setOccurrences(data || []);
       } catch (error) {
         console.error("Erro ao buscar serviços em tempo real:", error);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     }
     loadData();
@@ -49,6 +50,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
 
     window.addEventListener("realtime-nivel-servico-update", handleRealtime);
     return () => {
+      isMounted = false;
       window.removeEventListener("realtime-nivel-servico-update", handleRealtime);
     };
   }, []);

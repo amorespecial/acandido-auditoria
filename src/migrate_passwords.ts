@@ -20,7 +20,7 @@ async function runMigration() {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   // 1. Fetch all users from database
-  const { data: users, error } = await supabase.from("usuarios").select("*");
+  const { data: users, error } = await supabase.from("usuarios").select("id, email, nome, perfil, senha_hash, almoxarifado, ativo");
 
   if (error) {
     console.error("Erro ao buscar usuários do Supabase:", error);
