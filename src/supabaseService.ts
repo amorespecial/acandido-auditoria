@@ -433,12 +433,68 @@ export const validateUserPassword = (
   return false;
 };
 
+export const dbValidateLogin = async (emailInput: string, passwordInput: string): Promise<AppUser | null> => {
+  if (!isSupabaseReady()) {
+    throw new Error("Supabase não está configurado.");
+  }
+
+  const cleanEmail = emailInput.toLowerCase().trim();
+
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('id, nome, email, perfil, almoxarifado, ativo, senha_hash')
+    .ilike('email', cleanEmail)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erro ao buscar usuário para login no Supabase:", error);
+    throw new Error("Erro de conexão ao buscar usuário.");
+  }
+
+  if (!data) {
+    return null; // Usuário não encontrado
+  }
+
+  const isPasswordCorrect = validateUserPassword(passwordInput, data.senha_hash);
+  if (!isPasswordCorrect) {
+    throw new Error("Senha incorreta.");
+  }
+
+  let extra: any = {};
+  if (data.almoxarifado && typeof data.almoxarifado === "string" && data.almoxarifado.trim().startsWith("{")) {
+    try {
+      extra = JSON.parse(data.almoxarifado);
+    } catch (e) {
+      console.warn("Could not parse extra payload from user almoxarifado column:", e);
+    }
+  }
+
+  const cargo = extra.cargo || "";
+  const almoxarifados = extra.almoxarifados || [];
+  const group = extra.group || "A";
+  const ownerName = extra.ownerName || data.nome.split(" ")[0];
+
+  return {
+    id: data.id,
+    name: data.nome,
+    email: data.email,
+    role: data.perfil === "auditor" ? "ADMIN" : data.perfil === "supervisor" ? "SUPERVISOR" : "ALMOXARIFE",
+    ownerName: ownerName,
+    group: group,
+    status: data.ativo ? "ATIVO" : "DESATIVADO",
+    almoxarifados: almoxarifados || [],
+    password: "",
+    senha_hash: data.senha_hash || undefined,
+    cargo: cargo
+  };
+};
+
 export const dbFetchUsers = async (): Promise<AppUser[]> => {
   if (!isSupabaseReady()) {
     return [];
   }
 
-  const { data, error } = await supabase.from('usuarios').select('id, nome, email, perfil, almoxarifado, ativo');
+  const { data, error } = await supabase.from('usuarios').select('id, nome, email, perfil, almoxarifado, ativo, senha_hash');
   if (error || !data) {
     return [];
   }
