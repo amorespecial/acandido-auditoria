@@ -273,6 +273,36 @@ const getScheduledInventoryDate = (branchName: string, monthYear: string, branch
   return sem === 1 ? "26/06/2026" : "27/11/2026";
 };
 
+const getMonthSortKey = (monthYearStr: string): number => {
+  if (!monthYearStr) return 0;
+  const str = String(monthYearStr).trim().toLowerCase();
+  const monthsMap: Record<string, number> = {
+    "janeiro": 1,
+    "fevereiro": 2,
+    "março": 3,
+    "marco": 3,
+    "abril": 4,
+    "maio": 5,
+    "junho": 6,
+    "julho": 7,
+    "agosto": 8,
+    "setembro": 9,
+    "outubro": 10,
+    "novembro": 11,
+    "dezembro": 12
+  };
+  let mVal = 0;
+  for (const [key, val] of Object.entries(monthsMap)) {
+    if (str.includes(key)) {
+      mVal = val;
+      break;
+    }
+  }
+  const yearMatch = str.match(/\d{4}/);
+  const yearVal = yearMatch ? parseInt(yearMatch[0], 10) : 2026;
+  return yearVal * 100 + mVal;
+};
+
 const getHistoryForBranch = (bId: string, historyList: any[]): AuditHistoryEntry[] => {
   const monthlyScoresMap: Record<string, number[]> = {
     "unitrans-jp": [],
@@ -331,6 +361,8 @@ const getHistoryForBranch = (bId: string, historyList: any[]): AuditHistoryEntry
       combined.push(sim);
     }
   });
+
+  combined.sort((a, b) => getMonthSortKey(a.monthYear) - getMonthSortKey(b.monthYear));
 
   return combined;
 };
@@ -549,23 +581,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
   };
 
   const getChronologicalHistory = (list: AuditHistoryEntry[]) => {
-    const monthsMap: Record<string, number> = {
-      "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
-      "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12
-    };
-    return [...list].sort((a, b) => {
-      const partsA = s(a.monthYear).split(" ");
-      const partsB = s(b.monthYear).split(" ");
-      const yearA = parseInt(partsA[1], 10) || 0;
-      const yearB = parseInt(partsB[1], 10) || 0;
-      const monthA = monthsMap[s(partsA[0]).toLowerCase()] || 0;
-      const monthB = monthsMap[s(partsB[0]).toLowerCase()] || 0;
-
-      if (yearA !== yearB) {
-        return yearA - yearB;
-      }
-      return monthA - monthB;
-    });
+    return [...list].sort((a, b) => getMonthSortKey(a.monthYear) - getMonthSortKey(b.monthYear));
   };
 
   const buildAutomaticResumoExecutivo = (entry: AuditHistoryEntry) => {
