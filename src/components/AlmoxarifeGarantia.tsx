@@ -3,7 +3,7 @@ import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
 import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
-import { getMesesDisponiveis } from "../utils/dateUtils";
+import { gerarMesesDisponiveis, getMesesDisponiveis } from "../utils/dateUtils";
 
 interface AlmoxarifeGarantiaProps {
   onBack: () => void;
@@ -468,8 +468,11 @@ export default function AlmoxarifeGarantia({
     return true;
   })();
 
+  const mesesDisponiveis = gerarMesesDisponiveis();
+  const defaultMonthFilter = mesesDisponiveis[0]?.value || `${activeMonth} ${activeYear}`;
+
   const getMonthFilterForBranch = (branchId: string) => {
-    return branchMonthFilters[branchId] || `${activeMonth} ${activeYear}`;
+    return branchMonthFilters[branchId] || defaultMonthFilter;
   };
 
   const setMonthFilterForBranch = (branchId: string, month: string) => {
@@ -481,7 +484,7 @@ export default function AlmoxarifeGarantia({
 
   const activeBranchMonthFilter = activeBranch
     ? getMonthFilterForBranch(activeBranch.id)
-    : `${activeMonth} ${activeYear}`;
+    : defaultMonthFilter;
 
   const persistChange = async (updated: WarrantyItem[]) => {
     if (isSupabaseReady()) {
@@ -830,9 +833,9 @@ export default function AlmoxarifeGarantia({
             }}
             className="border border-slate-250 bg-white rounded-lg px-3 py-2 text-xs font-bold text-[#1B2A4A] focus:outline-none focus:border-[#1B2A4A]"
           >
-            {getMesesDisponiveis().map((m) => (
-              <option key={m} value={m}>
-                {m}
+            {mesesDisponiveis.map((op) => (
+              <option key={op.value} value={op.value}>
+                {op.label}
               </option>
             ))}
           </select>
