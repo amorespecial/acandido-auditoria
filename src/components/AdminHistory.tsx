@@ -475,7 +475,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
       case "fretamento-jaboatao": return `Fretamento Jaboatão (${ownerName})`;
       case "rodoviario-jaboatao": return `Rodoviário Jaboatão (${ownerName})`;
       case "fretamento-goiana": return `Fretamento Goiana (${ownerName})`;
-      case "unissana-rn": return `Unissana RN (${ownerName})`;
+      case "unissana-rn": return `Unissanta RN (${ownerName})`;
       case "reunidas-nat": return `Reunidas Transportes NAT (${ownerName})`;
       case "fretamento-pb": return `Fretamento PB (${ownerName})`;
       case "trans-cg-bayeux": return `Trans CG Bayeux (${ownerName})`;

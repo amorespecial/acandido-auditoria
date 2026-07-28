@@ -2,6 +2,7 @@ import { supabase, isSupabaseReady, realtimeFlags } from "./supabaseClient";
 export { isSupabaseReady };
 import { AppUser, Branch, CriterionState, WarrantyItem, MaterialOccurrence, EvaluationStatus, CollaboratorCertificate } from "./types";
 import { getCurrentUser, requirePermission } from "./authorization";
+import { getCriteriaForBranch } from "./mockData";
 import bcrypt from "bcryptjs";
 
 const STORAGE_PREFIX = "acandido_";
@@ -1056,7 +1057,7 @@ export const getBranchNameById = (id: string): string => {
   if (branchId === "fretamento-maracanau") return "FRETAMENTO MARACANAU";
   if (branchId === "reunidas-nat") return "REUNIDAS TRANSPORTES NAT";
   if (branchId === "fretamento-pb") return "FRETAMENTO PB";
-  if (branchId === "unissana-rn") return "ALMOXARIFADO UNISSANA RN";
+  if (branchId === "unissana-rn" || branchId === "unissanta-rn") return "ALMOXARIFADO UNISSANTA RN";
   return id;
 };
 
@@ -2537,6 +2538,59 @@ export async function dbFetchYearEvaluations(ano: string | number): Promise<any[
     return [];
   }
   return data;
+}
+
+export async function dbFetchAlmoxarifados(): Promise<Branch[]> {
+  if (!isSupabaseReady()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('almoxarifados')
+      .select('id, nome, cidade, estado, grupo, responsavel, garagem_dupla_com, ativo')
+      .eq('ativo', true)
+      .order('grupo', { ascending: true })
+      .order('nome', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      if (error) console.warn("dbFetchAlmoxarifados error or empty:", error);
+      return [];
+    }
+
+    return data.map((row: any) => ({
+      id: row.id,
+      name: row.nome || row.id,
+      location: row.cidade && row.estado ? `${row.cidade}, ${row.estado}` : row.cidade || row.estado || "Brasil",
+      currentScore: 0,
+      meta: 100,
+      status: "PENDENTE" as const,
+      scoreCategory: "Abaixo da Meta" as const,
+      criteria: getCriteriaForBranch(0),
+      ownerName: row.responsavel || "Almoxarife",
+      group: (row.grupo === "A" || row.grupo === "B") ? row.grupo : "A",
+      semestralScore: 0
+    }));
+  } catch (err) {
+    console.error("Error in dbFetchAlmoxarifados:", err);
+    return [];
+  }
+}
+
+export async function dbUpdateAlmoxarifadoNome(id: string, newNome: string): Promise<boolean> {
+  if (!isSupabaseReady()) return false;
+  try {
+    const { error } = await supabase
+      .from('almoxarifados')
+      .update({ nome: newNome })
+      .eq('id', id);
+
+    if (error) {
+      console.error("Error updating almoxarifado in Supabase:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Error in dbUpdateAlmoxarifadoNome:", err);
+    return false;
+  }
 }
 
 

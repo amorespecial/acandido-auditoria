@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus, dbFetchAlmoxarifados } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 import { getCurrentUser, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
@@ -47,11 +47,24 @@ const getInitialAuditMode = (branchId: string, ownerName: string, criterionId: s
 };
 
 const getCleanDefaultBranches = () => {
+  let customNamesMap: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const saved = localStorage.getItem("acandido_custom_branch_names");
+      if (saved) {
+        customNamesMap = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Failed to parse acandido_custom_branch_names from localStorage", e);
+    }
+  }
+
   return initialBranches.map((b) => ({
     ...b,
+    name: customNamesMap[b.id] || b.name,
     currentScore: 0,
     status: "PENDENTE" as const,
-    scoreCategory: "Sem Nota Inicial" as const,
+    scoreCategory: "Abaixo da Meta" as const,
     criteria: b.criteria.map((c) => ({
       ...c,
       status: "AGUARDANDO ENVIO" as const,
@@ -607,7 +620,28 @@ export default function App() {
         console.log("[DEBUG] local update in progress. Skipping fetchEvaluationsFromSupabase from effect trigger.");
         return;
       }
-      const defaultBranches = getCleanDefaultBranches();
+      let defaultBranches: Branch[] = [];
+      if (isSupabaseReady()) {
+        try {
+          const dbB = await dbFetchAlmoxarifados();
+          if (dbB && dbB.length > 0) {
+            let customNamesMap: Record<string, string> = {};
+            try {
+              const saved = localStorage.getItem("acandido_custom_branch_names");
+              if (saved) customNamesMap = JSON.parse(saved);
+            } catch (e) {}
+            defaultBranches = dbB.map((b) => ({
+              ...b,
+              name: customNamesMap[b.id] || b.name,
+            }));
+          }
+        } catch (e) {
+          console.error("Error fetching almoxarifados in fetchEvaluationsFromSupabase:", e);
+        }
+      }
+      if (!defaultBranches || defaultBranches.length === 0) {
+        defaultBranches = getCleanDefaultBranches();
+      }
       
       let evaluationsMap: Record<string, any> = {};
       let loadedFromSupabase = false;
@@ -2142,7 +2176,7 @@ export default function App() {
                   : "border-transparent text-[#64748B] font-medium hover:text-[#00194C] hover:border-[#CBD5E1]"
               }`}
             >
-              Almoxarifados ({branches.length})
+              Almoxarifados
             </button>
             <button
               onClick={() => {

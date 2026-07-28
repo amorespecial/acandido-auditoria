@@ -251,7 +251,7 @@ function AdminRankingContent({
         branches: []
       },
       "Raimundo": {
-        name: "Almoxarifado Unissana RN",
+        name: "Almoxarifado Unissanta RN",
         location: "Natal, RN",
         group: "B",
         branches: []

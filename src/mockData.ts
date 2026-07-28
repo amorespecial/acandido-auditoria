@@ -1,6 +1,6 @@
 import { Branch, AuditHistoryEntry, MaterialOccurrence, WarrantyItem, CollaboratorCertificate, InventoryItemToCount, CriterionState, EvaluationStatus } from "./types";
 
-const getCriteriaForBranch = (score: number = 0): CriterionState[] => {
+export const getCriteriaForBranch = (score: number = 0): CriterionState[] => {
   if (score === 0) {
     return [
       { id: "1", number: "01", name: "Inventário", recurrence: "Semestral", pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" },
@@ -141,7 +141,7 @@ export const initialBranches: Branch[] = [
   // --- GRUPO B ---
   {
     id: "unissana-rn",
-    name: "ALMOXARIFADO UNISSANA RN",
+    name: "ALMOXARIFADO UNISSANTA RN",
     location: "Natal, Rio Grande do Norte",
     currentScore: 0,
     meta: 100,
@@ -289,7 +289,7 @@ export function getCollaboratorsForBranch(branchId?: string, branchName?: string
       names = ["Matheus"];
     } else if (bId.includes("cabedelo") || bName.includes("cabedelo")) {
       names = ["Matheus"];
-    } else if (bId.includes("unissana") || bName.includes("unissana")) {
+    } else if (bId.includes("unissana") || bName.includes("unissana") || bId.includes("unissanta") || bName.includes("unissanta")) {
       names = ["Raimundo"];
     } else if (bId.includes("reunidas") || bName.includes("reunidas")) {
       names = ["Joel"];

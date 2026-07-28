@@ -28,6 +28,8 @@ import {
   dbSaveUnimobinFieldConfig,
   dbFetchSupervisorFieldConfig,
   dbSaveSupervisorFieldConfig,
+  dbUpdateAlmoxarifadoNome,
+  dbFetchAlmoxarifados,
   dbFetchPresetItems,
   dbSavePresetItems,
   dbFetchPresetManufacturers,
@@ -1270,6 +1272,11 @@ export default function AdminConfiguracoes({
     const oldName = editingBranch.name;
     const newName = branchFormName.trim().toUpperCase();
 
+    // 0. Update Supabase table 'almoxarifados'
+    if (isSupabaseReady()) {
+      await dbUpdateAlmoxarifadoNome(editingBranch.id, newName);
+    }
+
     // 1. Update branches in parent state
     const updated = branches.map((b) => {
       if (b.id === editingBranch.id) {
@@ -1280,6 +1287,18 @@ export default function AdminConfiguracoes({
       }
       return b;
     });
+
+    // Save custom names map in localStorage so it persists across reloads and getCleanDefaultBranches
+    try {
+      const customNamesMap = updated.reduce((acc, b) => {
+        acc[b.id] = b.name;
+        return acc;
+      }, {} as Record<string, string>);
+      localStorage.setItem("acandido_custom_branch_names", JSON.stringify(customNamesMap));
+    } catch (e) {
+      console.error("Failed to save custom branch names to localStorage", e);
+    }
+
     onUpdateBranchNames(updated);
 
     // 2. Cascade rename inside global Calendar inventories
@@ -1500,7 +1519,7 @@ export default function AdminConfiguracoes({
           }`}
         >
           <span className="material-symbols-outlined text-[16px]">warehouse</span>
-          Almoxarifados ({branches.length})
+          Almoxarifados
         </button>
         <button
           onClick={() => setActiveTab("COLABORADORES")}
