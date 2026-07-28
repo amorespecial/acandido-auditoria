@@ -145,7 +145,8 @@ export const normalizeCycleStatus = (val: any): CycleState['status'] => {
   if (s === "AGUARDANDO_FECHAMENTO") return "AGUARDANDO_FECHAMENTO";
   if (s === "FECHADO") return "FECHADO";
   if (s === "ARQUIVADO") return "ARQUIVADO";
-  return "ABERTO";
+  if (s === "NENHUM") return "NENHUM";
+  return "NENHUM";
 };
 const generateUUID = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -645,21 +646,9 @@ export async function dbFecharCiclo(mes: string, ano: string, requesterRole?: st
 }
 
 export const dbFetchCycleState = async (): Promise<CycleState> => {
-  const defaultState: CycleState = { activeMonth: "Janeiro", activeYear: "2026", status: "ABERTO", openedAt: "01/01/2026", openedBy: "Fernando Silva" };
+  const defaultState: CycleState = { activeMonth: "Janeiro", activeYear: "2026", status: "NENHUM" };
   
-  // Rule 4: If Supabase is not ready, load from localStorage fallback to ensure the last state is persisted.
   if (!isSupabaseReady()) {
-    const saved = localStorage.getItem("acandido_cycle_state_manual");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.status) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error("Failed to parse cached cycleState on offline fallback:", e);
-      }
-    }
     return defaultState;
   }
 
@@ -683,7 +672,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
       data = resBloq.data;
     } else {
-      // Fetch the latest cycle of all (e.g. FECHADO or fechado)
+      // Fetch the latest cycle of all (e.g. FECHADO or ARQUIVADO)
       const resLatest = await supabase
         .from('ciclos')
         .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
@@ -697,15 +686,6 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
   }
 
   if (!data || data.length === 0) {
-    const saved = localStorage.getItem("acandido_cycle_state_manual");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.status) {
-          return parsed;
-        }
-      } catch (e) {}
-    }
     return defaultState;
   }
 

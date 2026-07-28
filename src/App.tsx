@@ -120,11 +120,11 @@ export default function App() {
       if (savedUser) sessionStorage.setItem("acandido_app_user", savedUser);
       if (savedUsersList) localStorage.setItem("acandido_users", savedUsersList);
       
-      // Seed Janeiro 2026 as unique active open cycle
+      // Reset initial cycle state as NENHUM
       const initialCycle = {
         activeMonth: "Janeiro",
         activeYear: "2026",
-        status: "ABERTO",
+        status: "NENHUM",
         openedAt: "01/01/2026",
         openedBy: "Fernando Silva"
       };
@@ -186,20 +186,12 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<"PAINEL" | "RANKING" | "HISTORICO" | "CONFIGURI" | "GARANTIAS" | "SERVICOS">("PAINEL");
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
-  // Centralized cycle state for Fernando Silva (default to ABERTO for Janeiro 2026 on first load)
+  // Centralized cycle state for Fernando Silva (default to NENHUM, initialized strictly from Supabase)
   const [cycleState, setCycleState] = useState<CycleState>(() => {
-    const saved = localStorage.getItem("acandido_cycle_state_manual");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
     return {
       activeMonth: "Janeiro",
       activeYear: "2026",
-      status: "ABERTO",
-      openedAt: "01/01/2026",
-      openedBy: "Fernando Silva"
+      status: "NENHUM"
     };
   });
 
@@ -369,11 +361,11 @@ export default function App() {
           }
           const initializeCycleState = async () => {
             try {
-              // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou aberto)
+              // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou AGUARDANDO_FECHAMENTO)
               const { data, error } = await supabase
                 .from('ciclos')
                 .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-                .in('status', ['ABERTO', 'aberto'])
+                .in('status', ['ABERTO', 'aberto', 'AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
                 .order('iniciado_em', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -401,7 +393,7 @@ export default function App() {
                 return;
               }
 
-              // PASSO 2 — Se não encontrou ciclo ABERTO, buscar o mais recente de todos
+              // PASSO 2 — Se não encontrou ciclo ABERTO, buscar o mais recente do banco
               const { data: latest, error: latestErr } = await supabase
                 .from('ciclos')
                 .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
@@ -436,18 +428,13 @@ export default function App() {
               console.error("Erro ao buscar ciclo do Supabase:", err);
             }
 
-            // PASSO 3 — Supabase falhou completamente, usar localStorage como último recurso
-            const cached = localStorage.getItem("acandido_cycle_state_manual");
-            if (cached) {
-              try {
-                const parsed = JSON.parse(cached);
-                setCycleState(parsed);
-                if (parsed.activeMonth) setActiveMonth(parsed.activeMonth);
-                if (parsed.activeYear) setActiveYear(parsed.activeYear);
-              } catch (e) {
-                console.error("Erro ao fazer parse do cache local:", e);
-              }
-            }
+            // PASSO 3 — Se não houver ciclos no banco de dados, marcar como NENHUM ciclo ativo
+            setCycleState({
+              activeMonth: "Janeiro",
+              activeYear: "2026",
+              status: "NENHUM"
+            });
+            localStorage.setItem("acandido_cycle_state_manual", JSON.stringify({ activeMonth: "Janeiro", activeYear: "2026", status: "NENHUM" }));
           };
 
           await initializeCycleState();
@@ -799,17 +786,6 @@ export default function App() {
   // Real-time synchronization of configurations (Users, Almoxarifados, Cycles)
   useEffect(() => {
     const handleSync = () => {
-      // 2. Sync cycleState
-      const storedCycle = localStorage.getItem("acandido_cycle_state_manual");
-      if (storedCycle) {
-        try {
-          const parsed = JSON.parse(storedCycle);
-          if (JSON.stringify(parsed) !== JSON.stringify(cycleState)) {
-            setCycleState(parsed);
-          }
-        } catch (e) {}
-      }
-
       // 3. Sync cycleConfigs
       const storedConfigs = localStorage.getItem("acandido_cycle_configs3");
       if (storedConfigs) {
