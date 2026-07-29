@@ -1121,7 +1121,9 @@ function AdminRankingContent({
       return uniqueMonthsWithArchive.size;
     })();
 
-    const top3Criteria = criteriaListWithConsistency.filter((c) => c && c.okMonths > 0).slice(0, 3);
+    const top3Criteria = criteriaListWithConsistency.filter((c) => c && c.okMonths > 0).length > 0
+      ? criteriaListWithConsistency.filter((c) => c && c.okMonths > 0).slice(0, 3)
+      : criteriaListWithConsistency.slice(0, 3);
     const bottomCriteria = criteriaListWithConsistency.filter((c) => c && c.okMonths < selectedMonths.length).slice(-3);
 
     // Dynamic executive report
@@ -1223,10 +1225,11 @@ function AdminRankingContent({
           </div>
         </div>
 
-        {/* Dynamic Side-by-Side Comparison for Double Garages */}
-        {selectedEntry.branches.length === 2 && (() => {
+        {/* Dynamic Detailed Criteria Audit Section (Double or Simple Garage) */}
+        {selectedEntry.branches.length > 0 && (() => {
+          const isDouble = selectedEntry.branches.length === 2;
           const b1 = selectedEntry.branches[0];
-          const b2 = selectedEntry.branches[1];
+          const b2 = isDouble ? selectedEntry.branches[1] : null;
           const periodLabel = rankingMode === "MES"
             ? localRankingMonth
             : localAccumulatedFilter === "1_SEMESTRE"
@@ -1239,12 +1242,18 @@ function AdminRankingContent({
             <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wide flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#1B2A4A] text-[20px]">compare</span>
-                  Detalhamento Lado a Lado (Garagem Dupla) — {periodLabel}
+                  <span className="material-symbols-outlined text-[#1B2A4A] text-[20px]">{isDouble ? "compare" : "fact_check"}</span>
+                  {isDouble ? `Detalhamento Lado a Lado (Garagem Dupla) — ${periodLabel}` : `Detalhamento de Auditoria — ${periodLabel}`}
                 </h3>
                 <p className="text-xs lg:text-sm text-slate-500 mt-1 font-medium">
-                  Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
-                  <strong className="text-rose-600 font-bold"> NOK</strong>, o resultado unificado é <strong className="text-rose-600 font-bold"> NOK</strong> e nenhum pontuará.
+                  {isDouble ? (
+                    <>
+                      Exibição de auditoria cruzada. Lembre-se: se qualquer um dos almoxarifados estiver 
+                      <strong className="text-rose-600 font-bold"> NOK</strong>, o resultado unificado é <strong className="text-rose-600 font-bold"> NOK</strong> e nenhum pontuará.
+                    </>
+                  ) : (
+                    <>Exibição detalhada de auditoria por critério e acompanhamento do desempenho.</>
+                  )}
                 </p>
               </div>
 
@@ -1253,9 +1262,18 @@ function AdminRankingContent({
                   <thead>
                     <tr className="border-b border-slate-200 text-xs font-black uppercase text-slate-500 tracking-wider">
                       <th className="py-3">Critério</th>
-                      <th className="py-3 px-4 text-center">{s(b1?.name).replace("ALMOXARIFADO ", "")}</th>
-                      <th className="py-3 px-4 text-center">{s(b2?.name).replace("ALMOXARIFADO ", "")}</th>
-                      <th className="py-3 text-right font-black">Resultado Unificado</th>
+                      {isDouble ? (
+                        <>
+                          <th className="py-3 px-4 text-center">{s(b1?.name).replace("ALMOXARIFADO ", "")}</th>
+                          <th className="py-3 px-4 text-center">{s(b2?.name).replace("ALMOXARIFADO ", "")}</th>
+                          <th className="py-3 text-right font-black">Resultado Unificado</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="py-3 px-4 text-center">Status no Período</th>
+                          <th className="py-3 text-right font-black">Pontos / Resultado</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1270,22 +1288,20 @@ function AdminRankingContent({
 
                       if (rankingMode === "MES") {
                         const res1 = getBranchCriterionForMonth(b1, localRankingMonth, c1.id);
-                        const res2 = getBranchCriterionForMonth(b2, localRankingMonth, c1.id);
                         const status1 = res1.status;
-                        const status2 = res2.status;
-                        const pts1 = res1.points;
-                        const pts2 = res2.points;
-
                         status1Display = status1;
-                        status2Display = status2;
-
                         status1Style = status1 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                                        status1 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
                                        "bg-amber-50 text-amber-700 border border-amber-200";
 
-                        status2Style = status2 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                                       status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
-                                       "bg-amber-50 text-amber-700 border border-amber-200";
+                        if (b2) {
+                          const res2 = getBranchCriterionForMonth(b2, localRankingMonth, c1.id);
+                          const status2 = res2.status;
+                          status2Display = status2;
+                          status2Style = status2 === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                         status2 === "NOK" ? "bg-rose-50 text-rose-700 border border-rose-200 font-extrabold" :
+                                         "bg-amber-50 text-amber-700 border border-amber-200";
+                        }
 
                         const unifiedRes = getCriterionScoreForMonth(selectedEntry, localRankingMonth, c1.id);
                         if (unifiedRes.status === "OK") {
@@ -1301,21 +1317,20 @@ function AdminRankingContent({
                       } else {
                         // ACUMULADO mode: consolidate across all selected months
                         const b1Statuses = selectedMonths.map(m => getBranchCriterionForMonth(b1, m, c1.id));
-                        const b2Statuses = selectedMonths.map(m => getBranchCriterionForMonth(b2, m, c1.id));
-
                         const okCount1 = b1Statuses.filter(x => x.status === "OK").length;
-                        const okCount2 = b2Statuses.filter(x => x.status === "OK").length;
-
                         status1Display = `${okCount1} / ${selectedMonths.length} OK`;
-                        status2Display = `${okCount2} / ${selectedMonths.length} OK`;
-
                         status1Style = okCount1 === selectedMonths.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                                        okCount1 === 0 ? "bg-rose-50 text-rose-700 border border-rose-200" :
                                        "bg-amber-50 text-amber-700 border border-amber-200";
 
-                        status2Style = okCount2 === selectedMonths.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                                       okCount2 === 0 ? "bg-rose-50 text-rose-700 border border-rose-200" :
-                                       "bg-amber-50 text-amber-700 border border-amber-200";
+                        if (b2) {
+                          const b2Statuses = selectedMonths.map(m => getBranchCriterionForMonth(b2, m, c1.id));
+                          const okCount2 = b2Statuses.filter(x => x.status === "OK").length;
+                          status2Display = `${okCount2} / ${selectedMonths.length} OK`;
+                          status2Style = okCount2 === selectedMonths.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                         okCount2 === 0 ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                                         "bg-amber-50 text-amber-700 border border-amber-200";
+                        }
 
                         const consolidatedC = criteriaListWithConsistency.find(cc => cc.id === c1.id);
                         const okUnified = consolidatedC ? consolidatedC.okMonths : 0;
@@ -1339,11 +1354,13 @@ function AdminRankingContent({
                               {status1Display}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-center">
-                            <span className={`inline-block px-3 py-1 rounded text-xs font-black ${status2Style}`}>
-                              {status2Display}
-                            </span>
-                          </td>
+                          {isDouble && (
+                            <td className="py-4 px-4 text-center">
+                              <span className={`inline-block px-3 py-1 rounded text-xs font-black ${status2Style}`}>
+                                {status2Display}
+                              </span>
+                            </td>
+                          )}
                           <td className="py-4 text-right">
                             <span className={`inline-block px-3.5 py-1.5 rounded-lg text-xs lg:text-sm font-black shadow-2xs ${unifiedStatusColor}`}>
                               {unifiedStatusText}
@@ -1359,11 +1376,10 @@ function AdminRankingContent({
           );
         })()}
 
-        {hasRealHistory ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* LEFT 2 COLUMNS: BLOCO 1 & BLOCO 2 */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* BLOCO 1 - EVOLUÇÃO MENSAL (GRÁFICO DE LINHA INTERATIVO) */}
+        {rankingMode === "ACUMULADO" ? (
+          /* ACUMULADO ANUAL MODE: Standardized 6 sections for all warehouses */
+          <div className="space-y-6">
+            {/* 2. EVOLUÇÃO DO SEMESTRE (GRÁFICO DE LINHA INTERATIVO) */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
@@ -1392,8 +1408,6 @@ function AdminRankingContent({
                 const chartWidth = width - paddingLeft - paddingRight;
                 const chartHeight = height - paddingTop - paddingBottom;
 
-                // CORREÇÃO 4: O gráfico exibe todos os 6 meses do período sem filtrar dados fictícios ou ocultar meses vazios.
-                // Se não houver dados, exibe 0 para aquele mês.
                 const monthsWithData = monthlyVals;
 
                 let cumulativeSum = 0;
@@ -1407,7 +1421,6 @@ function AdminRankingContent({
                   };
                 });
 
-                // Calculate paths using monthlyVal (capped at 100 pt max)
                 let pathD = "";
                 let fillD = "";
 
@@ -1446,7 +1459,7 @@ function AdminRankingContent({
                           {gridValues.map((v) => {
                             const y = paddingTop + (1 - v / 100) * chartHeight;
                             const isMinLine = v === 80;
-                            if (isMinLine) return null; // Handled separately with bold red
+                            if (isMinLine) return null;
                             return (
                               <g key={v} className="opacity-40">
                                 <line
@@ -1505,7 +1518,6 @@ function AdminRankingContent({
                             </text>
                           </g>
 
-                          {/* Gradient definition for fill */}
                           <defs>
                             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.35" />
@@ -1513,7 +1525,6 @@ function AdminRankingContent({
                             </linearGradient>
                           </defs>
 
-                          {/* Area Fill under the line chart */}
                           {fillD && (
                             <path
                               d={fillD}
@@ -1522,7 +1533,6 @@ function AdminRankingContent({
                             />
                           )}
 
-                          {/* Line connecting the points */}
                           {pathD && (
                             <path
                               d={pathD}
@@ -1535,10 +1545,8 @@ function AdminRankingContent({
                             />
                           )}
 
-                          {/* Static X-Axis Labels (always 6 months) */}
                           {monthlyVals.map((d, idx) => {
                             const x = paddingLeft + (idx / 5) * chartWidth;
-                            const hasDataIdx = visibleData.some(vd => vd.month === d.month);
                             const visibleItem = visibleData.find(vd => vd.month === d.month);
                             const isCurrentActive = visibleItem ? (visibleItem.index === activeIdx) : false;
 
@@ -1558,7 +1566,6 @@ function AdminRankingContent({
                             );
                           })}
 
-                          {/* Points to click */}
                           {visibleData.map((d) => {
                             const originalIdx = monthlyVals.findIndex(mv => mv.month === d.month);
                             const x = paddingLeft + (originalIdx / 5) * chartWidth;
@@ -1571,7 +1578,6 @@ function AdminRankingContent({
                                 className="cursor-pointer"
                                 onClick={() => setChartSelectedIdx(d.index)}
                               >
-                                {/* Hover halo */}
                                 <circle
                                   cx={x}
                                   cy={y}
@@ -1579,7 +1585,6 @@ function AdminRankingContent({
                                   fill={isCurrentActive ? "#C8A84B" : "#1B2A4A"}
                                   className="opacity-25 hover:opacity-45 transition-all duration-300"
                                 />
-                                {/* Inner point */}
                                 <circle
                                   cx={x}
                                   cy={y}
@@ -1589,7 +1594,6 @@ function AdminRankingContent({
                                   strokeWidth="2.5"
                                   className="transition-all duration-300 transform"
                                 />
-                                {/* Dynamic values on top of points */}
                                 <text
                                   x={x}
                                   y={y - 12}
@@ -1607,7 +1611,6 @@ function AdminRankingContent({
                       </div>
                     </div>
 
-                    {/* Interactive Click Tooltip Info Box */}
                     {currentSelectedMonthData && (
                       <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex items-center justify-between shadow-2xs">
                         <div>
@@ -1628,7 +1631,6 @@ function AdminRankingContent({
                 );
               })()}
 
-              {/* Metric stats columns */}
               <div className="grid grid-cols-3 gap-3.5 text-center mt-5 pt-5 border-t border-slate-100">
                 <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
                   <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Total Acumulado</p>
@@ -1663,240 +1665,692 @@ function AdminRankingContent({
               </div>
             </div>
 
-            {/* BLOCO 2 — DESEMPENHO POR CRITÉRIO */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
-              <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3 mb-5">
-                <span className="material-symbols-outlined text-slate-500 text-[20px]">table_rows</span>
-                Desempenho por Critério
-              </h3>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[10.5px] lg:text-xs font-black uppercase text-slate-500 tracking-wider">
-                      <th className="py-3 pb-2.5">CRITÉRIO</th>
-                      <th className="py-3 pb-2.5 text-center">PONTOS MENSAL</th>
-                      <th className="py-3 pb-2.5 text-center">STATUS NO PERÍODO</th>
-                      <th className="py-3 pb-2.5 text-right">PONTOS OBTIDOS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {criteriaListWithConsistency.map((c) => {
-                      const pctStyle = c.accuracy >= 80 ? "bg-emerald-500" : c.accuracy >= 60 ? "bg-amber-400" : "bg-rose-500";
-                      const textStyle = c.accuracy >= 80 ? "text-emerald-700" : c.accuracy >= 60 ? "text-amber-700" : "text-rose-700";
-
-                      return (
-                        <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-                          <td className="py-4 pr-3">
-                            <p className="text-sm font-black text-[#1B2A4A]">{c.name}</p>
-                            <p className="text-xs text-slate-500 italic mt-0.5 font-medium">{c.recurrence}</p>
-                          </td>
-                          <td className="py-4 text-center">
-                            <span className="text-xs lg:text-sm font-mono font-black text-slate-700 bg-slate-100/80 px-2.5 py-1 rounded-md inline-block">
-                              {c.pointsPossible} pts
-                            </span>
-                          </td>
-                          <td className="py-4 text-center text-xs lg:text-sm font-extrabold text-slate-800">
-                            {c.id === "10" && awaiting_pair ? (
-                              <span className="bg-amber-100 text-amber-800 border border-amber-200 font-black px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider animate-pulse inline-block">
-                                Aguardando par
-                              </span>
-                            ) : (
-                              <span>{c.statusInPeriod}</span>
-                            )}
-                          </td>
-                          <td className="py-4 text-right">
-                            {c.id === "10" && awaiting_pair ? (
-                              <span className="text-amber-600 font-black text-xs uppercase font-mono tracking-wider">Aguardando</span>
-                            ) : (
-                              <div className="inline-flex flex-col items-end">
-                                <span className={`text-sm lg:text-base font-black font-mono ${textStyle}`}>{c.pointsObtained} pts</span>
-                                <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                                  <div className={`h-full ${pctStyle}`} style={{ width: `${c.accuracy}%` }}></div>
-                                </div>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT SIDEBAR ON DETAIL VIEW: BLOCOS 3, 4, 5 */}
-          <div className="space-y-6">
-            {/* BLOCO 3 - CRITÉRIOS COM MELHOR DESEMPENHO (Top 3) */}
-            <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-6 shadow-xs space-y-4">
-              <h3 className="text-sm lg:text-base font-black text-emerald-800 uppercase tracking-wider flex items-center gap-2 border-b border-emerald-200 pb-3">
-                <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
-                Destaques Positivos (Top 3)
-              </h3>
-              <div className="space-y-3">
-                {top3Criteria.map((c) => (
-                  <div key={c.id} className="bg-white p-3.5 rounded-xl border border-emerald-100/80 flex items-start gap-3 shadow-2xs">
-                    <span className="text-xl shrink-0">🏆</span>
-                    <div>
-                      <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
-                      <p className="text-xs text-emerald-600 font-bold mt-1">
-                        {rankingMode === "MES" ? `${c.pointsObtained} pts (${c.statusInPeriod}) em ${localRankingMonth}` : `Conquistou ${c.okMonths} de ${selectedMonths.length} no período`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* BLOCO 4 - CRITÉRIOS COM PIOR DESEMPENHO (Alertas de Atenção) */}
-            <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-6 shadow-xs space-y-4">
-              <h3 className="text-sm lg:text-base font-black text-amber-800 uppercase tracking-wider flex items-center gap-2 border-b border-amber-200 pb-3">
-                <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
-                Pontos de Atenção (Alertas)
-              </h3>
-              <div className="space-y-3">
-                {bottomCriteria.length > 0 ? (
-                  bottomCriteria.map((c) => {
-                    const mostRecentNokMonth = (c.pointsObtained < c.pointsPossible * selectedMonths.length) ? "Inconformidade detectada" : "Ok";
-                    return (
-                      <div key={c.id} className="bg-white p-3.5 rounded-xl border border-amber-100/80 flex items-start gap-3 shadow-2xs">
-                        <span className="text-xl shrink-0">⚠️</span>
+            {/* 3. DESTAQUES POSITIVOS (TOP 3) & 4. PONTOS DE ATENÇÃO (ALERTAS) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 3. DESTAQUES POSITIVOS - TOP 3 */}
+              <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-6 shadow-xs space-y-4">
+                <h3 className="text-sm lg:text-base font-black text-emerald-800 uppercase tracking-wider flex items-center gap-2 border-b border-emerald-200 pb-3">
+                  <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
+                  Destaques Positivos — Top 3
+                </h3>
+                <div className="space-y-3">
+                  {top3Criteria.length > 0 ? (
+                    top3Criteria.map((c) => (
+                      <div key={c.id} className="bg-white p-3.5 rounded-xl border border-emerald-100/80 flex items-start gap-3 shadow-2xs">
+                        <span className="text-xl shrink-0">🏆</span>
                         <div>
                           <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
-                          <p className="text-xs text-amber-700 font-bold mt-1">
-                            {rankingMode === "MES" ? `Inconformidade em ${localRankingMonth}` : `NOK em ${selectedMonths.length - c.okMonths} meses`}
+                          <p className="text-xs text-emerald-600 font-bold mt-1">
+                            Conquistou {c.okMonths} de {selectedMonths.length} no período
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
                         </div>
                       </div>
-                    );
-                  })
+                    ))
+                  ) : (
+                    <div className="p-3.5 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-100 font-medium">
+                      Nenhum destaque registrado neste período
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. PONTOS DE ATENÇÃO (ALERTAS) */}
+              <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-6 shadow-xs space-y-4">
+                <h3 className="text-sm lg:text-base font-black text-amber-800 uppercase tracking-wider flex items-center gap-2 border-b border-amber-200 pb-3">
+                  <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
+                  Pontos de Atenção (Alertas)
+                </h3>
+                <div className="space-y-3">
+                  {bottomCriteria.length > 0 ? (
+                    bottomCriteria.map((c) => {
+                      const mostRecentNokMonth = (c.pointsObtained < c.pointsPossible * selectedMonths.length) ? "Inconformidade detectada" : "Ok";
+                      return (
+                        <div key={c.id} className="bg-white p-3.5 rounded-xl border border-amber-100/80 flex items-start gap-3 shadow-2xs">
+                          <span className="text-xl shrink-0">⚠️</span>
+                          <div>
+                            <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
+                            <p className="text-xs text-amber-700 font-bold mt-1">
+                              NOK em {selectedMonths.length - c.okMonths} meses
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-3.5 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-100 font-medium">
+                      Nenhum critério com inconformidade neste período
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 5. COMPARATIVO COM A META */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Comparativo com a Meta */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <span className="material-symbols-outlined text-slate-500 text-[20px]">adjust</span>
+                  Comparativo com a Meta
+                </h3>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
+                    <span className="text-slate-500 font-bold">Nota no Período</span>
+                    <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{totalAccumulatedScore} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
+                    <span className="text-slate-500 font-bold">Meta Mínima no Período</span>
+                    <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{selectedMonths.length * 50} pts</span>
+                  </div>
+
+                  {totalAccumulatedScore >= (selectedMonths.length * 50) ? (
+                    <div className="p-3.5 lg:p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                      <p className="flex items-center gap-1.5 text-emerald-800 font-black text-xs lg:text-sm">
+                        <span className="material-symbols-outlined text-[#10B981] text-[18px] font-bold">check_circle</span>
+                        Meta Atingida
+                      </p>
+                      <p className="text-xs lg:text-sm font-normal leading-relaxed text-emerald-950 mt-1">
+                        ✅ Meta atingida — <strong>{totalAccumulatedScore - (selectedMonths.length * 50)} pts</strong> acima da meta de {selectedMonths.length * 50} pts.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 lg:p-4 bg-rose-50 rounded-xl border border-rose-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                      <p className="flex items-center gap-1.5 text-rose-800 font-black text-xs lg:text-sm">
+                        <span className="material-symbols-outlined text-[#EF4444] text-[18px] font-bold">cancel</span>
+                        Abaixo da Meta
+                      </p>
+                      <p className="text-xs lg:text-sm font-normal leading-relaxed text-rose-950 mt-1">
+                        ⚠️ Abaixo da meta — <strong>faltam {(selectedMonths.length * 50) - totalAccumulatedScore} pts</strong> para atingir a qualificação mínima ({selectedMonths.length * 50} pts).
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-150/60 text-xs text-slate-600 leading-relaxed">
+                    <span className="font-bold text-slate-700">Resultado: </span>
+                    Se manter a média atual, encerrará o período com {totalAccumulatedScore} pts.
+                  </div>
+                </div>
+              </div>
+
+              {/* Evolução em Relação ao Semestre Anterior */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">analytics</span>
+                  Evolução em Relação ao Semestre Anterior
+                </h3>
+                
+                {!has2025Data ? (
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-150/50 text-xs text-slate-500 italic text-center leading-relaxed">
+                    Comparativo com semestre anterior indisponível — este é o primeiro semestre registrado no sistema (2026). A comparação estará disponível a partir do 2º semestre de 2026.
+                  </div>
                 ) : (
-                  <div className="p-3.5 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-100">
-                    Nenhum critério com inconformidade este período!
+                  <div className="space-y-3 font-sans">
+                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
+                      <span className="text-slate-500">{targetSemesterLabel} 2025 (Histórico)</span>
+                      <span className="font-mono text-slate-700 font-extrabold text-sm lg:text-base">{scorePrevSem} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
+                      <span className="text-slate-500">{targetSemesterLabel} 2026 (Atual)</span>
+                      <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{scoreCurrentSem} pts</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Absoluta</span>
+                      <span className={`font-mono text-sm lg:text-base font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        {diffPoints >= 0 ? `+${diffPoints}` : diffPoints} pts
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Percentual</span>
+                      <span className={`font-mono text-sm lg:text-base font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        <span className="material-symbols-outlined text-[18px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
+                        {diffPoints >= 0 ? `+${pctChange}%` : `${pctChange}%`}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-150/60 text-xs lg:text-sm text-slate-600 leading-relaxed font-medium">
+                      {diffPoints >= 0 ? (
+                        <span>📈 Desempenho com crescimento positivo de <strong>{diffPoints} pontos</strong> em comparação com o mesmo período do ano anterior.</span>
+                      ) : (
+                        <span>📉 Redução de <strong>{Math.abs(diffPoints)} pontos</strong> detectada no acumulado do semestre comparado ao ano anterior. Requer atenção corretiva.</span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* BLOCO 5 - COMPARATIVO COM A META */}
-            {(() => {
-              const currentScore = rankingMode === "MES"
-                ? getUnifiedScoreForMonth(selectedEntry, localRankingMonth, activeYear)
-                : totalAccumulatedScore;
-              const targetScore = rankingMode === "MES" ? 80 : selectedMonths.length * 50;
-              const periodLabel = rankingMode === "MES" ? localRankingMonth : "Período";
+          </div>
+        ) : (
+          /* MÊS SELECIONADO MODE: Original layout */
+          hasRealHistory ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* LEFT 2 COLUMNS: BLOCO 1 & BLOCO 2 */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* BLOCO 1 - EVOLUÇÃO MENSAL (GRÁFICO DE LINHA INTERATIVO) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-500 text-[20px]">trending_up</span>
+                        Evolução do Semestre — {selectedEntry.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-bold mt-0.5 uppercase tracking-wider font-sans">
+                        Acompanhamento de pontuação acumulada do semestre atual
+                      </p>
+                    </div>
+                    <span className="bg-slate-100 text-slate-700 font-black px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider self-start sm:self-auto font-mono border border-slate-200">
+                      Mínimo: 300 pts
+                    </span>
+                  </div>
 
-              return (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
-                    <span className="material-symbols-outlined text-slate-500 text-[20px]">adjust</span>
-                    Comparativo com a Meta
+                  {/* SVG Cumulative Score Line Chart */}
+                  {(() => {
+                    const width = 500;
+                    const height = 290;
+                    const paddingLeft = 55;
+                    const paddingRight = 25;
+                    const paddingTop = 30;
+                    const paddingBottom = 40;
+
+                    const chartWidth = width - paddingLeft - paddingRight;
+                    const chartHeight = height - paddingTop - paddingBottom;
+
+                    const monthsWithData = monthlyVals;
+
+                    let cumulativeSum = 0;
+                    const visibleData = monthsWithData.map((item, idx) => {
+                      cumulativeSum += item.val;
+                      return {
+                        month: item.month,
+                        monthlyVal: item.val,
+                        cumulativeVal: cumulativeSum,
+                        index: idx
+                      };
+                    });
+
+                    let pathD = "";
+                    let fillD = "";
+
+                    visibleData.forEach((d, idx) => {
+                      const originalIdx = monthlyVals.findIndex(mv => mv.month === d.month);
+                      const x = paddingLeft + (originalIdx / 5) * chartWidth;
+                      const y = paddingTop + (1 - d.monthlyVal / 100) * chartHeight;
+                      if (idx === 0) {
+                        pathD += `M ${x} ${y}`;
+                      } else {
+                        pathD += ` L ${x} ${y}`;
+                      }
+                    });
+
+                    if (visibleData.length > 0) {
+                      const firstOriginalIdx = monthlyVals.findIndex(mv => mv.month === visibleData[0].month);
+                      const lastOriginalIdx = monthlyVals.findIndex(mv => mv.month === visibleData[visibleData.length - 1].month);
+                      const xFirst = paddingLeft + (firstOriginalIdx / 5) * chartWidth;
+                      const xLast = paddingLeft + (lastOriginalIdx / 5) * chartWidth;
+                      fillD = pathD + ` L ${xLast} ${paddingTop + chartHeight} L ${xFirst} ${paddingTop + chartHeight} Z`;
+                    }
+
+                    const gridValues = [0, 20, 40, 60, 80, 100];
+                    const defaultMonthIdx = visibleData.findIndex(vd => vd.month.toLowerCase().startsWith(s(localRankingMonth).slice(0, 3).toLowerCase()));
+                    const activeIdx = chartSelectedIdx !== null
+                      ? chartSelectedIdx
+                      : (rankingMode === "MES" && defaultMonthIdx !== -1 ? defaultMonthIdx : visibleData.length - 1);
+                    const currentSelectedMonthData = visibleData[activeIdx] || visibleData[visibleData.length - 1];
+
+                    return (
+                      <div className="space-y-5">
+                        <div className="relative overflow-x-auto">
+                          <div className="min-w-[480px]">
+                            <svg viewBox="0 0 500 290" className="w-full h-auto overflow-visible select-none">
+                              {/* Grid Lines */}
+                              {gridValues.map((v) => {
+                                const y = paddingTop + (1 - v / 100) * chartHeight;
+                                const isMinLine = v === 80;
+                                if (isMinLine) return null;
+                                return (
+                                  <g key={v} className="opacity-40">
+                                    <line
+                                      x1={paddingLeft}
+                                      y1={y}
+                                      x2={width - paddingRight}
+                                      y2={y}
+                                      stroke="#CBD5E1"
+                                      strokeDasharray="3,3"
+                                      strokeWidth={1}
+                                    />
+                                    <text
+                                      x={paddingLeft - 10}
+                                      y={y + 3}
+                                      textAnchor="end"
+                                      fill="#94A3B8"
+                                      fontSize="9"
+                                      className="font-mono font-bold"
+                                    >
+                                      {v}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+
+                              {/* Red dashed line for operational limit/target (80 pts) */}
+                              <g>
+                                <line
+                                  x1={paddingLeft}
+                                  y1={paddingTop + (1 - 80 / 100) * chartHeight}
+                                  x2={width - paddingRight}
+                                  y2={paddingTop + (1 - 80 / 100) * chartHeight}
+                                  stroke="#EF4444"
+                                  strokeDasharray="4,4"
+                                  strokeWidth="1.5"
+                                />
+                                <text
+                                  x={paddingLeft - 10}
+                                  y={paddingTop + (1 - 80 / 100) * chartHeight + 3}
+                                  textAnchor="end"
+                                  fill="#EF4444"
+                                  fontSize="9"
+                                  className="font-mono font-black"
+                                >
+                                  80
+                                </text>
+                                <text
+                                  x={width - paddingRight - 10}
+                                  y={paddingTop + (1 - 80 / 100) * chartHeight - 6}
+                                  textAnchor="end"
+                                  fill="#EF4444"
+                                  fontSize="8.5"
+                                  className="font-sans font-black uppercase tracking-wider"
+                                >
+                                  Meta de Qualificação
+                                </text>
+                              </g>
+
+                              <defs>
+                                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.35" />
+                                  <stop offset="100%" stopColor="#C8A84B" stopOpacity="0.0" />
+                                </linearGradient>
+                              </defs>
+
+                              {fillD && (
+                                <path
+                                  d={fillD}
+                                  fill="url(#chartGrad)"
+                                  className="transition-all duration-300"
+                                />
+                              )}
+
+                              {pathD && (
+                                <path
+                                  d={pathD}
+                                  stroke="#1B2A4A"
+                                  strokeWidth="4"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  fill="none"
+                                  className="transition-all duration-300"
+                                />
+                              )}
+
+                              {monthlyVals.map((d, idx) => {
+                                const x = paddingLeft + (idx / 5) * chartWidth;
+                                const visibleItem = visibleData.find(vd => vd.month === d.month);
+                                const isCurrentActive = visibleItem ? (visibleItem.index === activeIdx) : false;
+
+                                return (
+                                  <g key={`lbl-${d.month}`}>
+                                    <text
+                                      x={x}
+                                      y={height - 12}
+                                      textAnchor="middle"
+                                      fill={isCurrentActive ? "#1B2A4A" : "#94A3B8"}
+                                      fontSize="10"
+                                      className={`font-mono font-black ${isCurrentActive ? "underline" : ""}`}
+                                    >
+                                      {d.month}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+
+                              {visibleData.map((d) => {
+                                const originalIdx = monthlyVals.findIndex(mv => mv.month === d.month);
+                                const x = paddingLeft + (originalIdx / 5) * chartWidth;
+                                const y = paddingTop + (1 - d.monthlyVal / 100) * chartHeight;
+                                const isCurrentActive = d.index === activeIdx;
+
+                                return (
+                                  <g
+                                    key={`pt-${d.month}`}
+                                    className="cursor-pointer"
+                                    onClick={() => setChartSelectedIdx(d.index)}
+                                  >
+                                    <circle
+                                      cx={x}
+                                      cy={y}
+                                      r={isCurrentActive ? "14" : "10"}
+                                      fill={isCurrentActive ? "#C8A84B" : "#1B2A4A"}
+                                      className="opacity-25 hover:opacity-45 transition-all duration-300"
+                                    />
+                                    <circle
+                                      cx={x}
+                                      cy={y}
+                                      r={isCurrentActive ? "6.5" : "4.5"}
+                                      fill={isCurrentActive ? "#C8A84B" : "#1B2A4A"}
+                                      stroke="#FFFFFF"
+                                      strokeWidth="2.5"
+                                      className="transition-all duration-300 transform"
+                                    />
+                                    <text
+                                      x={x}
+                                      y={y - 12}
+                                      textAnchor="middle"
+                                      fill={isCurrentActive ? "#C8A84B" : "#475569"}
+                                      fontSize="10.5"
+                                      className="font-mono font-black"
+                                    >
+                                      {d.monthlyVal}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                          </div>
+                        </div>
+
+                        {currentSelectedMonthData && (
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex items-center justify-between shadow-2xs">
+                            <div>
+                              <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Mês Selecionado</p>
+                              <p className="text-base font-black text-[#1B2A4A] mt-0.5">{currentSelectedMonthData.month} / {cycleStateParsed.activeYear}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Desempenho no Mês</p>
+                              <p className="text-base lg:text-lg font-black text-emerald-600 mt-0.5">+{currentSelectedMonthData.monthlyVal} pts</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase font-sans tracking-wide">Total Acumulado</p>
+                              <p className="text-base lg:text-lg font-black text-[#1B2A4A] font-mono mt-0.5">{currentSelectedMonthData.cumulativeVal} pts</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="grid grid-cols-3 gap-3.5 text-center mt-5 pt-5 border-t border-slate-100">
+                    <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                      <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Total Acumulado</p>
+                      <p className="text-base lg:text-lg font-black text-[#1B2A4A] font-mono mt-1">
+                        {awaiting_pair ? (
+                          <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
+                        ) : (
+                          `${totalAccumulatedScore} pts`
+                        )}
+                      </p>
+                    </div>
+                    <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                      <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Melhor Desempenho</p>
+                      <p className="text-base lg:text-lg font-black text-[#C8A84B] font-mono mt-1">
+                        {awaiting_pair ? (
+                          <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
+                        ) : (
+                          `${bestMonth.month} (${bestMonth.val} pts)`
+                        )}
+                      </p>
+                    </div>
+                    <div className="p-3.5 lg:p-4 bg-slate-50 rounded-xl border border-slate-200/80 shadow-2xs">
+                      <p className="text-[10px] lg:text-xs text-slate-500 font-extrabold uppercase tracking-wider">Pior Desempenho</p>
+                      <p className="text-base lg:text-lg font-black text-rose-600 font-mono mt-1">
+                        {awaiting_pair ? (
+                          <span className="text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded px-2 py-0.5 leading-none">Aguardando par</span>
+                        ) : (
+                          `${worstMonth.month} (${worstMonth.val} pts)`
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BLOCO 2 — DESEMPENHO POR CRITÉRIO */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 lg:p-7 shadow-sm space-y-5">
+                  <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3 mb-5">
+                    <span className="material-symbols-outlined text-slate-500 text-[20px]">table_rows</span>
+                    Desempenho por Critério
                   </h3>
 
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-[10.5px] lg:text-xs font-black uppercase text-slate-500 tracking-wider">
+                          <th className="py-3 pb-2.5">CRITÉRIO</th>
+                          <th className="py-3 pb-2.5 text-center">PONTOS MENSAL</th>
+                          <th className="py-3 pb-2.5 text-center">STATUS NO PERÍODO</th>
+                          <th className="py-3 pb-2.5 text-right">PONTOS OBTIDOS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {criteriaListWithConsistency.map((c) => {
+                          const pctStyle = c.accuracy >= 80 ? "bg-emerald-500" : c.accuracy >= 60 ? "bg-amber-400" : "bg-rose-500";
+                          const textStyle = c.accuracy >= 80 ? "text-emerald-700" : c.accuracy >= 60 ? "text-amber-700" : "text-rose-700";
+
+                          return (
+                            <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                              <td className="py-4 pr-3">
+                                <p className="text-sm font-black text-[#1B2A4A]">{c.name}</p>
+                                <p className="text-xs text-slate-500 italic mt-0.5 font-medium">{c.recurrence}</p>
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className="text-xs lg:text-sm font-mono font-black text-slate-700 bg-slate-100/80 px-2.5 py-1 rounded-md inline-block">
+                                  {c.pointsPossible} pts
+                                </span>
+                              </td>
+                              <td className="py-4 text-center text-xs lg:text-sm font-extrabold text-slate-800">
+                                {c.id === "10" && awaiting_pair ? (
+                                  <span className="bg-amber-100 text-amber-800 border border-amber-200 font-black px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider animate-pulse inline-block">
+                                    Aguardando par
+                                  </span>
+                                ) : (
+                                  <span>{c.statusInPeriod}</span>
+                                )}
+                              </td>
+                              <td className="py-4 text-right">
+                                {c.id === "10" && awaiting_pair ? (
+                                  <span className="text-amber-600 font-black text-xs uppercase font-mono tracking-wider">Aguardando</span>
+                                ) : (
+                                  <div className="inline-flex flex-col items-end">
+                                    <span className={`text-sm lg:text-base font-black font-mono ${textStyle}`}>{c.pointsObtained} pts</span>
+                                    <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                                      <div className={`h-full ${pctStyle}`} style={{ width: `${c.accuracy}%` }}></div>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT SIDEBAR ON DETAIL VIEW: BLOCOS 3, 4, 5 */}
+              <div className="space-y-6">
+                {/* BLOCO 3 - CRITÉRIOS COM MELHOR DESEMPENHO (Top 3) */}
+                <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-6 shadow-xs space-y-4">
+                  <h3 className="text-sm lg:text-base font-black text-emerald-800 uppercase tracking-wider flex items-center gap-2 border-b border-emerald-200 pb-3">
+                    <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
+                    Destaques Positivos (Top 3)
+                  </h3>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
-                      <span className="text-slate-500 font-bold">Nota em {periodLabel}</span>
-                      <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{currentScore} pts</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
-                      <span className="text-slate-500 font-bold">Meta Mínima em {periodLabel}</span>
-                      <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{targetScore} pts</span>
-                    </div>
-
-                    {currentScore >= targetScore ? (
-                      <div className="p-3.5 lg:p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
-                        <p className="flex items-center gap-1.5 text-emerald-800 font-black text-xs lg:text-sm">
-                          <span className="material-symbols-outlined text-[#10B981] text-[18px] font-bold">check_circle</span>
-                          Meta Atingida
-                        </p>
-                        <p className="text-xs lg:text-sm font-normal leading-relaxed text-emerald-950 mt-1">
-                          ✅ Meta atingida — <strong>{currentScore - targetScore} pts</strong> acima da meta de {targetScore} pts.
-                        </p>
+                    {top3Criteria.map((c) => (
+                      <div key={c.id} className="bg-white p-3.5 rounded-xl border border-emerald-100/80 flex items-start gap-3 shadow-2xs">
+                        <span className="text-xl shrink-0">🏆</span>
+                        <div>
+                          <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
+                          <p className="text-xs text-emerald-600 font-bold mt-1">
+                            {rankingMode === "MES" ? `${c.pointsObtained} pts (${c.statusInPeriod}) em ${localRankingMonth}` : `Conquistou ${c.okMonths} de ${selectedMonths.length} no período`}
+                          </p>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="p-3.5 lg:p-4 bg-rose-50 rounded-xl border border-rose-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
-                        <p className="flex items-center gap-1.5 text-rose-800 font-black text-xs lg:text-sm">
-                          <span className="material-symbols-outlined text-[#EF4444] text-[18px] font-bold">cancel</span>
-                          Abaixo da Meta
-                        </p>
-                        <p className="text-xs lg:text-sm font-normal leading-relaxed text-rose-950 mt-1">
-                          ⚠️ Abaixo da meta — <strong>faltam {targetScore - currentScore} pts</strong> para atingir a qualificação mínima ({targetScore} pts).
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150/60 text-xs text-slate-600 leading-relaxed">
-                      <span className="font-bold text-slate-700">Resultado: </span>
-                      {rankingMode === "MES"
-                        ? `Pontuação do mês de ${localRankingMonth}: ${currentScore} de 100 pts possíveis.`
-                        : `Se manter a média atual, encerrará o período com ${currentScore} pts.`}
-                    </div>
+                    ))}
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* BLOCO EXTRA - EVOLUÇÃO EM RELAÇÃO AO SEMESTRE ANTERIOR */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-              <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
-                <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">analytics</span>
-                Evolução em Relação ao Semestre Anterior
-              </h3>
-              
-              {!has2025Data ? (
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-150/50 text-xs text-slate-500 italic text-center">
-                  Dados consolidados de 2025 indisponíveis para comparação neste almoxarifado.
-                </div>
-              ) : (
-                <div className="space-y-3 font-sans">
-                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
-                    <span className="text-slate-500">{targetSemesterLabel} 2025 (Histórico)</span>
-                    <span className="font-mono text-slate-700 font-extrabold text-sm lg:text-base">{scorePrevSem} pts</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
-                    <span className="text-slate-500">{targetSemesterLabel} 2026 (Atual)</span>
-                    <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{scoreCurrentSem} pts</span>
-                  </div>
-
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Absoluta</span>
-                    <span className={`font-mono text-sm lg:text-base font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                      {diffPoints >= 0 ? `+${diffPoints}` : diffPoints} pts
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Percentual</span>
-                    <span className={`font-mono text-sm lg:text-base font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                      <span className="material-symbols-outlined text-[18px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
-                      {diffPoints >= 0 ? `+${pctChange}%` : `${pctChange}%`}
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-150/60 text-xs lg:text-sm text-slate-600 leading-relaxed font-medium">
-                    {diffPoints >= 0 ? (
-                      <span>📈 Desempenho com crescimento positivo de <strong>{diffPoints} pontos</strong> em comparação com o mesmo período do ano anterior.</span>
+                {/* BLOCO 4 - CRITÉRIOS COM PIOR DESEMPENHO (Alertas de Atenção) */}
+                <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-6 shadow-xs space-y-4">
+                  <h3 className="text-sm lg:text-base font-black text-amber-800 uppercase tracking-wider flex items-center gap-2 border-b border-amber-200 pb-3">
+                    <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
+                    Pontos de Atenção (Alertas)
+                  </h3>
+                  <div className="space-y-3">
+                    {bottomCriteria.length > 0 ? (
+                      bottomCriteria.map((c) => {
+                        const mostRecentNokMonth = (c.pointsObtained < c.pointsPossible * selectedMonths.length) ? "Inconformidade detectada" : "Ok";
+                        return (
+                          <div key={c.id} className="bg-white p-3.5 rounded-xl border border-amber-100/80 flex items-start gap-3 shadow-2xs">
+                            <span className="text-xl shrink-0">⚠️</span>
+                            <div>
+                              <p className="text-xs lg:text-sm font-black text-slate-800 leading-tight">{c.name}</p>
+                              <p className="text-xs text-amber-700 font-bold mt-1">
+                                {rankingMode === "MES" ? `Inconformidade em ${localRankingMonth}` : `NOK em ${selectedMonths.length - c.okMonths} meses`}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5 italic">Status: {mostRecentNokMonth}</p>
+                            </div>
+                          </div>
+                        );
+                      })
                     ) : (
-                      <span>📉 Redução de <strong>{Math.abs(diffPoints)} pontos</strong> detectada no acumulado do semestre comparado ao ano anterior. Requer atenção corretiva.</span>
+                      <div className="p-3.5 bg-white rounded-xl text-center text-xs text-slate-500 italic border border-slate-100 font-medium">
+                        Nenhum critério com inconformidade neste período
+                      </div>
                     )}
                   </div>
                 </div>
-              )}
+
+                {/* BLOCO 5 - COMPARATIVO COM A META */}
+                {(() => {
+                  const currentScore = rankingMode === "MES"
+                    ? getUnifiedScoreForMonth(selectedEntry, localRankingMonth, activeYear)
+                    : totalAccumulatedScore;
+                  const targetScore = rankingMode === "MES" ? 80 : selectedMonths.length * 50;
+                  const periodLabel = rankingMode === "MES" ? localRankingMonth : "Período";
+
+                  return (
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                      <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                        <span className="material-symbols-outlined text-slate-500 text-[20px]">adjust</span>
+                        Comparativo com a Meta
+                      </h3>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
+                          <span className="text-slate-500 font-bold">Nota em {periodLabel}</span>
+                          <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{currentScore} pts</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
+                          <span className="text-slate-500 font-bold">Meta Mínima em {periodLabel}</span>
+                          <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{targetScore} pts</span>
+                        </div>
+
+                        {currentScore >= targetScore ? (
+                          <div className="p-3.5 lg:p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                            <p className="flex items-center gap-1.5 text-emerald-800 font-black text-xs lg:text-sm">
+                              <span className="material-symbols-outlined text-[#10B981] text-[18px] font-bold">check_circle</span>
+                              Meta Atingida
+                            </p>
+                            <p className="text-xs lg:text-sm font-normal leading-relaxed text-emerald-950 mt-1">
+                              ✅ Meta atingida — <strong>{currentScore - targetScore} pts</strong> acima da meta de {targetScore} pts.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-3.5 lg:p-4 bg-rose-50 rounded-xl border border-rose-100 text-xs lg:text-sm inline-block w-full font-bold space-y-1">
+                            <p className="flex items-center gap-1.5 text-rose-800 font-black text-xs lg:text-sm">
+                              <span className="material-symbols-outlined text-[#EF4444] text-[18px] font-bold">cancel</span>
+                              Abaixo da Meta
+                            </p>
+                            <p className="text-xs lg:text-sm font-normal leading-relaxed text-rose-950 mt-1">
+                              ⚠️ Abaixo da meta — <strong>faltam {targetScore - currentScore} pts</strong> para atingir a qualificação mínima ({targetScore} pts).
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-150/60 text-xs text-slate-600 leading-relaxed">
+                          <span className="font-bold text-slate-700">Resultado: </span>
+                          {rankingMode === "MES"
+                            ? `Pontuação do mês de ${localRankingMonth}: ${currentScore} de 100 pts possíveis.`
+                            : `Se manter a média atual, encerrará o período com ${currentScore} pts.`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* BLOCO EXTRA - EVOLUÇÃO EM RELAÇÃO AO SEMESTRE ANTERIOR */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <h3 className="text-sm lg:text-base font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <span className="material-symbols-outlined text-[#C8A84B] text-[20px]">analytics</span>
+                    Evolução em Relação ao Semestre Anterior
+                  </h3>
+                  
+                  {!has2025Data ? (
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-150/50 text-xs text-slate-500 italic text-center leading-relaxed">
+                      Comparativo com semestre anterior indisponível — este é o primeiro semestre registrado no sistema (2026). A comparação estará disponível a partir do 2º semestre de 2026.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 font-sans">
+                      <div className="flex items-center justify-between text-xs lg:text-sm font-bold">
+                        <span className="text-slate-500">{targetSemesterLabel} 2025 (Histórico)</span>
+                        <span className="font-mono text-slate-700 font-extrabold text-sm lg:text-base">{scorePrevSem} pts</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs lg:text-sm font-bold pb-2 border-b border-slate-100">
+                        <span className="text-slate-500">{targetSemesterLabel} 2026 (Atual)</span>
+                        <span className="font-mono text-slate-800 font-black text-sm lg:text-base">{scoreCurrentSem} pts</span>
+                      </div>
+
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Absoluta</span>
+                        <span className={`font-mono text-sm lg:text-base font-black ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {diffPoints >= 0 ? `+${diffPoints}` : diffPoints} pts
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs lg:text-sm text-slate-500 font-bold">Variação Percentual</span>
+                        <span className={`font-mono text-sm lg:text-base font-black flex items-center gap-1 ${diffPoints >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          <span className="material-symbols-outlined text-[18px]">{diffPoints >= 0 ? "trending_up" : "trending_down"}</span>
+                          {diffPoints >= 0 ? `+${pctChange}%` : `${pctChange}%`}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-150/60 text-xs lg:text-sm text-slate-600 leading-relaxed font-medium">
+                        {diffPoints >= 0 ? (
+                          <span>📈 Desempenho com crescimento positivo de <strong>{diffPoints} pontos</strong> em comparação com o mesmo período do ano anterior.</span>
+                        ) : (
+                          <span>📉 Redução de <strong>{Math.abs(diffPoints)} pontos</strong> detectada no acumulado do semestre comparado ao ano anterior. Requer atenção corretiva.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        ) : (
-          <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-6 text-center shadow-xs space-y-2">
-            <span className="material-symbols-outlined text-amber-500 text-[28px]">info</span>
-            <p className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">Histórico de Fechamento Inexistente</p>
-            <p className="text-[11px] text-slate-500 font-bold max-w-xl mx-auto leading-normal">
-              Este almoxarifado não possui nenhum ciclo fechado neste semestre. Os blocos de 
-              <strong> Evolução do Semestre, Desempenho por Critério, Destaques Positivos, Pontos de Atenção </strong> 
-              e <strong> Comparativo com a Meta </strong> só serão exibidos a partir do momento em que existir pelo menos 1 ciclo fechado real.
-            </p>
-          </div>
+          ) : (
+            <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-6 text-center shadow-xs space-y-2">
+              <span className="material-symbols-outlined text-amber-500 text-[28px]">info</span>
+              <p className="text-xs font-black text-[#1B2A4A] uppercase tracking-wider">Histórico de Fechamento Inexistente</p>
+              <p className="text-[11px] text-slate-500 font-bold max-w-xl mx-auto leading-normal">
+                Este almoxarifado não possui nenhum ciclo fechado neste semestre. Os blocos de 
+                <strong> Evolução do Semestre, Desempenho por Critério, Destaques Positivos, Pontos de Atenção </strong> 
+                e <strong> Comparativo com a Meta </strong> só serão exibidos a partir do momento em que existir pelo menos 1 ciclo fechado real.
+              </p>
+            </div>
+          )
         )}
 
         {/* BLOCO 6 - RESUMO EXECUTIVO */}

@@ -31,6 +31,10 @@ interface HistoricalReportDetails {
     obsNok?: string;
     nokEvidenceLink?: string;
     nokEvidenceLinks?: string[];
+    nokEvidenceDescription?: string;
+    nokEvidenceFileData?: string;
+    nokEvidenceFileName?: string;
+    nokEvidenceFileType?: string;
   }>;
 }
 
@@ -223,7 +227,7 @@ const defaultCriteriaInfo: Record<string, { desc: string; reasons: string[]; sug
 const getMonthYearSortKey = (monthYearStr: string) => {
   if (!monthYearStr) return 0;
   const str = monthYearStr.toLowerCase().trim();
-  const months: Record<string, number> = {
+  const ORDEM_MESES: Record<string, number> = {
     janeiro: 1, jan: 1,
     fevereiro: 2, fev: 2,
     março: 3, marco: 3, mar: 3,
@@ -237,16 +241,47 @@ const getMonthYearSortKey = (monthYearStr: string) => {
     novembro: 11, nov: 11,
     dezembro: 12, dez: 12,
   };
-  let mVal = 1;
-  for (const [key, val] of Object.entries(months)) {
+  let mVal = 0;
+  for (const [key, val] of Object.entries(ORDEM_MESES)) {
     if (str.includes(key)) {
       mVal = val;
       break;
     }
   }
+  if (mVal === 0) {
+    const numMatch = str.match(/^(\d{1,2})[/-]/);
+    if (numMatch) {
+      mVal = parseInt(numMatch[1], 10);
+    } else {
+      mVal = 1;
+    }
+  }
   const yMatch = str.match(/\d{4}/);
   const yVal = yMatch ? parseInt(yMatch[0], 10) : 2026;
   return yVal * 100 + mVal;
+};
+
+const formatCompetencia = (monthYearStr: string) => {
+  if (!monthYearStr) return "";
+  return monthYearStr.trim().replace(/\s+/g, "/").replace(/-\s*/g, "/");
+};
+
+const getShortMonthLabel = (monthYear: string): string => {
+  if (!monthYear) return "";
+  const upper = monthYear.toUpperCase();
+  if (upper.includes("JAN")) return "JAN";
+  if (upper.includes("FEV")) return "FEV";
+  if (upper.includes("MAR")) return "MAR";
+  if (upper.includes("ABR")) return "ABR";
+  if (upper.includes("MAI")) return "MAI";
+  if (upper.includes("JUN")) return "JUN";
+  if (upper.includes("JUL")) return "JUL";
+  if (upper.includes("AGO")) return "AGO";
+  if (upper.includes("SET")) return "SET";
+  if (upper.includes("OUT")) return "OUT";
+  if (upper.includes("NOV")) return "NOV";
+  if (upper.includes("DEZ")) return "DEZ";
+  return monthYear.split(" ")[0].slice(0, 3).toUpperCase();
 };
 
 export default function AlmoxarifeHistorico({
@@ -261,6 +296,7 @@ export default function AlmoxarifeHistorico({
   });
 
   const [viewingReport, setViewingReport] = useState<HistoricalReportDetails | null>(null);
+  const [chartSelectedMonthId, setChartSelectedMonthId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -396,10 +432,14 @@ export default function AlmoxarifeHistorico({
           pointsPossible: pPoss,
           pointsObtained: pObt,
           notes: c.notes || c.evidenceNotes || (isOk ? "Critério atendido com conformidade." : "Inconformidade registrada."),
-          reasonNok: c.reasonNok || c.evidenceDescription || c.nokEvidenceDescription || "Desvio constatado no processo.",
+          reasonNok: c.reasonNok || c.descricao_evidencia || c.nokEvidenceDescription || c.evidenceDescription || c.notes || "Inconformidade registrada durante a verificação em campo.",
           obsNok: c.obsNok || c.evidenceNotes || c.nokObs || "Registrado pela comissão de auditoria.",
-          nokEvidenceLink: c.nokEvidenceLink || c.evidenceLink,
-          nokEvidenceLinks: c.nokEvidenceLinks || (c.nokEvidenceLink ? [c.nokEvidenceLink] : [])
+          nokEvidenceLink: c.nokEvidenceLink || c.evidenceLink || c.nok_evidence_link || c.link_evidencia,
+          nokEvidenceLinks: c.nokEvidenceLinks || (c.nokEvidenceLink ? [c.nokEvidenceLink] : (c.evidenceLink ? [c.evidenceLink] : (c.nok_evidence_link ? [c.nok_evidence_link] : (c.link_evidencia ? [c.link_evidencia] : [])))),
+          nokEvidenceFileData: c.nokEvidenceFileData || c.evidenceFileData || c.nok_evidence_file_data,
+          nokEvidenceFileName: c.nokEvidenceFileName || c.evidenceFileName || c.nok_evidence_file_name,
+          nokEvidenceFileType: c.nokEvidenceFileType || c.evidenceFileType || c.nok_evidence_file_type,
+          nokEvidenceDescription: c.nokEvidenceDescription || c.evidenceDescription || c.nok_evidence_description
         };
       }) : [];
 
@@ -419,7 +459,7 @@ export default function AlmoxarifeHistorico({
       });
     });
 
-    return combined;
+    return combined.sort((a, b) => getMonthYearSortKey(a.monthYear) - getMonthYearSortKey(b.monthYear));
   };
 
   const currentHistory = getHistoryEntries();
@@ -504,15 +544,9 @@ export default function AlmoxarifeHistorico({
     const okNames = okList.map(c => `${c.name} (${c.pointsPossible} pts)`).join(", ");
     const nokNames = nokList.map(c => `${c.name} (0 pts)`).join(", ");
 
-    const rankInfo = calculateGroupRankingAndSemesterScore(report.monthYear);
+    const comp = formatCompetencia(report.monthYear);
 
-    let baseText = `O almoxarifado ${activeBranch.name} obteve a pontuação total de ${report.score} de 100 pontos possíveis no ciclo de auditoria de ${report.monthYear}, registrando ${okCount} critérios em conformidade (OK) e ${nokCount} critérios não conformes (NOK).`;
-
-    if (report.score >= 80) {
-      baseText += ` A unidade demonstrou alto padrão de controle operacional, garantindo a integridade dos processos vistoriados.`;
-    } else {
-      baseText += ` A unidade apresentou pontos críticos que demandam adequação e acompanhamento prioritário nos desvios registrados.`;
-    }
+    let baseText = `Considerando a auditoria referente à competência ${comp}, o almoxarifado ${activeBranch.name} obteve a pontuação total de ${report.score} de 100 pontos possíveis, registrando ${okCount} critérios em conformidade (OK) e ${nokCount} critérios não conformes (NOK).`;
 
     if (okCount > 0) {
       baseText += `\n\nCritérios Aprovados (${okCount}): ${okNames}.`;
@@ -523,24 +557,15 @@ export default function AlmoxarifeHistorico({
       baseText += `\n\nCritérios Não Conformes (0): Nenhum desvio registrado no ciclo.`;
     }
 
-    baseText += `\n\nPosição atual no ranking do grupo: ${rankInfo.positionInGroup}º Lugar (de ${rankInfo.totalBranchesInGroup} unidades), acumulando ${rankInfo.semesterAccumulatedScore} pontos no semestre.`;
-
     return baseText;
   };
 
   const buildAutomaticConclusion = (report: HistoricalReportDetails) => {
     const nokList = report.criteria.filter(c => c.status === "NOK");
-    let text = `Diante da vistoria técnica realizada no ciclo de ${report.monthYear} no almoxarifado ${activeBranch.name}, conclui-se que a unidade obteve ${report.score} de 100 pontos possíveis (Status: ${report.statusLabel.toUpperCase()}). `;
+    const comp = formatCompetencia(report.monthYear);
+    const statusUpper = (report.statusLabel || "BOM").toUpperCase();
 
-    if (report.score >= 90) {
-      text += `A unidade apresenta um excelente nível de conformidade e controle operacional, alinhada com as melhores práticas e diretrizes do Grupo A. Cândido. Recomenda-se a manutenção do rigor nos processos.`;
-    } else if (report.score >= 80) {
-      text += `A unidade atingiu a meta regulamentar de conformidade, apresentando bom desempenho geral. Recomenda-se atenção pontual aos itens sinalizados para alcance da excelência técnica.`;
-    } else if (report.score >= 70) {
-      text += `A unidade encontra-se em estado de atenção. Recomenda-se a execução imediata dos planos de ação propostos para sanar os desvios identificados antes do próximo ciclo de vistoria.`;
-    } else {
-      text += `A unidade encontra-se em estado de alerta. Faz-se indispensável a intervenção corretiva prioritária com acompanhamento direto da supervisão nos itens com inconformidade.`;
-    }
+    let text = `Diante dos resultados obtidos na auditoria referente à competência ${comp}, conclui-se que o almoxarifado ${activeBranch.name} obteve ${report.score} de 100 pontos possíveis.\n\nStatus da Competência Auditada: ${statusUpper}\n\nA unidade encontra-se em estado de ${statusUpper} referente à competência auditada, sendo indispensável a execução das ações corretivas e o acompanhamento da supervisão sobre os critérios não conformes.`;
 
     if (nokList.length > 0) {
       text += `\n\nRecomendações Específicas por Critério:\n`;
@@ -612,7 +637,17 @@ export default function AlmoxarifeHistorico({
       doc.text("RELATÓRIO DE AUDITORIA PREVENTIVA", 190, y + 10, { align: "right" });
       y += 24;
 
-      // Metadata Block
+      // Section 1: Identificação do Ciclo de Auditoria
+      checkPage(30);
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(27, 42, 74);
+      doc.text("1. Identificação do Ciclo de Auditoria", 15, y);
+      y += 2;
+      doc.setDrawColor(27, 42, 74);
+      doc.line(15, y, 195, y);
+      y += 5;
+
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(226, 232, 240);
       doc.rect(15, y, 180, 22, "FD");
@@ -639,12 +674,12 @@ export default function AlmoxarifeHistorico({
       doc.text(`Ref ID: ${refCode}`, 20, y + 19);
       y += 28;
 
-      // Section 1
+      // Section 2: Resumo Executivo Operacional
       checkPage(20);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 42, 74);
-      doc.text("1. Resumo Executivo Operacional", 15, y);
+      doc.text("2. Resumo Executivo Operacional", 15, y);
       y += 2;
       doc.setDrawColor(27, 42, 74);
       doc.line(15, y, 195, y);
@@ -667,12 +702,12 @@ export default function AlmoxarifeHistorico({
       });
       y += boxHeight + 8;
 
-      // Section 2
+      // Section 3: Checklist Geral de Auditoria (10 Critérios)
       checkPage(25);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 42, 74);
-      doc.text("2. Checklist Geral de Auditoria (10 Critérios)", 15, y);
+      doc.text("3. Checklist Geral de Auditoria (10 Critérios)", 15, y);
       y += 2;
       doc.setDrawColor(27, 42, 74);
       doc.line(15, y, 195, y);
@@ -700,7 +735,7 @@ export default function AlmoxarifeHistorico({
         doc.setFontSize(8);
         doc.setTextColor(51, 65, 85);
         doc.text(c.id.padStart(2, "0"), 18, y + 5);
-        doc.text(c.name, 25, y + 5);
+        doc.text(c.name === "LayOut" ? "Layout" : c.name, 25, y + 5);
         doc.text(c.recurrence || "Mensal", 90, y + 5);
         doc.text(`${c.pointsPossible} pts`, 115, y + 5);
 
@@ -730,12 +765,12 @@ export default function AlmoxarifeHistorico({
       doc.text(`PONTUAÇÃO ACUMULADA — ${score} pts`, 18, y + 5.5);
       y += 14;
 
-      // Section 3
+      // Section 4: Conformidades Identificadas
       checkPage(20);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(16, 124, 65);
-      doc.text(`3. Conformidades Identificadas (${okCount})`, 15, y);
+      doc.text(`4. Conformidades Identificadas (${okCount})`, 15, y);
       y += 2;
       doc.setDrawColor(220, 252, 231);
       doc.line(15, y, 195, y);
@@ -756,7 +791,7 @@ export default function AlmoxarifeHistorico({
           doc.setFont("Helvetica", "bold");
           doc.setFontSize(8);
           doc.setTextColor(21, 128, 61);
-          doc.text(`[OK] ${c.name} (${c.pointsPossible} pts)`, cx + 3, cy + 5);
+          doc.text(`[OK] ${c.name === "LayOut" ? "Layout" : c.name} (${c.pointsPossible} pts)`, cx + 3, cy + 5);
         });
         y = cy + 14;
       } else {
@@ -767,12 +802,12 @@ export default function AlmoxarifeHistorico({
         y += 10;
       }
 
-      // Section 4
+      // Section 5: Não Conformidades Registradas
       checkPage(20);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(185, 28, 28);
-      doc.text(`4. Não Conformidades Registradas (${nokCount})`, 15, y);
+      doc.text(`5. Não Conformidades Registradas (${nokCount})`, 15, y);
       y += 2;
       doc.setDrawColor(254, 226, 226);
       doc.line(15, y, 195, y);
@@ -780,42 +815,95 @@ export default function AlmoxarifeHistorico({
 
       if (nokCount > 0) {
         nokList.forEach((c) => {
-          const actionText = planosDeAcao[c.name] || "Ação corretiva recomendada pelo setor de qualidade.";
-          const desvioText = c.reasonNok ? `Desvio: ${c.reasonNok}` : `Desvio: ${c.notes}`;
+          const actionText = planosDeAcao[c.name] || planosDeAcao[c.name === "Layout" ? "LayOut" : c.name] || "Realizar adequação técnica conforme diretrizes operacionais do grupo.";
+          const desvioContent = c.reasonNok || c.nokEvidenceDescription || c.descricao_evidencia || c.notes || "Inconformidade registrada durante a verificação em campo.";
+          const desvioText = `Desvio: ${desvioContent}`;
+          const desvioLines = doc.splitTextToSize(desvioText, 172);
 
-          checkPage(26);
+          const obsText = (c.obsNok && c.obsNok !== "Registrado pela comissão de auditoria.") ? `Observação do Auditor: "${c.obsNok}"` : "";
+          const obsLines = obsText ? doc.splitTextToSize(obsText, 172) : [];
+
+          const linksArr = (c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0)
+            ? c.nokEvidenceLinks
+            : (c.nokEvidenceLink ? [c.nokEvidenceLink] : []);
+          const validLinks = linksArr.filter((l: string) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder"));
+          const linksStr = validLinks.length > 0 ? `Evidências: ${validLinks.join(" | ")}` : "";
+          const linkLines = linksStr ? doc.splitTextToSize(linksStr, 172) : [];
+
+          const actionLines = doc.splitTextToSize(actionText, 168);
+
+          let itemBoxHeight = 10;
+          itemBoxHeight += desvioLines.length * 4;
+          if (obsLines.length > 0) itemBoxHeight += obsLines.length * 4 + 1;
+          if (linkLines.length > 0) itemBoxHeight += linkLines.length * 4 + 1;
+          itemBoxHeight += 4;
+          itemBoxHeight += actionLines.length * 4 + 9;
+          itemBoxHeight += 4;
+
+          checkPage(itemBoxHeight);
+
           doc.setFillColor(254, 242, 242);
           doc.setDrawColor(254, 226, 226);
-          doc.rect(15, y, 180, 22, "FD");
+          doc.rect(15, y, 180, itemBoxHeight, "FD");
+
+          let currentY = y + 5;
 
           doc.setFont("Helvetica", "bold");
-          doc.setFontSize(8);
+          doc.setFontSize(8.5);
           doc.setTextColor(153, 27, 27);
-          doc.text(`${c.name} (0 / ${c.pointsPossible} pts)`, 18, y + 4.5);
+          doc.text(`${c.name === "LayOut" ? "Layout" : c.name} (0 / ${c.pointsPossible} pts)`, 18, currentY);
+          currentY += 5;
 
           doc.setFont("Helvetica", "normal");
           doc.setFontSize(7.5);
           doc.setTextColor(127, 29, 29);
-          doc.text(doc.splitTextToSize(desvioText, 172)[0] || "", 18, y + 9);
+          desvioLines.forEach((line: string) => {
+            doc.text(line, 18, currentY);
+            currentY += 4;
+          });
 
-          const linksStr = c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0
-            ? `Evidências: ${c.nokEvidenceLinks.join(" | ")}`
-            : (c.nokEvidenceLink ? `Evidência: ${c.nokEvidenceLink}` : `Nota: "${c.notes}"`);
-          doc.text(doc.splitTextToSize(linksStr, 172)[0] || "", 18, y + 13);
+          if (obsLines.length > 0) {
+            currentY += 1;
+            doc.setFont("Helvetica", "italic");
+            obsLines.forEach((line: string) => {
+              doc.text(line, 18, currentY);
+              currentY += 4;
+            });
+          }
 
+          if (linkLines.length > 0) {
+            currentY += 1;
+            doc.setFont("Helvetica", "normal");
+            linkLines.forEach((line: string) => {
+              doc.text(line, 18, currentY);
+              currentY += 4;
+            });
+          }
+
+          currentY += 2;
+
+          const actionBoxHeight = actionLines.length * 4 + 8;
           doc.setFillColor(255, 255, 255);
-          doc.rect(18, y + 15, 174, 5.5, "F");
+          doc.setDrawColor(254, 226, 226);
+          doc.rect(18, currentY, 174, actionBoxHeight, "FD");
+
+          let aY = currentY + 4.5;
           doc.setFont("Helvetica", "bold");
+          doc.setFontSize(7.5);
           doc.setTextColor(15, 23, 42);
-          doc.text(`Plano de Ação Corretiva: `, 20, y + 19);
+          doc.text("Plano de Ação Corretiva Oficial:", 21, aY);
+          aY += 4.5;
+
           doc.setFont("Helvetica", "normal");
           doc.setTextColor(127, 29, 29);
-          const actionSplit = doc.splitTextToSize(actionText, 125);
-          doc.text(actionSplit[0] || "", 52, y + 19);
+          actionLines.forEach((line: string) => {
+            doc.text(line, 21, aY);
+            aY += 4;
+          });
 
-          y += 25;
+          y += itemBoxHeight + 5;
         });
-        y += 3;
+        y += 2;
       } else {
         checkPage(15);
         doc.setFillColor(240, 253, 244);
@@ -828,12 +916,12 @@ export default function AlmoxarifeHistorico({
         y += 14;
       }
 
-      // Section 5
+      // Section 6: Conclusão e Recomendações
       checkPage(20);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 42, 74);
-      doc.text("5. Conclusão e Recomendações", 15, y);
+      doc.text("6. Conclusão e Recomendações", 15, y);
       y += 2;
       doc.setDrawColor(27, 42, 74);
       doc.line(15, y, 195, y);
@@ -856,12 +944,12 @@ export default function AlmoxarifeHistorico({
       });
       y += concBoxHeight + 8;
 
-      // Section 6
+      // Section 7: Histórico Consolidado dos Ciclos Anteriores
       checkPage(20);
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 42, 74);
-      doc.text("6. Histórico Consolidado dos Ciclos Anteriores", 15, y);
+      doc.text("7. Histórico Consolidado dos Ciclos Anteriores", 15, y);
       y += 2;
       doc.setDrawColor(27, 42, 74);
       doc.line(15, y, 195, y);
@@ -873,13 +961,17 @@ export default function AlmoxarifeHistorico({
       doc.setFontSize(8);
       doc.setTextColor(71, 85, 105);
       doc.text("Ciclo", 18, y + 5);
-      doc.text("Tipo", 55, y + 5);
-      doc.text("Pontuação", 95, y + 5);
-      doc.text("Ocorrências / Desvios", 125, y + 5);
+      doc.text("Tipo", 50, y + 5);
+      doc.text("Pontuação", 85, y + 5);
+      doc.text("Ocorrências / Desvios", 118, y + 5);
       y += 7;
 
       currentHistory.forEach((h) => {
-        checkPage(7);
+        const nokStr = (h.nokItems && h.nokItems.length > 0) ? h.nokItems.join(", ") : "Nenhum desvio registrado";
+        const splitNok = doc.splitTextToSize(nokStr, 72);
+        const rowHeight = Math.max(7, splitNok.length * 4 + 3);
+
+        checkPage(rowHeight);
         doc.setDrawColor(226, 232, 240);
         doc.line(15, y, 195, y);
 
@@ -887,17 +979,22 @@ export default function AlmoxarifeHistorico({
         doc.setFontSize(8);
         doc.setTextColor(51, 65, 85);
         doc.text(h.monthYear, 18, y + 5);
-        doc.text(h.statusLabel, 55, y + 5);
-        doc.text(`${h.score} pts`, 95, y + 5);
+        doc.text(h.statusLabel, 50, y + 5);
+        doc.text(`${h.score} pts`, 85, y + 5);
 
         if (h.nokItems && h.nokItems.length > 0) {
           doc.setTextColor(185, 28, 28);
-          doc.text(h.nokItems.join(", "), 125, y + 5);
         } else {
           doc.setTextColor(21, 128, 61);
-          doc.text("Nenhum desvio registrado", 125, y + 5);
         }
-        y += 6;
+
+        let ny = y + 5;
+        splitNok.forEach((line: string) => {
+          doc.text(line, 118, ny);
+          ny += 4;
+        });
+
+        y += rowHeight;
       });
       y += 12;
 
@@ -1139,7 +1236,23 @@ export default function AlmoxarifeHistorico({
         <div className="max-w-5xl mx-auto space-y-6">
           <style dangerouslySetInnerHTML={{ __html: `
             @media print {
-              .no-print {
+              @page {
+                size: A4 portrait;
+                margin: 15mm;
+              }
+              html, body {
+                width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                font-size: 11pt !important;
+                line-height: 1.4 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .no-print, nav, header, button:not(.print-keep) {
                 display: none !important;
               }
               .print-container {
@@ -1147,14 +1260,193 @@ export default function AlmoxarifeHistorico({
                 margin: 0 !important;
                 border: none !important;
                 box-shadow: none !important;
-                background: white !important;
-                color: black !important;
+                background: #ffffff !important;
+                color: #000000 !important;
                 width: 100% !important;
                 max-width: 100% !important;
+                overflow: visible !important;
               }
-              @page {
-                size: A4;
-                margin: 1.5cm;
+              div, section, main, article, .overflow-x-auto {
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                overflow: visible !important;
+              }
+              /* Force white background and fine gray border (#CCCCCC) on all cards/boxes */
+              .print-container .bg-slate-50\/90,
+              .print-container .bg-slate-50,
+              .print-container .bg-rose-50\/80,
+              .print-container .bg-rose-50,
+              .print-container .bg-emerald-50\/80,
+              .print-container .bg-emerald-50,
+              .print-container .bg-slate-100,
+              .print-container .bg-white,
+              .print-container .bg-\[\#1B2A4A\] {
+                background-color: #ffffff !important;
+                border: 1px solid #CCCCCC !important;
+                box-shadow: none !important;
+              }
+              /* Typography rules: main text black and min 11pt for running text */
+              .print-container,
+              .print-container p,
+              .print-container div,
+              .print-container span,
+              .print-container li {
+                color: #000000 !important;
+                font-size: 11pt !important;
+                line-height: 1.4 !important;
+              }
+              .print-container h1,
+              .print-container h2,
+              .print-container h3,
+              .print-container h4 {
+                color: #000000 !important;
+                font-weight: 800 !important;
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+              }
+              .print-container h1 { font-size: 18pt !important; }
+              .print-container h2 { font-size: 14pt !important; }
+              .print-container h3 {
+                font-size: 12pt !important;
+                border-bottom: 2px solid #000000 !important;
+                padding-bottom: 4px !important;
+                margin-top: 14px !important;
+                margin-bottom: 8px !important;
+              }
+              .print-container .border-b-2,
+              .print-container .border-b {
+                border-color: #000000 !important;
+              }
+              /* Table typography and borders */
+              .print-container table {
+                width: 100% !important;
+                max-width: 100% !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+                border: 1px solid #CCCCCC !important;
+                margin-top: 8px !important;
+                margin-bottom: 8px !important;
+                page-break-inside: auto !important;
+              }
+              .print-container thead tr,
+              .print-container thead th {
+                background-color: #E0E0E0 !important;
+                color: #000000 !important;
+                font-weight: bold !important;
+                font-size: 9pt !important;
+                border: 1px solid #CCCCCC !important;
+                padding: 6px 8px !important;
+                text-align: left !important;
+                text-transform: uppercase !important;
+              }
+              .print-container tbody tr {
+                background-color: #ffffff !important;
+                border-bottom: 1px solid #CCCCCC !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              .print-container tbody tr:nth-child(even) {
+                background-color: #F5F5F5 !important;
+              }
+              .print-container th,
+              .print-container td {
+                font-size: 9pt !important;
+                line-height: 1.3 !important;
+                padding: 6px 8px !important;
+                color: #000000 !important;
+                border: 1px solid #CCCCCC !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                word-break: break-word !important;
+                white-space: normal !important;
+              }
+              /* Status badges in print: light background + distinct text and border */
+              .print-container .bg-emerald-50,
+              .print-container .bg-emerald-100,
+              .print-container .bg-emerald-600,
+              .print-container .text-emerald-600,
+              .print-container .text-emerald-700,
+              .print-container .text-emerald-800,
+              .print-container .text-emerald-900,
+              .print-container .text-emerald-950 {
+                background-color: #f0fdf4 !important;
+                color: #15803d !important;
+                border: 1px solid #16a34a !important;
+                font-weight: 800 !important;
+              }
+              .print-container .bg-rose-50,
+              .print-container .bg-rose-100,
+              .print-container .bg-rose-600,
+              .print-container .text-rose-600,
+              .print-container .text-rose-700,
+              .print-container .text-rose-800,
+              .print-container .text-rose-900,
+              .print-container .text-rose-950 {
+                background-color: #fef2f2 !important;
+                color: #b91c1c !important;
+                border: 1px solid #dc2626 !important;
+                font-weight: 800 !important;
+              }
+              .print-container .bg-cyan-50,
+              .print-container .bg-cyan-100,
+              .print-container .text-cyan-700,
+              .print-container .text-cyan-800 {
+                background-color: #ecfeff !important;
+                color: #0369a1 !important;
+                border: 1px solid #0284c7 !important;
+                font-weight: 800 !important;
+              }
+              .print-container .bg-amber-50,
+              .print-container .bg-amber-100,
+              .print-container .text-amber-700,
+              .print-container .text-amber-800 {
+                background-color: #fffbeb !important;
+                color: #b45309 !important;
+                border: 1px solid #d97706 !important;
+                font-weight: 800 !important;
+              }
+              /* Evidence links: plain dark text and URL */
+              .print-container a {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                color: #000000 !important;
+                padding: 0 !important;
+                text-decoration: underline !important;
+                font-size: 8.5pt !important;
+              }
+              .print-container a[href]::after {
+                content: " (" attr(href) ")" !important;
+                font-weight: normal !important;
+                color: #333333 !important;
+                font-size: 8pt !important;
+                word-break: break-all !important;
+              }
+              .print-container button {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                color: #000000 !important;
+                padding: 0 !important;
+                font-size: 8.5pt !important;
+              }
+              /* Prevent breaking inside sections and cards */
+              .print-container .space-y-4,
+              .print-container .space-y-6,
+              .print-container .grid,
+              .print-container .print-avoid-break,
+              .print-container .p-5,
+              .print-container .p-6 {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              /* Document Footer alignment */
+              .print-container .border-t-2 {
+                border-top: 2px solid #000000 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                margin-top: 20px !important;
+                padding-top: 12px !important;
               }
             }
           `}} />
@@ -1217,10 +1509,10 @@ export default function AlmoxarifeHistorico({
               </div>
             </div>
 
-            {/* Metadata Table */}
+            {/* Metadata Table - Section 1: Identificação do Ciclo */}
             <div className="bg-slate-50/90 border border-slate-200 p-6 rounded-2xl shadow-3xs">
               <h3 className="text-xs sm:text-sm font-black text-[#1B2A4A] uppercase tracking-wider mb-4">
-                Identificação do Ciclo de Auditoria
+                1. Identificação do Ciclo de Auditoria
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-5 text-xs sm:text-sm">
                 <div>
@@ -1242,58 +1534,109 @@ export default function AlmoxarifeHistorico({
               </div>
             </div>
 
-            {/* Section 1: Executive Summary */}
+            {/* Section 2: Resumo Executivo Operacional */}
             <div className="space-y-4">
               <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-3 flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">description</span>
-                1. Resumo Executivo Operacional
+                2. Resumo Executivo Operacional
               </h3>
               <div className="bg-slate-50/90 border border-slate-200 border-l-4 border-l-[#1B2A4A] p-6 sm:p-7 rounded-2xl text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans shadow-2xs">
                 {buildAutomaticResumoExecutivo(viewingReport)}
               </div>
             </div>
 
-            {/* Section 2: Full Checklist Table (10 Criteria) */}
+            {/* Section 3: Checklist Geral de Auditoria (10 Critérios) */}
             <div className="space-y-4">
               <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-3 flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">fact_check</span>
-                2. Checklist Geral de Auditoria (10 Critérios)
+                3. Checklist Geral de Auditoria (10 Critérios)
               </h3>
               <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-[#1B2A4A] text-white text-xs font-black uppercase tracking-wider">
-                      <th className="py-3.5 px-4 sm:px-5 w-12">#</th>
-                      <th className="py-3.5 px-4 sm:px-5">Critério Operacional</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center">Frequência</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center">Pontos Possíveis</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center">Pontos Obtidos</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center">Status</th>
+                      <th className="py-3.5 px-4 sm:px-5 w-12 font-mono">#</th>
+                      <th className="py-3.5 px-4 sm:px-5 w-[42%] font-mono">Critério Operacional</th>
+                      <th className="py-3.5 px-4 sm:px-5 text-center w-[15%] font-mono">Frequência</th>
+                      <th className="py-3.5 px-4 sm:px-5 text-center w-[13%] font-mono">Possíveis</th>
+                      <th className="py-3.5 px-4 sm:px-5 text-center w-[13%] font-mono">Obtidos</th>
+                      <th className="py-3.5 px-4 sm:px-5 text-center w-[12%] font-mono">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {viewingReport.criteria.map((c) => (
-                      <tr key={c.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 px-4 sm:px-5 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
-                        <td className="py-3.5 px-4 sm:px-5 font-bold text-[#1B2A4A]">
-                          {c.name}
-                        </td>
-                        <td className="py-3.5 px-4 sm:px-5 text-center font-semibold text-slate-500">{c.recurrence || "Mensal"}</td>
-                        <td className="py-3.5 px-4 sm:px-5 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
-                        <td className={`py-3.5 px-4 sm:px-5 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
-                          {c.pointsObtained} pts
-                        </td>
-                        <td className="py-3.5 px-4 sm:px-5 text-center">
-                          <span className={`inline-block px-3 py-1 rounded-lg text-xs font-black ${
-                            c.status === "OK" 
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                              : "bg-rose-50 text-rose-700 border border-rose-200"
-                          }`}>
-                            {c.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {viewingReport.criteria.map((c) => {
+                      const hasEvidence = c.status === "NOK" && (
+                        Boolean(c.nokEvidenceLink) ||
+                        Boolean(c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0) ||
+                        Boolean(c.nokEvidenceFileData)
+                      );
+
+                      const evidenceLinks = (c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0)
+                        ? c.nokEvidenceLinks
+                        : (c.nokEvidenceLink ? [c.nokEvidenceLink] : []);
+
+                      return (
+                        <tr key={c.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3.5 px-4 sm:px-5 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
+                          <td className="py-3.5 px-4 sm:px-5 font-bold text-[#1B2A4A]">
+                            <div>{c.name}</div>
+                            {hasEvidence && (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                                {evidenceLinks.map((link, lIdx) => (
+                                  <a
+                                    key={lIdx}
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-md font-black transition-all shadow-3xs"
+                                  >
+                                    <span>🔗 Ver Evidência</span>
+                                  </a>
+                                ))}
+                                {c.nokEvidenceFileData && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newTab = window.open();
+                                      if (newTab) {
+                                        newTab.document.write(
+                                          `<html><head><title>Evidência - ${c.name}</title></head>` +
+                                          `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #0f172a;">` +
+                                          (c.nokEvidenceFileType?.startsWith("image/") 
+                                            ? `<img src="${c.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                            : `<iframe src="${c.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`) +
+                                          `</body></html>`
+                                        );
+                                        newTab.document.close();
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1.5 text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-md font-black transition-all shadow-3xs cursor-pointer"
+                                  >
+                                    <span>🔗 Ver Evidência</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 sm:px-5 text-center font-semibold text-slate-500">{c.recurrence || "Mensal"}</td>
+                          <td className="py-3.5 px-4 sm:px-5 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
+                          <td className={`py-3.5 px-4 sm:px-5 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
+                            {c.pointsObtained} pts
+                          </td>
+                          <td className="py-3.5 px-4 sm:px-5 text-center">
+                            <div className="flex flex-col items-center justify-center gap-1.5">
+                              <span className={`inline-block px-3 py-1 rounded-lg text-xs font-black ${
+                                c.status === "OK" 
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                              }`}>
+                                {c.status}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     <tr className="bg-slate-100 font-black border-t-2 border-slate-300">
                       <td colSpan={3} className="py-3.5 px-4 sm:px-5 text-right text-slate-600">PONTUAÇÃO ACUMULADA:</td>
                       <td className="py-3.5 px-4 sm:px-5 text-center font-mono text-slate-600">100 pts</td>
@@ -1314,11 +1657,11 @@ export default function AlmoxarifeHistorico({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Section 3: Conformidades */}
+              {/* Section 4: Conformidades Identificadas */}
               <div className="space-y-4">
                 <h3 className="text-base sm:text-lg font-black text-emerald-800 uppercase tracking-wider border-b-2 border-emerald-200 pb-3 flex items-center gap-2.5">
                   <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
-                  3. Conformidades Identificadas ({viewingReport.criteria.filter(c => c.status === "OK").length})
+                  4. Conformidades Identificadas ({viewingReport.criteria.filter(c => c.status === "OK").length})
                 </h3>
                 {viewingReport.criteria.filter(c => c.status === "OK").length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -1337,11 +1680,11 @@ export default function AlmoxarifeHistorico({
                 )}
               </div>
 
-              {/* Section 4: Não Conformidades */}
+              {/* Section 5: Não Conformidades Registradas (com evidências) */}
               <div className="space-y-4">
                 <h3 className="text-base sm:text-lg font-black text-rose-800 uppercase tracking-wider border-b-2 border-rose-200 pb-3 flex items-center gap-2.5">
                   <span className="material-symbols-outlined text-[20px] text-rose-600">report_problem</span>
-                  4. Não Conformidades Registradas ({viewingReport.criteria.filter(c => c.status === "NOK").length})
+                  5. Não Conformidades Registradas ({viewingReport.criteria.filter(c => c.status === "NOK").length})
                 </h3>
                 {viewingReport.criteria.filter(c => c.status === "NOK").length > 0 ? (
                   <div className="space-y-4">
@@ -1359,24 +1702,66 @@ export default function AlmoxarifeHistorico({
                             </span>
                           </div>
                           <div className="text-xs sm:text-sm space-y-2.5 text-rose-900 leading-relaxed">
-                            <p><strong className="text-rose-950 font-extrabold">Desvio: </strong>{c.reasonNok || c.notes}</p>
-                            <p className="font-medium italic text-rose-850"><strong className="text-rose-950 font-extrabold">Nota de Auditoria: </strong>"{c.obsNok || c.notes}"</p>
+                            <p><strong className="text-rose-950 font-extrabold">Desvio: </strong>{c.reasonNok || c.notes || c.nokEvidenceDescription || "Inconformidade registrada durante a verificação em campo."}</p>
+                            {c.obsNok && <p className="font-medium italic text-rose-850"><strong className="text-rose-950 font-extrabold">Observação do Auditor: </strong>"{c.obsNok}"</p>}
                             
-                            {(c.nokEvidenceLink || (c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0)) && (
-                              <div className="flex flex-wrap gap-2 items-center my-2">
-                                {(c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0 ? c.nokEvidenceLinks : [c.nokEvidenceLink!]).map((link, lIdx) => (
-                                  <a
-                                    key={lIdx}
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-black transition-all shadow-3xs"
-                                  >
-                                    <span>🔗 Ver evidência {lIdx + 1}</span>
-                                  </a>
-                                ))}
+                            {/* Evidências Registradas do Desvio */}
+                            <div className="p-3.5 bg-white/90 border border-rose-200 rounded-xl space-y-2">
+                              <div className="flex items-center gap-1.5 font-extrabold text-rose-950 text-[11px] uppercase tracking-wider">
+                                <span className="material-symbols-outlined text-sm text-rose-600">attach_file</span>
+                                <span>Evidência do Desvio (Anexo / Documento):</span>
                               </div>
-                            )}
+
+                              {c.nokEvidenceDescription && (
+                                <p className="text-xs text-slate-700 font-medium bg-slate-50 p-2 rounded border border-slate-200">
+                                  {c.nokEvidenceDescription}
+                                </p>
+                              )}
+
+                              {(c.nokEvidenceLink || (c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0) || c.nokEvidenceFileData) ? (
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  {((c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0) ? c.nokEvidenceLinks : [c.nokEvidenceLink!].filter(Boolean)).map((link, lIdx) => (
+                                    <a
+                                      key={lIdx}
+                                      href={link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-black transition-all shadow-3xs"
+                                    >
+                                      <span className="material-symbols-outlined text-xs">open_in_new</span>
+                                      <span>Ver Evidência {lIdx + 1}</span>
+                                    </a>
+                                  ))}
+                                  {c.nokEvidenceFileData && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newTab = window.open();
+                                        if (newTab) {
+                                          newTab.document.write(
+                                            `<html><head><title>Evidência - ${c.name}</title></head>` +
+                                            `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #0f172a;">` +
+                                            (c.nokEvidenceFileType?.startsWith("image/") 
+                                              ? `<img src="${c.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                              : `<iframe src="${c.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`) +
+                                            `</body></html>`
+                                          );
+                                          newTab.document.close();
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1.5 text-xs bg-rose-100/90 hover:bg-rose-200 text-rose-900 border border-rose-300 px-3 py-1.5 rounded-lg font-black transition-all shadow-3xs cursor-pointer"
+                                    >
+                                      <span className="material-symbols-outlined text-xs">file_present</span>
+                                      <span>Abrir Anexo ({c.nokEvidenceFileName || "Evidência"})</span>
+                                    </button>
+                                  )}
+                                </div>
+                              ) : !c.nokEvidenceDescription ? (
+                                <p className="text-xs text-slate-500 italic">
+                                  Evidência documental registrada e validada no ato da auditoria.
+                                </p>
+                              ) : null}
+                            </div>
 
                             <div className="p-4 bg-white border border-rose-200 rounded-xl text-xs sm:text-sm text-slate-800 shadow-2xs space-y-1">
                               <strong className="text-rose-950 font-extrabold block mb-1">Plano de Ação Corretiva Oficial:</strong>
@@ -1395,64 +1780,293 @@ export default function AlmoxarifeHistorico({
               </div>
             </div>
 
-            {/* Section 5: Conclusion & Recommendations */}
+            {/* Section 6: Conclusão e Recomendações */}
             <div className="space-y-4">
               <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-3 flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">engineering</span>
-                5. Conclusão e Recomendações
+                6. Conclusão e Recomendações
               </h3>
               <div className="bg-slate-50/90 border border-slate-200 border-l-4 border-l-[#1B2A4A] p-6 sm:p-7 rounded-2xl text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans shadow-2xs">
                 {buildAutomaticConclusion(viewingReport)}
               </div>
             </div>
 
-            {/* Section 6: Historical Consolidated Cycles */}
-            <div className="space-y-4">
-              <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-3 flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">history</span>
-                6. Histórico Consolidado dos Ciclos Anteriores
-              </h3>
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
-                      <th className="py-3.5 px-4 sm:px-5 font-mono">Ciclo</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center font-mono">Resultado</th>
-                      <th className="py-3.5 px-4 sm:px-5 text-center font-mono">Pontuação</th>
-                      <th className="py-3.5 px-4 sm:px-5 font-mono">Ocorrências / Desvios</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...currentHistory]
-                      .sort((a, b) => getMonthYearSortKey(a.monthYear) - getMonthYearSortKey(b.monthYear))
-                      .map((h) => (
-                      <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 px-4 sm:px-5 font-bold text-[#1B2A4A]">{h.monthYear}</td>
-                        <td className="py-3.5 px-4 sm:px-5 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${
-                            h.score >= 90 ? "bg-emerald-100 text-emerald-800" :
-                            h.score >= 80 ? "bg-cyan-100 text-cyan-800" :
-                            h.score >= 70 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
-                          }`}>
-                            {h.statusLabel}
+            {/* Section 7: Evolução de Desempenho (gráfico) */}
+            {(() => {
+              const sortedBranchHistory = [...currentHistory].sort((a, b) => getMonthYearSortKey(a.monthYear) - getMonthYearSortKey(b.monthYear));
+              const currentReportIdx = sortedBranchHistory.findIndex(h => h.id === viewingReport.id || h.monthYear === viewingReport.monthYear);
+              const accumulatedHistory = (currentReportIdx !== -1 ? sortedBranchHistory.slice(0, currentReportIdx + 1) : sortedBranchHistory)
+                .sort((a, b) => getMonthYearSortKey(a.monthYear) - getMonthYearSortKey(b.monthYear));
+
+              const N = sortedBranchHistory.length;
+              const pointSpacing = N > 6 ? 90 : 85;
+              const paddingLeft = 50;
+              const paddingRight = 40;
+              const chartWidth = N > 1 ? (N - 1) * pointSpacing : 380;
+              const width = Math.max(500, chartWidth + paddingLeft + paddingRight);
+              const height = 220;
+              const paddingTop = 35;
+              const paddingBottom = 40;
+              const innerChartWidth = width - paddingLeft - paddingRight;
+              const innerChartHeight = height - paddingTop - paddingBottom;
+
+              const gridValues = [0, 20, 40, 60, 80, 100];
+
+              let pathD = "";
+              let fillD = "";
+
+              sortedBranchHistory.forEach((item, idx) => {
+                const x = N === 1 ? paddingLeft + innerChartWidth / 2 : paddingLeft + idx * pointSpacing;
+                const clampedScore = Math.min(100, Math.max(0, item.score));
+                const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+                if (idx === 0) pathD += `M ${x} ${y}`;
+                else pathD += ` L ${x} ${y}`;
+              });
+
+              if (N > 1) {
+                const xFirst = paddingLeft;
+                const xLast = paddingLeft + (N - 1) * pointSpacing;
+                fillD = pathD + ` L ${xLast} ${paddingTop + innerChartHeight} L ${xFirst} ${paddingTop + innerChartHeight} Z`;
+              } else if (N === 1) {
+                const x = paddingLeft + innerChartWidth / 2;
+                const clampedScore = Math.min(100, Math.max(0, sortedBranchHistory[0].score));
+                const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+                fillD = `M ${x - 30} ${y} L ${x + 30} ${y} L ${x + 30} ${paddingTop + innerChartHeight} L ${x - 30} ${paddingTop + innerChartHeight} Z`;
+              }
+
+              return (
+                <>
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-[#1B2A4A]/20 pb-3">
+                      <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">trending_up</span>
+                        7. Evolução de Desempenho — {activeBranch.name}
+                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {N > 6 && (
+                          <span className="text-[11px] font-bold text-slate-600 bg-slate-200/80 px-2.5 py-1 rounded-lg border border-slate-300 flex items-center gap-1 font-mono">
+                            <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                            Deslize para ver todos ({N} meses)
                           </span>
-                        </td>
-                        <td className="py-3.5 px-4 sm:px-5 text-center font-mono font-black text-slate-800">
-                          {h.score} pts
-                        </td>
-                        <td className="py-3.5 px-4 sm:px-5 text-slate-700 font-medium">
-                          {h.nokItems && h.nokItems.length > 0 ? (
-                            <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
-                          ) : (
-                            <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        )}
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-mono">
+                          {sortedBranchHistory.length} {sortedBranchHistory.length === 1 ? "ciclo registrado" : "ciclos registrados"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/90 border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-2xs">
+                      <div className="relative overflow-x-auto scroll-smooth pb-2">
+                        <div style={{ minWidth: `${width}px` }}>
+                          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+                            {/* Grid Lines */}
+                            {gridValues.map((v) => {
+                              if (v === 80) return null;
+                              const y = paddingTop + (1 - v / 100) * innerChartHeight;
+                              return (
+                                <g key={v} className="opacity-40">
+                                  <line
+                                    x1={paddingLeft}
+                                    y1={y}
+                                    x2={width - paddingRight}
+                                    y2={y}
+                                    stroke="#CBD5E1"
+                                    strokeDasharray="3,3"
+                                    strokeWidth={1}
+                                  />
+                                  <text
+                                    x={paddingLeft - 10}
+                                    y={y + 3}
+                                    textAnchor="end"
+                                    fill="#94A3B8"
+                                    fontSize="9"
+                                    className="font-mono font-bold"
+                                  >
+                                    {v}
+                                  </text>
+                                </g>
+                              );
+                            })}
+
+                            {/* Red dashed line for target limit (80 pts) */}
+                            <g>
+                              <line
+                                x1={paddingLeft}
+                                y1={paddingTop + (1 - 80 / 100) * innerChartHeight}
+                                x2={width - paddingRight}
+                                y2={paddingTop + (1 - 80 / 100) * innerChartHeight}
+                                stroke="#EF4444"
+                                strokeDasharray="4,4"
+                                strokeWidth="1.5"
+                              />
+                              <text
+                                x={paddingLeft - 10}
+                                y={paddingTop + (1 - 80 / 100) * innerChartHeight + 3}
+                                textAnchor="end"
+                                fill="#EF4444"
+                                fontSize="9"
+                                className="font-mono font-black"
+                              >
+                                80
+                              </text>
+                              <text
+                                x={width - paddingRight - 10}
+                                y={paddingTop + (1 - 80 / 100) * innerChartHeight - 5}
+                                textAnchor="end"
+                                fill="#EF4444"
+                                fontSize="8.5"
+                                className="font-sans font-black uppercase tracking-wider"
+                              >
+                                Meta Mensal (80 pts)
+                              </text>
+                            </g>
+
+                            {/* Linear Gradient Definition */}
+                            <defs>
+                              <linearGradient id="almoxGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.25" />
+                                <stop offset="100%" stopColor="#C8A84B" stopOpacity="0.0" />
+                              </linearGradient>
+                            </defs>
+
+                            {/* Area Fill */}
+                            {fillD && (
+                              <path
+                                d={fillD}
+                                fill="url(#almoxGrad)"
+                                className="transition-all duration-300"
+                              />
+                            )}
+
+                            {/* Path Line */}
+                            {pathD && (
+                              <path
+                                d={pathD}
+                                stroke="#1B2A4A"
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                fill="none"
+                                className="transition-all duration-300"
+                              />
+                            )}
+
+                            {/* Month Labels and Interactive Dots */}
+                            {sortedBranchHistory.map((item, idx) => {
+                              const x = N === 1 ? paddingLeft + innerChartWidth / 2 : paddingLeft + idx * pointSpacing;
+                              const clampedScore = Math.min(100, Math.max(0, item.score));
+                              const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+                              const isSelected = item.id === viewingReport.id || item.monthYear === viewingReport.monthYear;
+
+                              return (
+                                <g
+                                  key={`point-${item.id || idx}`}
+                                  className="cursor-pointer group"
+                                  onClick={() => setViewingReport(item)}
+                                >
+                                  {/* Score Label on Top */}
+                                  <text
+                                    x={x}
+                                    y={y - 12}
+                                    textAnchor="middle"
+                                    fill={isSelected ? "#C8A84B" : "#1B2A4A"}
+                                    fontSize={isSelected ? "11" : "10"}
+                                    className={`font-mono font-black transition-all ${isSelected ? "scale-110" : ""}`}
+                                  >
+                                    {item.score} pts
+                                  </text>
+
+                                  {/* Outer glow ring for active point */}
+                                  {isSelected && (
+                                    <circle
+                                      cx={x}
+                                      cy={y}
+                                      r="11"
+                                      fill="#C8A84B"
+                                      fillOpacity="0.25"
+                                      className="animate-pulse"
+                                    />
+                                  )}
+
+                                  {/* Dot Circle */}
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r={isSelected ? 7 : 5}
+                                    fill={isSelected ? "#C8A84B" : "#1B2A4A"}
+                                    stroke="#FFFFFF"
+                                    strokeWidth={isSelected ? 3 : 2}
+                                    className="transition-all group-hover:r-8 group-hover:fill-[#C8A84B]"
+                                  />
+
+                                  {/* Short Month Label at Bottom */}
+                                  <text
+                                    x={x}
+                                    y={height - 10}
+                                    textAnchor="middle"
+                                    fill={isSelected ? "#C8A84B" : "#64748B"}
+                                    fontSize={isSelected ? "10.5" : "9.5"}
+                                    className={`font-mono font-black ${isSelected ? "underline font-black text-[#C8A84B]" : ""}`}
+                                  >
+                                    {getShortMonthLabel(item.monthYear)}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 8: Historical Consolidated Cycles */}
+                  <div className="space-y-4">
+                    <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-3 flex items-center gap-2.5">
+                      <span className="material-symbols-outlined text-[20px] text-[#1B2A4A]">history</span>
+                      8. Histórico Consolidado dos Ciclos Anteriores
+                    </h3>
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
+                            <th className="py-3.5 px-4 sm:px-5 font-mono w-[18%]">Ciclo</th>
+                            <th className="py-3.5 px-4 sm:px-5 text-center font-mono w-[20%]">Resultado</th>
+                            <th className="py-3.5 px-4 sm:px-5 text-center font-mono w-[15%]">Pontuação</th>
+                            <th className="py-3.5 px-4 sm:px-5 font-mono w-[47%]">Ocorrências / Desvios</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accumulatedHistory.map((h) => (
+                            <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3.5 px-4 sm:px-5 font-bold text-[#1B2A4A] break-words">{h.monthYear}</td>
+                              <td className="py-3.5 px-4 sm:px-5 text-center">
+                                <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${
+                                  h.score >= 90 ? "bg-emerald-100 text-emerald-800" :
+                                  h.score >= 80 ? "bg-cyan-100 text-cyan-800" :
+                                  h.score >= 70 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
+                                }`}>
+                                  {h.statusLabel}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 sm:px-5 text-center font-mono font-black text-slate-800">
+                                {h.score} pts
+                              </td>
+                              <td className="py-3.5 px-4 sm:px-5 text-slate-700 font-medium break-words">
+                                {h.nokItems && h.nokItems.length > 0 ? (
+                                  <span className="text-rose-600 font-semibold break-words block">{h.nokItems.join(", ")}</span>
+                                ) : (
+                                  <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Document Footer */}
             <div className="pt-8 border-t-2 border-slate-200 flex flex-col md:flex-row md:items-end justify-between gap-6 text-xs text-slate-500 font-medium">

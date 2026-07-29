@@ -150,6 +150,24 @@ const getEvidenceForCriterion = (cId: string): EvidenceData => {
   };
 };
 
+const getShortMonthLabel = (monthYear: string): string => {
+  if (!monthYear) return "";
+  const upper = monthYear.toUpperCase();
+  if (upper.includes("JAN")) return "JAN";
+  if (upper.includes("FEV")) return "FEV";
+  if (upper.includes("MAR")) return "MAR";
+  if (upper.includes("ABR")) return "ABR";
+  if (upper.includes("MAI")) return "MAI";
+  if (upper.includes("JUN")) return "JUN";
+  if (upper.includes("JUL")) return "JUL";
+  if (upper.includes("AGO")) return "AGO";
+  if (upper.includes("SET")) return "SET";
+  if (upper.includes("OUT")) return "OUT";
+  if (upper.includes("NOV")) return "NOV";
+  if (upper.includes("DEZ")) return "DEZ";
+  return monthYear.split(" ")[0].slice(0, 3).toUpperCase();
+};
+
 const planosDeAcao: Record<string, string> = {
   "Inventário": 
     "Realizar recontagem dos itens divergentes, identificar a causa das diferenças encontradas, corrigir as movimentações necessárias no sistema e reforçar os procedimentos de controle e acuracidade dos estoques.",
@@ -185,6 +203,11 @@ const planosDeAcao: Record<string, string> = {
 const isSemestralMonth = (monthYear: string) => {
   const m = s(monthYear).toLowerCase();
   return m.includes("janeiro") || m.includes("junho") || m.includes("dezembro") || m.includes("semestral");
+};
+
+const formatCompetencia = (monthYearStr: string) => {
+  if (!monthYearStr) return "";
+  return monthYearStr.trim().replace(/\s+/g, "/").replace(/-\s*/g, "/");
 };
 
 const getBranchCalendarForEntry = (branchId: string, monthYear: string, branchName: string | undefined, calendarData: any[] | undefined) => {
@@ -432,6 +455,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
 
   // Expanded criterion row inside details table
   const [expandedCriterionId, setExpandedCriterionId] = useState<string | null>(null);
+  const [chartSelectedMonthId, setChartSelectedMonthId] = useState<string | null>(null);
 
   // Active Lightbox for evidence fullscreen mock
   const [activeLightbox, setActiveLightbox] = useState<{
@@ -587,90 +611,30 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
   const buildAutomaticResumoExecutivo = (entry: AuditHistoryEntry) => {
     const crits = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
     const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
-    const maxPoints = crits.reduce((sum, c) => sum + c.pointsPossible, 0);
     const listOK = crits.filter(c => c.status === "OK");
     const listNOK = crits.filter(c => c.status === "NOK");
 
     const okStr = listOK.map(c => `${c.name === "LayOut" ? "Layout" : c.name} (${c.pointsPossible} pts)`).join(", ");
     const nokStr = listNOK.map(c => `${c.name === "LayOut" ? "Layout" : c.name} (0 pts)`).join(", ");
 
-    const sortedList = getChronologicalHistory(historyList);
-    const currentIndex = sortedList.findIndex(e => e.id === entry.id);
-    const preceding = currentIndex !== -1 ? sortedList.slice(0, currentIndex) : [];
-    const lastThree = preceding.slice(-3);
+    const comp = formatCompetencia(entry.monthYear);
 
-    let tendencyLine = "";
-    if (lastThree.length === 3) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems, lastThree[1].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj3 = getCriteriaForHistory(lastThree[2].score, lastThree[2].nokItems, lastThree[2].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-
-      let trend = "estabilidade";
-      if (adj3 > adj1) {
-        trend = "melhora";
-      } else if (adj3 < adj1) {
-        trend = "queda";
-      }
-
-      tendencyLine = `Nos últimos três meses o almoxarifado registrou ${adj1}, ${adj2} e ${adj3} pts respectivamente, indicando ${trend} no desempenho operacional.`;
-    } else if (lastThree.length === 2) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const adj2 = getCriteriaForHistory(lastThree[1].score, lastThree[1].nokItems, lastThree[1].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-      const trend = adj2 > adj1 ? "melhora" : adj2 < adj1 ? "queda" : "estabilidade";
-      tendencyLine = `Nos últimos dois meses o almoxarifado registrou ${adj1} e ${adj2} pts respectivamente, indicando ${trend} no desempenho operacional.`;
-    } else if (lastThree.length === 1) {
-      const adj1 = getCriteriaForHistory(lastThree[0].score, lastThree[0].nokItems, lastThree[0].criteriaState).reduce((sum, c) => sum + c.pointsObtained, 0);
-      tendencyLine = `No mês anterior o almoxarifado registrou ${adj1} pts, indicando desempenho operacional estável.`;
-    } else {
-      tendencyLine = `Nos meses anteriores o almoxarifado não possuía registros suficientes, estabelecendo esta avaliação como linha de base para análises de tendência futuras.`;
-    }
-
-    // Ranking position
-    const groupBranchesWithScores = branches
-      .filter((b) => b.group === activeBranch.group)
-      .map((b) => ({
-        id: b.id,
-        semestralScore: getHistoryForBranch(b.id, rawHistoryList).reduce((sum, h) => {
-          return sum + getCriteriaForHistory(h.score, h.nokItems, h.criteriaState).reduce((acc, c) => acc + c.pointsObtained, 0);
-        }, 0)
-      }))
-      .sort((a, b) => b.semestralScore - a.semestralScore);
-
-    const rankIndex = groupBranchesWithScores.findIndex((b) => b.id === activeBranch.id);
-    const posNumber = rankIndex !== -1 ? rankIndex + 1 : 1;
-    const groupLabel = activeBranch.group === "A" ? "Grupo A" : "Grupo B";
-    const rankPos = `${posNumber}º lugar`;
-    const accumulatedPoints = groupBranchesWithScores.find(b => b.id === activeBranch.id)?.semestralScore || activeBranch.semestralScore;
-
-    let text = `RESUMO EXECUTIVO OPERACIONAL\n`;
-    text += `${activeBranch.name} — ${entry.monthYear}\n`;
-    text += `Responsável: ${activeBranch.ownerName}\n\n`;
-    text += `A auditoria preventiva de ${entry.monthYear} registrou ${score} pts de um máximo de ${maxPoints} pts auditáveis no período, com ${listOK.length} critérios em conformidade e ${listNOK.length} em não conformidade.\n\n`;
+    let text = `Considerando a auditoria referente à competência ${comp}, o almoxarifado ${activeBranch.name} obteve a pontuação total de ${score} de 100 pontos possíveis, registrando ${listOK.length} critérios em conformidade (OK) e ${listNOK.length} critérios não conformes (NOK).\n\n`;
     text += `Critérios aprovados: ${okStr}\n\n`;
     if (listNOK.length > 0) {
       text += `Critérios não conformes: ${nokStr}\n\n`;
     }
-    text += `${tendencyLine}\n\n`;
-    text += `Posição atual no Ranking ${groupLabel}: ${rankPos} com ${accumulatedPoints} pts acumulados no semestre.`;
 
     return text;
   };
 
   const buildAutomaticConclusion = (entry: AuditHistoryEntry) => {
     const crits = getCriteriaForHistory(entry.score, entry.nokItems, entry.criteriaState);
-    const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
     const listNOK = crits.filter(c => c.status === "NOK");
+    const comp = formatCompetencia(entry.monthYear);
+    const statusUpper = (entry.status || entry.status_ciclo || entry.type || (entry.score >= 90 ? "EXCELENTE" : entry.score >= 80 ? "BOM" : entry.score >= 70 ? "ALERTA" : "CRÍTICO")).toUpperCase();
 
-    let conclusionText = "";
-    if (score >= 90) {
-      conclusionText = `A auditoria de ${entry.monthYear} do almoxarifado ${activeBranch.name} evidenciou excelente nível de conformidade operacional. O almoxarifado atingiu ${score} pts, demonstrando consistência nos processos de controle, organização e gestão de estoques. A manutenção deste padrão contribui diretamente para os resultados do Grupo A.Cândido.`;
-    } else if (score >= 75) {
-      conclusionText = `A auditoria de ${entry.monthYear} do almoxarifado ${activeBranch.name} resultou em ${score} pts, indicando desempenho satisfatório com oportunidades pontuais de melhoria. Os critérios aprovados demonstram solidez nos processos fundamentais, enquanto os critérios não conformes requerem atenção para recuperação da pontuação nos próximos ciclos.`;
-    } else if (score >= 60) {
-      conclusionText = `A auditoria de ${entry.monthYear} do almoxarifado ${activeBranch.name} registrou ${score} pts, desempenho regular que requer atenção imediata. A quantidade de não conformidades identificadas impacta diretamente a posição no ranking semestral e deve ser tratada com prioridade nas próximas semanas.`;
-    } else {
-      conclusionText = `A auditoria de ${entry.monthYear} do almoxarifado ${activeBranch.name} registrou ${score} pts, resultado abaixo do esperado e que exige ação corretiva imediata. O número de não conformidades identificadas compromete o desempenho semestral e a qualificação mínima de 300 pts exigida pela gestão.`;
-    }
+    let conclusionText = `Diante dos resultados obtidos na auditoria referente à competência ${comp}, conclui-se que o almoxarifado ${activeBranch.name} obteve ${entry.score} de 100 pontos possíveis.\n\nStatus da Competência Auditada: ${statusUpper}\n\nA unidade encontra-se em estado de ${statusUpper} referente à competência auditada, sendo indispensável a execução das ações corretivas e o acompanhamento da supervisão sobre os critérios não conformes.`;
 
     let recsText = "";
     if (listNOK.length > 0) {
@@ -679,10 +643,7 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
       recsText = "Não há recomendações corretivas para este período. Recomenda-se manter os controles operacionais em vigor e sustentar o padrão de conformidade alcançado.";
     }
 
-    let template = `CONCLUSÃO\n\n`;
-    template += `${conclusionText}\n\n`;
-    template += `RECOMENDAÇÕES\n\n`;
-    template += `${recsText}`;
+    let template = `${conclusionText}\n\nRecomendações Específicas:\n${recsText}`;
 
     return template;
   };
@@ -690,24 +651,25 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
   const handleExportPDF = () => {
     if (!selectedEntry) return;
     setIsExporting(true);
+    setToastMessage("Gerando relatório oficial A. Cândido Grupo...");
 
     try {
-        const crits = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems, selectedEntry.criteriaState);
-        const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
-        const okList = crits.filter(c => c.status === "OK");
-        const okCount = okList.length;
-        const nokList = crits.filter(c => c.status === "NOK");
-        const nokCount = nokList.length;
+      const crits = getCriteriaForHistory(selectedEntry.score, selectedEntry.nokItems, selectedEntry.criteriaState);
+      const score = crits.reduce((sum, c) => sum + c.pointsObtained, 0);
+      const okList = crits.filter(c => c.status === "OK");
+      const okCount = okList.length;
+      const nokList = crits.filter(c => c.status === "NOK");
+      const nokCount = nokList.length;
 
-        const currentSummary = buildAutomaticResumoExecutivo(selectedEntry);
-        const currentConclusion = buildAutomaticConclusion(selectedEntry);
-        const evaluationDate = getEvaluationDate(selectedEntry.monthYear);
+      const currentSummary = buildAutomaticResumoExecutivo(selectedEntry);
+      const currentConclusion = buildAutomaticConclusion(selectedEntry);
+      const evaluationDate = getEvaluationDate(selectedEntry.monthYear);
 
-        const doc = new jsPDF({
-          orientation: "portrait",
-          unit: "mm",
-          format: "a4"
-        });
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
 
         let y = 15;
         let pageNumber = 1;
@@ -914,47 +876,98 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
         if (nokCount > 0) {
           nokList.forEach((c) => {
             const evidence = getEvidenceForCriterion(c.id);
-            const actionText = planosDeAcao[c.name] || "";
+            const actionText = planosDeAcao[c.name] || planosDeAcao[c.name === "Layout" ? "LayOut" : c.name] || "Realizar adequação técnica conforme diretrizes operacionais do grupo.";
 
-            checkPage(26);
-            doc.setFillColor(254, 242, 242);
-            doc.setDrawColor(254, 226, 226);
-            doc.rect(15, y, 180, 22, "FD");
+            const desvioContent = c.nokEvidenceDescription || (c as any).reasonNok || (c as any).descricao_evidencia || evidence.reasonNok || (c as any).notes || "Inconformidade registrada durante a verificação em campo.";
+            const desvioText = `Desvio: ${desvioContent}`;
+            const desvioLines = doc.splitTextToSize(desvioText, 172);
 
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(8);
-            doc.setTextColor(153, 27, 27);
-            doc.text(`${c.name === "LayOut" ? "Layout" : c.name} (0 / ${c.pointsPossible} pts)`, 18, y + 4.5);
+            const obsText = (evidence.obsNok && evidence.obsNok !== "Registrado pela comissão de auditoria.") ? `Observação do Auditor: "${evidence.obsNok}"` : "";
+            const obsLines = obsText ? doc.splitTextToSize(obsText, 172) : [];
 
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(7.5);
-            doc.setTextColor(127, 29, 29);
-            
-            const desvioText = c.nokEvidenceDescription ? `Desvio: ${c.nokEvidenceDescription}` : `Desvio: ${evidence.reasonNok}`;
-            doc.text(doc.splitTextToSize(desvioText, 172)[0] || "", 18, y + 9);
-            
             const validPdfLinks = Array.isArray((c as any).nokEvidenceLinks)
               ? (c as any).nokEvidenceLinks.filter((l: string) => typeof l === "string" && l.trim() !== "" && !l.includes("mock-nok-folder"))
               : [];
             const singlePdfLink = (c as any).nokEvidenceLink && typeof (c as any).nokEvidenceLink === "string" && !(c as any).nokEvidenceLink.includes("mock-nok-folder") && (c as any).nokEvidenceLink.trim() !== "" ? (c as any).nokEvidenceLink : null;
             const linksStr = validPdfLinks.length > 0 
               ? `Evidências: ${validPdfLinks.join(" | ")}` 
-              : (singlePdfLink ? `Evidência: ${singlePdfLink}` : `Nota: "${evidence.obsNok}"`);
-            doc.text(doc.splitTextToSize(linksStr, 172)[0] || "", 18, y + 13);
+              : (singlePdfLink ? `Evidência: ${singlePdfLink}` : "");
+            const linkLines = linksStr ? doc.splitTextToSize(linksStr, 172) : [];
 
-            doc.setFillColor(255, 255, 255);
-            doc.rect(18, y + 15, 174, 5.5, "F");
+            const actionLines = doc.splitTextToSize(actionText, 168);
+
+            let itemBoxHeight = 10;
+            itemBoxHeight += desvioLines.length * 4;
+            if (obsLines.length > 0) itemBoxHeight += obsLines.length * 4 + 1;
+            if (linkLines.length > 0) itemBoxHeight += linkLines.length * 4 + 1;
+            itemBoxHeight += 4;
+            itemBoxHeight += actionLines.length * 4 + 9;
+            itemBoxHeight += 4;
+
+            checkPage(itemBoxHeight);
+
+            doc.setFillColor(254, 242, 242);
+            doc.setDrawColor(254, 226, 226);
+            doc.rect(15, y, 180, itemBoxHeight, "FD");
+
+            let currentY = y + 5;
+
             doc.setFont("Helvetica", "bold");
+            doc.setFontSize(8.5);
+            doc.setTextColor(153, 27, 27);
+            doc.text(`${c.name === "LayOut" ? "Layout" : c.name} (0 / ${c.pointsPossible} pts)`, 18, currentY);
+            currentY += 5;
+
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(7.5);
+            doc.setTextColor(127, 29, 29);
+            desvioLines.forEach((line: string) => {
+              doc.text(line, 18, currentY);
+              currentY += 4;
+            });
+
+            if (obsLines.length > 0) {
+              currentY += 1;
+              doc.setFont("Helvetica", "italic");
+              obsLines.forEach((line: string) => {
+                doc.text(line, 18, currentY);
+                currentY += 4;
+              });
+            }
+
+            if (linkLines.length > 0) {
+              currentY += 1;
+              doc.setFont("Helvetica", "normal");
+              linkLines.forEach((line: string) => {
+                doc.text(line, 18, currentY);
+                currentY += 4;
+              });
+            }
+
+            currentY += 2;
+
+            const actionBoxHeight = actionLines.length * 4 + 8;
+            doc.setFillColor(255, 255, 255);
+            doc.setDrawColor(254, 226, 226);
+            doc.rect(18, currentY, 174, actionBoxHeight, "FD");
+
+            let aY = currentY + 4.5;
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(7.5);
             doc.setTextColor(15, 23, 42);
-            doc.text(`Plano de Ação Corretiva: `, 20, y + 19);
+            doc.text("Plano de Ação Corretiva Oficial:", 21, aY);
+            aY += 4.5;
+
             doc.setFont("Helvetica", "normal");
             doc.setTextColor(127, 29, 29);
-            const actionSplit = doc.splitTextToSize(actionText, 125);
-            doc.text(actionSplit[0] || "", 52, y + 19);
+            actionLines.forEach((line: string) => {
+              doc.text(line, 21, aY);
+              aY += 4;
+            });
 
-            y += 25;
+            y += itemBoxHeight + 5;
           });
-          y += 3;
+          y += 2;
         } else {
           checkPage(15);
           doc.setFillColor(240, 253, 244);
@@ -1643,67 +1656,517 @@ export default function AdminHistory({ user, branches, calendarData }: AdminHist
             </div>
           </div>
 
-          {/* Section 6: Histórico Consolidado */}
-          <div className="mt-8 space-y-3">
-            <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">history</span>
-              6. Histórico Consolidado dos Ciclos Anteriores
-            </h3>
-            <div className="overflow-x-auto border border-slate-200 rounded-xl mt-3 shadow-2xs">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
-                    <th className="py-3 px-4 font-mono">Ciclo</th>
-                    <th className="py-3 px-4 text-center font-mono">Resultado</th>
-                    <th className="py-3 px-4 text-center font-mono">Pontuação</th>
-                    <th className="py-3 px-4 font-mono">Ocorrências / Desvios</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyList.map((h) => {
-                    let displayType = h.type;
-                    if (displayType === "Avaliação Semestral" || displayType === "Mensal" || !displayType) {
-                      if (h.score >= 90) displayType = "Excelente";
-                      else if (h.score >= 80) displayType = "Bom";
-                      else if (h.score >= 70) displayType = "Atenção";
-                      else displayType = "Alerta";
-                    }
-                    const isSemestral = isSemestralMonth(h.monthYear);
+          {/* Performance Evolution Chart */}
+          {(() => {
+            const branchHistory = getHistoryForBranch(selectedBranchId, historyList);
+            const sortedBranchHistory = getChronologicalHistory(branchHistory);
+            const currentReportIdx = sortedBranchHistory.findIndex(h => h.id === selectedEntry.id || h.monthYear === selectedEntry.monthYear);
+            const accumulatedHistory = currentReportIdx !== -1 ? sortedBranchHistory.slice(0, currentReportIdx + 1) : sortedBranchHistory;
 
-                    return (
-                      <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3 px-4 font-bold text-[#1B2A4A]">
-                          <div>
-                            <span>{h.monthYear}</span>
-                            {isSemestral && (
-                              <span className="block text-[10px] text-slate-400 font-semibold leading-tight mt-0.5">
-                                Auditoria Semestral
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${getTypeBadgeColor(displayType)}`}>
-                            {displayType}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono font-black text-slate-800">
-                          {h.score} pts
-                        </td>
-                        <td className="py-3 px-4 text-slate-700 font-medium">
-                          {h.nokItems.length > 0 ? (
-                            <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
-                          ) : (
-                            <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
+            const activeBranchObj = branches.find((b) => b.id === selectedBranchId) || { name: selectedBranchId };
+            const activeChartEntry = (chartSelectedMonthId && sortedBranchHistory.find(h => h.id === chartSelectedMonthId)) || selectedEntry;
+
+            const N = sortedBranchHistory.length;
+            const pointSpacing = N > 6 ? 90 : 85;
+            const paddingLeft = 50;
+            const paddingRight = 40;
+            const chartWidth = N > 1 ? (N - 1) * pointSpacing : 380;
+            const width = Math.max(500, chartWidth + paddingLeft + paddingRight);
+            const height = 220;
+            const paddingTop = 35;
+            const paddingBottom = 40;
+            const innerChartWidth = width - paddingLeft - paddingRight;
+            const innerChartHeight = height - paddingTop - paddingBottom;
+
+            const gridValues = [0, 20, 40, 60, 80, 100];
+
+            let pathD = "";
+            let fillD = "";
+
+            sortedBranchHistory.forEach((item, idx) => {
+              const x = N === 1 ? paddingLeft + innerChartWidth / 2 : paddingLeft + idx * pointSpacing;
+              const clampedScore = Math.min(100, Math.max(0, item.score));
+              const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+              if (idx === 0) pathD += `M ${x} ${y}`;
+              else pathD += ` L ${x} ${y}`;
+            });
+
+            if (N > 1) {
+              const xFirst = paddingLeft;
+              const xLast = paddingLeft + (N - 1) * pointSpacing;
+              fillD = pathD + ` L ${xLast} ${paddingTop + innerChartHeight} L ${xFirst} ${paddingTop + innerChartHeight} Z`;
+            } else if (N === 1) {
+              const x = paddingLeft + innerChartWidth / 2;
+              const clampedScore = Math.min(100, Math.max(0, sortedBranchHistory[0].score));
+              const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+              fillD = `M ${x - 30} ${y} L ${x + 30} ${y} L ${x + 30} ${paddingTop + innerChartHeight} L ${x - 30} ${paddingTop + innerChartHeight} Z`;
+            }
+
+            const activeCriteriaList = getCriteriaForHistory(activeChartEntry.score, activeChartEntry.nokItems || [], activeChartEntry.criteriaState);
+            const activeOkCriteria = activeCriteriaList.filter(c => c.status === "OK");
+            const activeNokCriteria = activeCriteriaList.filter(c => c.status === "NOK");
+
+            return (
+              <>
+                <div className="mt-8 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-[#1B2A4A]/20 pb-2">
+                    <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">trending_up</span>
+                      Evolução de Desempenho — {activeBranchObj.name}
+                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {N > 6 && (
+                        <span className="text-[11px] font-bold text-slate-600 bg-slate-200/80 px-2.5 py-1 rounded-lg border border-slate-300 flex items-center gap-1 font-mono">
+                          <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                          Deslize para ver todos ({N} meses)
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-mono">
+                        {sortedBranchHistory.length} {sortedBranchHistory.length === 1 ? "ciclo registrado" : "ciclos registrados"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50/90 border border-slate-200 rounded-xl p-4 sm:p-5 shadow-2xs mt-3">
+                    <div className="relative overflow-x-auto scroll-smooth pb-2">
+                      <div style={{ minWidth: `${width}px` }}>
+                        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+                          {/* Grid Lines */}
+                          {gridValues.map((v) => {
+                            if (v === 80) return null;
+                            const y = paddingTop + (1 - v / 100) * innerChartHeight;
+                            return (
+                              <g key={v} className="opacity-40">
+                                <line
+                                  x1={paddingLeft}
+                                  y1={y}
+                                  x2={width - paddingRight}
+                                  y2={y}
+                                  stroke="#CBD5E1"
+                                  strokeDasharray="3,3"
+                                  strokeWidth={1}
+                                />
+                                <text
+                                  x={paddingLeft - 10}
+                                  y={y + 3}
+                                  textAnchor="end"
+                                  fill="#94A3B8"
+                                  fontSize="9"
+                                  className="font-mono font-bold"
+                                >
+                                  {v}
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Red dashed line for target limit (80 pts) */}
+                          <g>
+                            <line
+                              x1={paddingLeft}
+                              y1={paddingTop + (1 - 80 / 100) * innerChartHeight}
+                              x2={width - paddingRight}
+                              y2={paddingTop + (1 - 80 / 100) * innerChartHeight}
+                              stroke="#EF4444"
+                              strokeDasharray="4,4"
+                              strokeWidth="1.5"
+                            />
+                            <text
+                              x={paddingLeft - 10}
+                              y={paddingTop + (1 - 80 / 100) * innerChartHeight + 3}
+                              textAnchor="end"
+                              fill="#EF4444"
+                              fontSize="9"
+                              className="font-mono font-black"
+                            >
+                              80
+                            </text>
+                            <text
+                              x={width - paddingRight - 10}
+                              y={paddingTop + (1 - 80 / 100) * innerChartHeight - 5}
+                              textAnchor="end"
+                              fill="#EF4444"
+                              fontSize="8.5"
+                              className="font-sans font-black uppercase tracking-wider"
+                            >
+                              Meta Mensal (80 pts)
+                            </text>
+                          </g>
+
+                          {/* Linear Gradient Definition */}
+                          <defs>
+                            <linearGradient id="adminChartGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#1B2A4A" stopOpacity="0.25" />
+                              <stop offset="100%" stopColor="#C8A84B" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+
+                          {/* Area Fill */}
+                          {fillD && (
+                            <path
+                              d={fillD}
+                              fill="url(#adminChartGrad)"
+                              className="transition-all duration-300"
+                            />
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+
+                          {/* Path Line */}
+                          {pathD && (
+                            <path
+                              d={pathD}
+                              stroke="#1B2A4A"
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              fill="none"
+                              className="transition-all duration-300"
+                            />
+                          )}
+
+                          {/* Month Labels and Interactive Dots */}
+                          {sortedBranchHistory.map((item, idx) => {
+                            const x = N === 1 ? paddingLeft + innerChartWidth / 2 : paddingLeft + idx * pointSpacing;
+                            const clampedScore = Math.min(100, Math.max(0, item.score));
+                            const y = paddingTop + (1 - clampedScore / 100) * innerChartHeight;
+                            const isSelected = item.id === activeChartEntry.id || item.monthYear === activeChartEntry.monthYear;
+
+                            return (
+                              <g
+                                key={`point-${item.id || idx}`}
+                                className="cursor-pointer group"
+                                onClick={() => setChartSelectedMonthId(item.id)}
+                              >
+                                {/* Score Label on Top */}
+                                <text
+                                  x={x}
+                                  y={y - 12}
+                                  textAnchor="middle"
+                                  fill={isSelected ? "#C8A84B" : "#1B2A4A"}
+                                  fontSize={isSelected ? "11" : "10"}
+                                  className={`font-mono font-black transition-all ${isSelected ? "scale-110" : ""}`}
+                                >
+                                  {item.score} pts
+                                </text>
+
+                                {/* Outer glow ring for active point */}
+                                {isSelected && (
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r="11"
+                                    fill="#C8A84B"
+                                    fillOpacity="0.25"
+                                    className="animate-pulse"
+                                  />
+                                )}
+
+                                {/* Dot Circle */}
+                                <circle
+                                  cx={x}
+                                  cy={y}
+                                  r={isSelected ? 7 : 5}
+                                  fill={isSelected ? "#C8A84B" : "#1B2A4A"}
+                                  stroke="#FFFFFF"
+                                  strokeWidth={isSelected ? 3 : 2}
+                                  className="transition-all group-hover:r-8 group-hover:fill-[#C8A84B]"
+                                />
+
+                                {/* Short Month Label at Bottom */}
+                                <text
+                                  x={x}
+                                  y={height - 10}
+                                  textAnchor="middle"
+                                  fill={isSelected ? "#C8A84B" : "#64748B"}
+                                  fontSize={isSelected ? "10.5" : "9.5"}
+                                  className={`font-mono font-black ${isSelected ? "underline font-black text-[#C8A84B]" : ""}`}
+                                >
+                                  {getShortMonthLabel(item.monthYear)}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dynamic Expanded Section for the Month Selected on Chart */}
+                <div className="bg-white border-2 border-[#1B2A4A]/20 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6 mt-6">
+                  <div className="border-b border-slate-150 pb-4">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="material-symbols-outlined text-[#1B2A4A] text-xl">tune</span>
+                      <h4 className="text-sm sm:text-base font-black text-[#1B2A4A] uppercase tracking-wide">
+                        Detalhamento de Auditoria — {activeChartEntry.monthYear}
+                      </h4>
+                      <span className={`px-2.5 py-0.5 rounded-md text-xs font-black ${
+                        activeChartEntry.score >= 90 ? "bg-emerald-100 text-emerald-800" :
+                        activeChartEntry.score >= 80 ? "bg-cyan-100 text-cyan-800" :
+                        activeChartEntry.score >= 70 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {activeChartEntry.score} pts
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-1">
+                      Exibindo checklist, conformidades e não conformidades com evidências selecionadas no gráfico para {activeChartEntry.monthYear}.
+                    </p>
+                  </div>
+
+                  {/* Checklist Geral (10 Critérios) */}
+                  <div className="space-y-3">
+                    <h5 className="text-xs sm:text-sm font-black text-[#1B2A4A] uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base text-[#1B2A4A]">fact_check</span>
+                      Checklist Geral de Auditoria (10 Critérios)
+                    </h5>
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-3xs">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#1B2A4A] text-white font-black uppercase text-[11px] tracking-wider">
+                            <th className="py-2.5 px-3.5 w-10">#</th>
+                            <th className="py-2.5 px-3.5">Critério Operacional</th>
+                            <th className="py-2.5 px-3.5 text-center">Frequência</th>
+                            <th className="py-2.5 px-3.5 text-center">Possível</th>
+                            <th className="py-2.5 px-3.5 text-center">Obtido</th>
+                            <th className="py-2.5 px-3.5 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeCriteriaList.map((c) => (
+                            <tr key={c.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-2.5 px-3.5 font-mono font-black text-slate-400">{c.id.padStart(2, "0")}</td>
+                              <td className="py-2.5 px-3.5 font-bold text-[#1B2A4A]">{c.name}</td>
+                              <td className="py-2.5 px-3.5 text-center text-slate-500 font-semibold">{c.recurrence || "Mensal"}</td>
+                              <td className="py-2.5 px-3.5 text-center text-slate-500 font-mono font-semibold">{c.pointsPossible} pts</td>
+                              <td className={`py-2.5 px-3.5 text-center font-mono font-black ${c.status === "OK" ? "text-emerald-700" : "text-rose-600"}`}>
+                                {c.pointsObtained} pts
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-black ${
+                                    c.status === "OK" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  }`}>
+                                    {c.status}
+                                  </span>
+                                  {c.status === "NOK" && (c.nokEvidenceLink || ((c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0) || (c as any).nokEvidenceFileData) && (
+                                    <span className="text-[10px] text-indigo-600 font-extrabold flex items-center gap-0.5">
+                                      <span className="material-symbols-outlined text-[11px]">attach_file</span>
+                                      Evidência Anexa
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="bg-slate-100 font-black border-t-2 border-slate-300">
+                            <td colSpan={3} className="py-2.5 px-3.5 text-right text-slate-600">PONTUAÇÃO ACUMULADA:</td>
+                            <td className="py-2.5 px-3.5 text-center font-mono text-slate-600">100 pts</td>
+                            <td className={`py-2.5 px-3.5 text-center font-mono text-xs ${activeChartEntry.score >= 80 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                              {activeChartEntry.score} pts
+                            </td>
+                            <td className="py-2.5 px-3.5 text-center">
+                              <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] uppercase font-black tracking-wider ${
+                                activeChartEntry.score >= 80 ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                              }`}>
+                                {activeChartEntry.score >= 80 ? "QUALIFICADO" : "EM ALERTA"}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Conformidades e Não Conformidades */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Conformidades Identificadas */}
+                    <div className="space-y-3">
+                      <h5 className="text-xs sm:text-sm font-black text-emerald-800 uppercase tracking-wider flex items-center gap-2 border-b border-emerald-200 pb-2">
+                        <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                        Conformidades Identificadas ({activeOkCriteria.length})
+                      </h5>
+                      {activeOkCriteria.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {activeOkCriteria.map(c => (
+                            <div key={c.id} className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-2.5 shadow-3xs">
+                              <span className="material-symbols-outlined text-emerald-600 text-base font-bold shrink-0">check</span>
+                              <div className="overflow-hidden">
+                                <p className="text-xs font-extrabold text-emerald-950 truncate">{c.name}</p>
+                                <p className="text-[10px] text-emerald-700 font-mono font-bold">{c.pointsPossible} pts obtidos</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">Nenhum processo em conformidade neste mês.</p>
+                      )}
+                    </div>
+
+                    {/* Não Conformidades Registradas */}
+                    <div className="space-y-3">
+                      <h5 className="text-xs sm:text-sm font-black text-rose-800 uppercase tracking-wider flex items-center gap-2 border-b border-rose-200 pb-2">
+                        <span className="material-symbols-outlined text-base text-rose-600">report_problem</span>
+                        Não Conformidades Registradas ({activeNokCriteria.length})
+                      </h5>
+                      {activeNokCriteria.length > 0 ? (
+                        <div className="space-y-3">
+                          {activeNokCriteria.map(c => {
+                            const actionText = planosDeAcao[c.name] || "Realizar adequação técnica conforme diretrizes operacionais do grupo.";
+                            return (
+                              <div key={c.id} className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-3 shadow-3xs">
+                                <div className="flex justify-between items-start gap-2">
+                                  <p className="text-xs font-black text-rose-950 flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-rose-600 text-base">warning</span>
+                                    {c.name}
+                                  </p>
+                                  <span className="font-mono text-[11px] font-extrabold text-rose-800 bg-rose-100/90 px-2 py-0.5 rounded border border-rose-200">
+                                    0 / {c.pointsPossible} pts
+                                  </span>
+                                </div>
+
+                                <div className="text-xs space-y-2.5 text-rose-900 leading-relaxed">
+                                  <p><strong className="text-rose-950 font-extrabold">Desvio Detectado: </strong>{(c as any).notes || c.nokEvidenceDescription || "Inconformidade registrada durante a verificação em campo."}</p>
+                                  
+                                  {/* Evidência Registrada do Desvio */}
+                                  <div className="p-3 bg-white/90 border border-rose-200 rounded-lg space-y-2">
+                                    <div className="flex items-center gap-1.5 font-extrabold text-rose-950 text-[11px] uppercase tracking-wider">
+                                      <span className="material-symbols-outlined text-sm text-rose-600">attach_file</span>
+                                      <span>Evidência do Desvio (Anexo / Documento):</span>
+                                    </div>
+
+                                    {c.nokEvidenceDescription && (
+                                      <p className="text-xs text-slate-700 font-medium bg-slate-50 p-2 rounded border border-slate-200">
+                                        {c.nokEvidenceDescription}
+                                      </p>
+                                    )}
+
+                                    {(c.nokEvidenceLink || ((c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0) || (c as any).nokEvidenceFileData) ? (
+                                      <div className="flex flex-wrap gap-2 items-center">
+                                        {(((c as any).nokEvidenceLinks && (c as any).nokEvidenceLinks.length > 0) ? (c as any).nokEvidenceLinks : [c.nokEvidenceLink!].filter(Boolean)).map((link: string, lIdx: number) => (
+                                          <a
+                                            key={lIdx}
+                                            href={link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-black transition-all shadow-3xs"
+                                          >
+                                            <span className="material-symbols-outlined text-xs">open_in_new</span>
+                                            <span>Ver Evidência {lIdx + 1}</span>
+                                          </a>
+                                        ))}
+                                        {(c as any).nokEvidenceFileData && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newTab = window.open();
+                                              if (newTab) {
+                                                newTab.document.write(
+                                                  `<html><head><title>Evidência - ${c.name}</title></head>` +
+                                                  `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #0f172a;">` +
+                                                  ((c as any).nokEvidenceFileType?.startsWith("image/") 
+                                                    ? `<img src="${(c as any).nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                                    : `<iframe src="${(c as any).nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`) +
+                                                  `</body></html>`
+                                                );
+                                                newTab.document.close();
+                                              }
+                                            }}
+                                            className="inline-flex items-center gap-1.5 text-[11px] bg-rose-100/90 hover:bg-rose-200 text-rose-900 border border-rose-300 px-3 py-1.5 rounded-lg font-black transition-all shadow-3xs cursor-pointer"
+                                          >
+                                            <span className="material-symbols-outlined text-xs">file_present</span>
+                                            <span>Abrir Anexo ({(c as any).nokEvidenceFileName || "Evidência"})</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : !c.nokEvidenceDescription ? (
+                                      <p className="text-xs text-slate-500 italic">
+                                        Evidência documental registrada e validada no ato da auditoria.
+                                      </p>
+                                    ) : null}
+                                  </div>
+
+                                  <div className="p-3 bg-white border border-rose-200 rounded-lg text-xs text-slate-800 space-y-0.5">
+                                    <strong className="text-rose-950 font-extrabold block">Plano de Ação Corretiva:</strong>
+                                    <span className="font-medium text-slate-700 leading-relaxed">{actionText}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-semibold">
+                          ✅ Unidade sem não-conformidades registradas neste ciclo.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+
+                {/* Section 6: Histórico Consolidado */}
+                <div className="mt-8 space-y-3">
+                  <h3 className="text-base sm:text-lg font-black text-[#1B2A4A] uppercase tracking-wider border-b-2 border-[#1B2A4A]/20 pb-2 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-[#1B2A4A]">history</span>
+                    6. Histórico Consolidado dos Ciclos Anteriores
+                  </h3>
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl mt-3 shadow-2xs">
+                    <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-black uppercase text-xs tracking-wider">
+                          <th className="py-3 px-4 font-mono">Ciclo</th>
+                          <th className="py-3 px-4 text-center font-mono">Resultado</th>
+                          <th className="py-3 px-4 text-center font-mono">Pontuação</th>
+                          <th className="py-3 px-4 font-mono">Ocorrências / Desvios</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accumulatedHistory.map((h) => {
+                          let displayType = h.type;
+                          if (displayType === "Avaliação Semestral" || displayType === "Mensal" || !displayType) {
+                            if (h.score >= 90) displayType = "Excelente";
+                            else if (h.score >= 80) displayType = "Bom";
+                            else if (h.score >= 70) displayType = "Atenção";
+                            else displayType = "Alerta";
+                          }
+                          const isSemestral = isSemestralMonth(h.monthYear);
+
+                          return (
+                            <tr key={h.id} className="border-b border-slate-150 last:border-0 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 font-bold text-[#1B2A4A]">
+                                <div>
+                                  <span>{h.monthYear}</span>
+                                  {isSemestral && (
+                                    <span className="block text-[10px] text-slate-400 font-semibold leading-tight mt-0.5">
+                                      Auditoria Semestral
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-black ${getTypeBadgeColor(displayType)}`}>
+                                  {displayType}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono font-black text-slate-800">
+                                {h.score} pts
+                              </td>
+                              <td className="py-3 px-4 text-slate-700 font-medium">
+                                {h.nokItems.length > 0 ? (
+                                  <span className="text-rose-600 font-semibold">{h.nokItems.join(", ")}</span>
+                                ) : (
+                                  <span className="text-emerald-700 font-semibold">Nenhum desvio registrado</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           {/* Document Footer */}
           <div className="mt-10 pt-6 border-t-2 border-slate-200 flex flex-col md:flex-row md:items-end justify-between gap-6 text-xs text-slate-500 font-medium">
