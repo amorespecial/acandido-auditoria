@@ -241,14 +241,20 @@ export default function App() {
       next = newStateOrFn;
     }
 
+    console.log('[CICLO] handleUpdateCycleState chamado com:', next);
+
+    // Set local flag to ignore realtime echoes during update
+    realtimeFlags.isLocalUpdate = true;
+
     // 1. Save to database FIRST and wait for completion
     if (isSupabaseReady()) {
       try {
         await dbSaveCycleState(next);
       } catch (err) {
-        console.error("Failed to sync cycle state to Supabase on explicit update:", err);
+        console.error("[CICLO] Failed to sync cycle state to Supabase on explicit update:", err);
         setDbConnectionError(true);
         alert("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
+        realtimeFlags.isLocalUpdate = false;
         return; // Halt if DB save fails
       }
     }
@@ -266,6 +272,14 @@ export default function App() {
       const updatedAll = { ...prev, [key]: next };
       return updatedAll;
     });
+
+    localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(next));
+
+    // Release local update flag after 3s to avoid race conditions with Realtime echo
+    setTimeout(() => {
+      realtimeFlags.isLocalUpdate = false;
+      console.log("[CICLO] realtimeFlags.isLocalUpdate liberado em App.tsx (3s após atualização local)");
+    }, 3000);
   };
 
   // Lock Almoxarife view strictly to the currently open cycle (cycleState) loaded from database
@@ -360,6 +374,7 @@ export default function App() {
             console.error("Failed to load initial cycle list:", listErr);
           }
           const initializeCycleState = async () => {
+            console.log('[CICLO] initializeCycleState chamado');
             try {
               // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou AGUARDANDO_FECHAMENTO)
               const { data, error } = await supabase
@@ -369,6 +384,8 @@ export default function App() {
                 .order('iniciado_em', { ascending: false })
                 .limit(1)
                 .maybeSingle();
+
+              console.log('[CICLO] Resultado do banco:', data, error);
 
               if (!error && data) {
                 let monthStr = "Janeiro";
@@ -390,6 +407,7 @@ export default function App() {
                 setActiveMonth(monthStr);
                 setActiveYear(String(data.ano));
                 localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloAtivo));
+                console.log('[CICLO] Estado definido como ABERTO:', cicloAtivo);
                 return;
               }
 
@@ -400,6 +418,8 @@ export default function App() {
                 .order('iniciado_em', { ascending: false })
                 .limit(1)
                 .maybeSingle();
+
+              console.log('[CICLO] Resultado do banco (ciclo mais recente):', latest, latestErr);
 
               if (!latestErr && latest) {
                 let monthStr = "Janeiro";
@@ -421,14 +441,16 @@ export default function App() {
                 setActiveMonth(monthStr);
                 setActiveYear(String(latest.ano));
                 localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloLatest));
+                console.log('[CICLO] Estado definido com ciclo mais recente:', cicloLatest);
                 return;
               }
 
             } catch (err) {
-              console.error("Erro ao buscar ciclo do Supabase:", err);
+              console.error("[CICLO] Erro ao buscar ciclo do Supabase:", err);
             }
 
             // PASSO 3 — Se não houver ciclos no banco de dados, marcar como NENHUM ciclo ativo
+            console.log('[CICLO] Estado definido como NULL — nenhum ciclo aberto no banco');
             setCycleState({
               activeMonth: "Janeiro",
               activeYear: "2026",

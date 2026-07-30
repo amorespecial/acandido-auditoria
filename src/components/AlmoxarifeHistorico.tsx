@@ -816,7 +816,7 @@ export default function AlmoxarifeHistorico({
       if (nokCount > 0) {
         nokList.forEach((c) => {
           const actionText = planosDeAcao[c.name] || planosDeAcao[c.name === "Layout" ? "LayOut" : c.name] || "Realizar adequação técnica conforme diretrizes operacionais do grupo.";
-          const desvioContent = c.reasonNok || c.nokEvidenceDescription || c.descricao_evidencia || c.notes || "Inconformidade registrada durante a verificação em campo.";
+          const desvioContent = c.reasonNok || c.nokEvidenceDescription || c.notes || "Inconformidade registrada durante a verificação em campo.";
           const desvioText = `Desvio: ${desvioContent}`;
           const desvioLines = doc.splitTextToSize(desvioText, 172);
 

@@ -728,42 +728,86 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
     realtimeFlags.isLocalUpdate = true;
     
     // Convert string month to number (e.g. "Março" -> 3) and year to integer (e.g. "2026" -> 2026)
-    const dbMes = typeof cycle.activeMonth === "string" ? monthNameToNum(cycle.activeMonth) : cycle.activeMonth;
-    const dbAno = typeof cycle.activeYear === "string" ? parseInt(cycle.activeYear, 10) : cycle.activeYear;
+    const dbMesNum = typeof cycle.activeMonth === "string" ? monthNameToNum(cycle.activeMonth) : cycle.activeMonth;
+    const dbAnoNum = typeof cycle.activeYear === "string" ? parseInt(cycle.activeYear, 10) : cycle.activeYear;
+
+    let validIniciadoEm = new Date().toISOString();
+    if (cycle.openedAt && typeof cycle.openedAt === "string" && cycle.openedAt.includes("-") && !isNaN(Date.parse(cycle.openedAt))) {
+      validIniciadoEm = new Date(cycle.openedAt).toISOString();
+    }
+
+    const targetStatus = cycle.status === "NENHUM" ? "ABERTO" : cycle.status;
 
     const updateObj = {
-      mes: dbMes,
-      ano: dbAno,
-      status: cycle.status === "NENHUM" ? "ABERTO" : cycle.status,
+      mes: dbMesNum,
+      ano: dbAnoNum,
+      status: targetStatus,
       iniciado_por: cycle.openedBy || "Fernando Silva",
-      iniciado_em: cycle.openedAt || new Date().toISOString(),
-      fechado_em: cycle.status === "FECHADO" || cycle.status === "ARQUIVADO" ? new Date().toISOString() : null
+      iniciado_em: validIniciadoEm,
+      fechado_em: (targetStatus === "FECHADO" || targetStatus === "ARQUIVADO") ? new Date().toISOString() : null
     };
 
-    const { error } = await supabase.from('ciclos').upsert(updateObj, { onConflict: 'mes,ano' });
-    if (error) {
-      console.warn("Error upserting cycle state, falling back to update:", error);
-      // Fallback to updating status and fechado_em directly if the row already exists and upsert fails
-      const { error: updateError } = await supabase
+    console.log('[CICLO] dbSaveCycleState salvando:', updateObj);
+
+    // Check if row exists by matching ano and mes (integer or string name)
+    const { data: existingRows } = await supabase
+      .from('ciclos')
+      .select('id, mes, ano')
+      .eq('ano', dbAnoNum);
+
+    const matchRow = existingRows?.find(r => {
+      const rMesNum = typeof r.mes === "number" ? r.mes : parseInt(r.mes, 10);
+      return rMesNum === dbMesNum || String(r.mes).toLowerCase() === String(cycle.activeMonth).toLowerCase();
+    });
+
+    if (matchRow) {
+      console.log('[CICLO] Atualizando registro existente ID:', matchRow.id);
+      const { error: updateErr } = await supabase
         .from('ciclos')
         .update({
           status: updateObj.status,
+          iniciado_por: updateObj.iniciado_por,
+          iniciado_em: updateObj.iniciado_em,
           fechado_em: updateObj.fechado_em
         })
-        .eq('mes', dbMes)
-        .eq('ano', dbAno);
-      if (updateError) {
-        console.warn("Update error in dbSaveCycleState fallback:", updateError);
-        const { error: insertErr } = await supabase.from('ciclos').insert(updateObj);
-        if (insertErr) {
-          console.warn("Insert error in dbSaveCycleState fallback:", insertErr);
+        .eq('id', matchRow.id);
+
+      if (updateErr) {
+        console.error("[CICLO] Erro ao atualizar ciclo:", updateErr);
+      } else {
+        console.log('[CICLO] Ciclo atualizado com sucesso no Supabase!');
+      }
+    } else {
+      console.log('[CICLO] Inserindo novo registro de ciclo no Supabase');
+      const { error: insertErr } = await supabase
+        .from('ciclos')
+        .insert(updateObj);
+
+      if (insertErr) {
+        console.warn("[CICLO] Erro ao inserir ciclo com mes numérico, tentando com string:", insertErr);
+        const { error: insertStringErr } = await supabase
+          .from('ciclos')
+          .insert({
+            ...updateObj,
+            mes: cycle.activeMonth
+          });
+        if (insertStringErr) {
+          console.error("[CICLO] Erro crítico ao inserir ciclo:", insertStringErr);
+        } else {
+          console.log('[CICLO] Ciclo inserido com sucesso (mes string)!');
         }
+      } else {
+        console.log('[CICLO] Ciclo inserido com sucesso!');
       }
     }
   } catch (err) {
-    console.error("Error in dbSaveCycleState:", err);
+    console.error("[CICLO] Exceção em dbSaveCycleState:", err);
   } finally {
-    realtimeFlags.isLocalUpdate = false;
+    // Keep realtimeFlags.isLocalUpdate true for 3000ms so Realtime echo does not revert state
+    setTimeout(() => {
+      realtimeFlags.isLocalUpdate = false;
+      console.log('[CICLO] realtimeFlags.isLocalUpdate liberado (3s após salvamento)');
+    }, 3000);
   }
 };
 

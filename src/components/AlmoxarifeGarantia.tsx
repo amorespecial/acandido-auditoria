@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { supabase } from "../supabaseClient";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
 import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
@@ -583,7 +584,7 @@ export default function AlmoxarifeGarantia({
     setShowFormModal(true);
   };
 
-  const handleSaveItem = (e: React.FormEvent) => {
+  const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
     let hasError = false;
@@ -662,43 +663,131 @@ export default function AlmoxarifeGarantia({
     const nomeAnexo = attachmentFile ? attachmentFile.name : "";
 
     if (editingItem) {
-      // Edit mode
-      const updated = warranties.map((w) => {
-        if (w.id === editingItem.id) {
-          return {
-            ...w,
-            itemCode: selectedItemCode,
-            itemDescription: desc,
-            manufacturer: selectedManufacturer,
-            expiryDate,
-            almoxarifado: selectedAlmoxarifado,
-            notaFiscal: notaFiscal.trim(),
-            nota_fiscal: notaFiscal.trim(),
-            nfEmissionDate: finalNfEmissionDate,
-            data_emissao_nf: finalNfEmissionDate,
-            reference: reference.trim(),
-            referencia_item: reference.trim(),
-            veiculo: veiculo.trim(),
-            localizacao: localizacao.trim(),
-            lastUpdateDate: autoLastUpdateDate,
-            pieceObservation: finalPieceObs,
-            observacao_peca: finalPieceObs,
-            observacao: finalPieceObs,
-            scrapObservation: scrapObservation.trim(),
-            observacao_sucata: scrapObservation.trim(),
-            monthYear: derivedMonthYear,
-            createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
-            registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
-            anexo_url: base64Anexo,
-            anexo_base64: base64Anexo,
-            arquivo_base64: base64Anexo,
-            anexo_nome: nomeAnexo,
-            ...customFormValues
-          };
+      // Edit mode - update database first via UPDATE if connected to Supabase
+      const finalAnexo = attachmentFile ? attachmentFile.base64 : (editingItem.anexo_url || editingItem.anexo_base64 || editingItem.arquivo_base64 || null);
+      const finalAnexoNome = attachmentFile ? attachmentFile.name : (editingItem.anexo_nome || "");
+
+      const updatePayload = {
+        fabricante: selectedManufacturer || null,
+        garantia_ate: expiryDate || null,
+        data_emissao_nf: finalNfEmissionDate || null,
+        referencia_item: reference.trim() || null,
+        nota_fiscal: notaFiscal.trim() || null,
+        veiculo: veiculo.trim() || null,
+        localizacao: localizacao.trim() || null,
+        observacao: finalPieceObs || null,
+        observacao_sucata: scrapObservation.trim() || null,
+        anexo_url: finalAnexo || null,
+        item: desc ? `${selectedItemCode} - ${desc}` : selectedItemCode,
+        almoxarifado: selectedAlmoxarifado
+      };
+
+      if (isSupabaseReady() && editingItem.id && !editingItem.id.startsWith("war-") && !editingItem.id.startsWith("tmp")) {
+        try {
+          let { error } = await supabase
+            .from('garantias')
+            .update(updatePayload)
+            .eq('id', editingItem.id);
+
+          if (error && updatePayload.anexo_url) {
+            console.warn("Retrying UPDATE without anexo_url payload:", error.message);
+            const safePayload = { ...updatePayload };
+            delete safePayload.anexo_url;
+            const retry = await supabase
+              .from('garantias')
+              .update(safePayload)
+              .eq('id', editingItem.id);
+            error = retry.error;
+          }
+
+          if (error) {
+            console.error("Erro ao editar garantia no Supabase:", error);
+            alert("Erro ao salvar edição no Supabase: " + error.message);
+            return;
+          }
+
+          const freshData = await dbFetchWarranties();
+          if (Array.isArray(freshData) && freshData.length > 0) {
+            setWarranties(freshData);
+          } else {
+            setWarranties((prev) =>
+              prev.map((g) =>
+                g.id === editingItem.id
+                  ? {
+                      ...g,
+                      itemCode: selectedItemCode,
+                      itemDescription: desc,
+                      manufacturer: selectedManufacturer,
+                      expiryDate,
+                      almoxarifado: selectedAlmoxarifado,
+                      notaFiscal: notaFiscal.trim(),
+                      nota_fiscal: notaFiscal.trim(),
+                      nfEmissionDate: finalNfEmissionDate,
+                      data_emissao_nf: finalNfEmissionDate,
+                      reference: reference.trim(),
+                      referencia_item: reference.trim(),
+                      veiculo: veiculo.trim(),
+                      localizacao: localizacao.trim(),
+                      lastUpdateDate: autoLastUpdateDate,
+                      pieceObservation: finalPieceObs,
+                      observacao_peca: finalPieceObs,
+                      observacao: finalPieceObs,
+                      scrapObservation: scrapObservation.trim(),
+                      observacao_sucata: scrapObservation.trim(),
+                      monthYear: derivedMonthYear,
+                      anexo_url: finalAnexo || "",
+                      anexo_base64: finalAnexo || "",
+                      anexo_nome: finalAnexoNome,
+                      ...customFormValues
+                    }
+                  : g
+              )
+            );
+          }
+          window.dispatchEvent(new Event("realtime-garantias-update"));
+        } catch (err: any) {
+          console.error("Erro ao salvar edição:", err);
+          alert("Erro ao salvar edição: " + (err?.message || "Erro desconhecido"));
+          return;
         }
-        return w;
-      });
-      persistChange(updated);
+      } else {
+        const updated = warranties.map((w) => {
+          if (w.id === editingItem.id) {
+            return {
+              ...w,
+              itemCode: selectedItemCode,
+              itemDescription: desc,
+              manufacturer: selectedManufacturer,
+              expiryDate,
+              almoxarifado: selectedAlmoxarifado,
+              notaFiscal: notaFiscal.trim(),
+              nota_fiscal: notaFiscal.trim(),
+              nfEmissionDate: finalNfEmissionDate,
+              data_emissao_nf: finalNfEmissionDate,
+              reference: reference.trim(),
+              referencia_item: reference.trim(),
+              veiculo: veiculo.trim(),
+              localizacao: localizacao.trim(),
+              lastUpdateDate: autoLastUpdateDate,
+              pieceObservation: finalPieceObs,
+              observacao_peca: finalPieceObs,
+              observacao: finalPieceObs,
+              scrapObservation: scrapObservation.trim(),
+              observacao_sucata: scrapObservation.trim(),
+              monthYear: derivedMonthYear,
+              createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
+              registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
+              anexo_url: finalAnexo || "",
+              anexo_base64: finalAnexo || "",
+              arquivo_base64: finalAnexo || "",
+              anexo_nome: finalAnexoNome,
+              ...customFormValues
+            };
+          }
+          return w;
+        });
+        await persistChange(updated);
+      }
       alert("Item de garantia atualizado com sucesso!");
     } else {
       // Add mode
@@ -732,10 +821,11 @@ export default function AlmoxarifeGarantia({
         anexo_nome: nomeAnexo,
         ...customFormValues
       };
-      persistChange([newItem, ...warranties]);
+      await persistChange([newItem, ...warranties]);
       alert("Item de garantia registrado com sucesso!");
     }
 
+    setEditingItem(null);
     setShowFormModal(false);
   };
 
