@@ -1696,7 +1696,41 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       return [];
     }
 
-    return data.map((item) => {
+    // Deduplicate records keeping the earliest record of each group
+    const seenMap = new Map<string, any>();
+    const duplicateIdsToDelete: string[] = [];
+    const cleanData: any[] = [];
+
+    for (const item of data) {
+      const alm = String(item.almoxarifado || item.almoxarifado_id || '').toLowerCase().trim();
+      const itm = String(item.item || '').toLowerCase().trim();
+      const mesVal = String(item.mes || '').trim();
+      const anoVal = String(item.ano || '').trim();
+      const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
+
+      const key = `${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`;
+      if (!seenMap.has(key)) {
+        seenMap.set(key, item);
+        cleanData.push(item);
+      } else {
+        if (item.id) {
+          duplicateIdsToDelete.push(item.id);
+        }
+      }
+    }
+
+    if (duplicateIdsToDelete.length > 0) {
+      console.warn(`[GARANTIAS] Removendo ${duplicateIdsToDelete.length} registros duplicados do Supabase...`);
+      supabase.from('garantias').delete().in('id', duplicateIdsToDelete).then(({ error: delErr }) => {
+        if (delErr) {
+          console.error("Erro ao deletar duplicatas de garantias:", delErr);
+        } else {
+          console.log(`[GARANTIAS] ${duplicateIdsToDelete.length} duplicatas removidas com sucesso no Supabase.`);
+        }
+      });
+    }
+
+    return cleanData.map((item) => {
       let itemCode = item.item_code || item.item_codigo || "";
       let itemDescription = item.item || item.item_description || item.item_nome || "";
       if (item.item && item.item.includes(" - ")) {

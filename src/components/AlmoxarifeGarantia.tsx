@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase, realtimeFlags } from "../supabaseClient";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
-import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 import { gerarMesesDisponiveis, getMesesDisponiveis } from "../utils/dateUtils";
 
@@ -237,6 +237,9 @@ export const getWarrantyFieldValue = (
   return "—";
 };
 
+// Flag global para evitar submit duplo
+let submitEmAndamento = false;
+
 export default function AlmoxarifeGarantia({
   onBack,
   user,
@@ -253,6 +256,7 @@ export default function AlmoxarifeGarantia({
   const [presetItems, setPresetItems] = useState<Array<{ code: string; description: string }>>(() => getPresetItems());
   const [presetManufacturers, setPresetManufacturers] = useState<string[]>(() => getManufacturers());
   const [warranties, setWarranties] = useState<WarrantyItem[]>(initialWarranties);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const loadWarrantiesData = async () => {
@@ -586,104 +590,110 @@ export default function AlmoxarifeGarantia({
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: Record<string, string> = {};
-    let hasError = false;
 
-    if (!selectedItemCode) {
-      alert("O campo Item / Descrição da Peça é obrigatório.");
-      return;
-    }
-    if (!expiryDate) {
-      alert("O campo Garantia até é obrigatório.");
-      return;
-    }
-    if (!selectedAlmoxarifado) {
-      alert("O campo Almoxarifado é obrigatório.");
-      return;
-    }
+    if (submitEmAndamento || isSaving) return;
+    submitEmAndamento = true;
+    setIsSaving(true);
 
-    // Validate configured active fields based on isFieldRequired
-    const orderedFields = getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS);
-    orderedFields.forEach((f) => {
-      // Skip disabled fields
-      if (garantiaConfig && f.id in garantiaConfig && garantiaConfig[f.id] === false) {
+    try {
+      const newErrors: Record<string, string> = {};
+      let hasError = false;
+
+      if (!selectedItemCode) {
+        alert("O campo Item / Descrição da Peça é obrigatório.");
+        return;
+      }
+      if (!expiryDate) {
+        alert("O campo Garantia até é obrigatório.");
+        return;
+      }
+      if (!selectedAlmoxarifado) {
+        alert("O campo Almoxarifado é obrigatório.");
         return;
       }
 
-      const isReq = isFieldRequired(f, garantiaConfig);
-      if (!isReq) return;
+      // Validate configured active fields based on isFieldRequired
+      const orderedFields = getOrderedFields(garantiaConfig, BUILTIN_GARANTIA_FIELDS);
+      orderedFields.forEach((f) => {
+        // Skip disabled fields
+        if (garantiaConfig && f.id in garantiaConfig && garantiaConfig[f.id] === false) {
+          return;
+        }
 
-      let val = "";
-      if (f.id === "fabricante") {
-        val = selectedManufacturer;
-      } else if (f.id === "notaFiscal") {
-        val = notaFiscal;
-      } else if (f.id === "nfEmissionDate") {
-        val = nfEmissionDate;
-      } else if (f.id === "reference") {
-        val = reference;
-      } else if (f.id === "veiculo") {
-        val = veiculo;
-      } else if (f.id === "localizacao") {
-        val = localizacao;
-      } else if (f.id === "pieceObservation") {
-        val = pieceObservation;
-      } else if (f.id === "scrapObservation") {
-        val = scrapObservation;
-      } else {
-        val = customFormValues[f.id] || "";
+        const isReq = isFieldRequired(f, garantiaConfig);
+        if (!isReq) return;
+
+        let val = "";
+        if (f.id === "fabricante") {
+          val = selectedManufacturer;
+        } else if (f.id === "notaFiscal") {
+          val = notaFiscal;
+        } else if (f.id === "nfEmissionDate") {
+          val = nfEmissionDate;
+        } else if (f.id === "reference") {
+          val = reference;
+        } else if (f.id === "veiculo") {
+          val = veiculo;
+        } else if (f.id === "localizacao") {
+          val = localizacao;
+        } else if (f.id === "pieceObservation") {
+          val = pieceObservation;
+        } else if (f.id === "scrapObservation") {
+          val = scrapObservation;
+        } else {
+          val = customFormValues[f.id] || "";
+        }
+
+        if (!val || !val.trim() || val === "— Selecione uma opção —") {
+          newErrors[f.id] = "Este campo é obrigatório";
+          hasError = true;
+        }
+      });
+
+      if (hasError) {
+        setFieldErrors(newErrors);
+        const firstError = Object.values(newErrors)[0];
+        if (firstError) {
+          alert(firstError);
+        }
+        return;
       }
 
-      if (!val || !val.trim() || val === "— Selecione uma opção —") {
-        newErrors[f.id] = "Este campo é obrigatório";
-        hasError = true;
-      }
-    });
+      const matchedPreset = presetItems.find((pi) => pi.code === selectedItemCode);
+      const desc = matchedPreset ? matchedPreset.description : "Desconhecido";
+      const finalPieceObs = pieceObservation.trim() === "" ? "Nenhuma observação" : pieceObservation.trim();
+      
+      // Derive dynamic monthYear filter group from Data de NF
+      const finalNfEmissionDate = nfEmissionDate || new Date().toISOString().split('T')[0];
+      const derivedMonthYear = getMonthYearFromDate(finalNfEmissionDate, activeMonth, activeYear);
 
-    if (hasError) {
-      setFieldErrors(newErrors);
-      const firstError = Object.values(newErrors)[0];
-      if (firstError) {
-        alert(firstError);
-      }
-      return;
-    }
+      const autoLastUpdateDate = new Date().toISOString().split('T')[0];
 
-    const matchedPreset = presetItems.find((pi) => pi.code === selectedItemCode);
-    const desc = matchedPreset ? matchedPreset.description : "Desconhecido";
-    const finalPieceObs = pieceObservation.trim() === "" ? "Nenhuma observação" : pieceObservation.trim();
-    
-    // Derive dynamic monthYear filter group from Data de NF
-    const finalNfEmissionDate = nfEmissionDate || new Date().toISOString().split('T')[0];
-    const derivedMonthYear = getMonthYearFromDate(finalNfEmissionDate, activeMonth, activeYear);
+      const base64Anexo = attachmentFile ? attachmentFile.base64 : "";
+      const nomeAnexo = attachmentFile ? attachmentFile.name : "";
 
-    const autoLastUpdateDate = new Date().toISOString().split('T')[0];
+      if (editingItem) {
+        // Edit mode - update database first via UPDATE if connected to Supabase
+        const finalAnexo = attachmentFile ? attachmentFile.base64 : (editingItem.anexo_url || editingItem.anexo_base64 || editingItem.arquivo_base64 || null);
+        const finalAnexoNome = attachmentFile ? attachmentFile.name : (editingItem.anexo_nome || "");
 
-    const base64Anexo = attachmentFile ? attachmentFile.base64 : "";
-    const nomeAnexo = attachmentFile ? attachmentFile.name : "";
+        const updatePayload = {
+          fabricante: selectedManufacturer || null,
+          garantia_ate: expiryDate || null,
+          data_emissao_nf: finalNfEmissionDate || null,
+          referencia_item: reference.trim() || null,
+          nota_fiscal: notaFiscal.trim() || null,
+          veiculo: veiculo.trim() || null,
+          localizacao: localizacao.trim() || null,
+          observacao: finalPieceObs || null,
+          observacao_sucata: scrapObservation.trim() || null,
+          anexo_url: finalAnexo || null,
+          item: desc ? `${selectedItemCode} - ${desc}` : selectedItemCode,
+          almoxarifado: selectedAlmoxarifado
+        };
 
-    if (editingItem) {
-      // Edit mode - update database first via UPDATE if connected to Supabase
-      const finalAnexo = attachmentFile ? attachmentFile.base64 : (editingItem.anexo_url || editingItem.anexo_base64 || editingItem.arquivo_base64 || null);
-      const finalAnexoNome = attachmentFile ? attachmentFile.name : (editingItem.anexo_nome || "");
-
-      const updatePayload = {
-        fabricante: selectedManufacturer || null,
-        garantia_ate: expiryDate || null,
-        data_emissao_nf: finalNfEmissionDate || null,
-        referencia_item: reference.trim() || null,
-        nota_fiscal: notaFiscal.trim() || null,
-        veiculo: veiculo.trim() || null,
-        localizacao: localizacao.trim() || null,
-        observacao: finalPieceObs || null,
-        observacao_sucata: scrapObservation.trim() || null,
-        anexo_url: finalAnexo || null,
-        item: desc ? `${selectedItemCode} - ${desc}` : selectedItemCode,
-        almoxarifado: selectedAlmoxarifado
-      };
-
-      if (isSupabaseReady() && editingItem.id && !editingItem.id.startsWith("war-") && !editingItem.id.startsWith("tmp")) {
-        try {
+        if (isSupabaseReady() && editingItem.id && !editingItem.id.startsWith("war-") && !editingItem.id.startsWith("tmp")) {
+          realtimeFlags.isLocalUpdate = true;
           let { error } = await supabase
             .from('garantias')
             .update(updatePayload)
@@ -706,127 +716,154 @@ export default function AlmoxarifeGarantia({
             return;
           }
 
-          const freshData = await dbFetchWarranties();
-          if (Array.isArray(freshData) && freshData.length > 0) {
-            setWarranties(freshData);
-          } else {
-            setWarranties((prev) =>
-              prev.map((g) =>
-                g.id === editingItem.id
-                  ? {
-                      ...g,
-                      itemCode: selectedItemCode,
-                      itemDescription: desc,
-                      manufacturer: selectedManufacturer,
-                      expiryDate,
-                      almoxarifado: selectedAlmoxarifado,
-                      notaFiscal: notaFiscal.trim(),
-                      nota_fiscal: notaFiscal.trim(),
-                      nfEmissionDate: finalNfEmissionDate,
-                      data_emissao_nf: finalNfEmissionDate,
-                      reference: reference.trim(),
-                      referencia_item: reference.trim(),
-                      veiculo: veiculo.trim(),
-                      localizacao: localizacao.trim(),
-                      lastUpdateDate: autoLastUpdateDate,
-                      pieceObservation: finalPieceObs,
-                      observacao_peca: finalPieceObs,
-                      observacao: finalPieceObs,
-                      scrapObservation: scrapObservation.trim(),
-                      observacao_sucata: scrapObservation.trim(),
-                      monthYear: derivedMonthYear,
-                      anexo_url: finalAnexo || "",
-                      anexo_base64: finalAnexo || "",
-                      anexo_nome: finalAnexoNome,
-                      ...customFormValues
-                    }
-                  : g
-              )
-            );
-          }
+          setWarranties((prev) =>
+            prev.map((g) =>
+              g.id === editingItem.id
+                ? {
+                    ...g,
+                    itemCode: selectedItemCode,
+                    itemDescription: desc,
+                    manufacturer: selectedManufacturer,
+                    expiryDate,
+                    almoxarifado: selectedAlmoxarifado,
+                    notaFiscal: notaFiscal.trim(),
+                    nota_fiscal: notaFiscal.trim(),
+                    nfEmissionDate: finalNfEmissionDate,
+                    data_emissao_nf: finalNfEmissionDate,
+                    reference: reference.trim(),
+                    referencia_item: reference.trim(),
+                    veiculo: veiculo.trim(),
+                    localizacao: localizacao.trim(),
+                    lastUpdateDate: autoLastUpdateDate,
+                    pieceObservation: finalPieceObs,
+                    observacao_peca: finalPieceObs,
+                    observacao: finalPieceObs,
+                    scrapObservation: scrapObservation.trim(),
+                    observacao_sucata: scrapObservation.trim(),
+                    monthYear: derivedMonthYear,
+                    anexo_url: finalAnexo || "",
+                    anexo_base64: finalAnexo || "",
+                    anexo_nome: finalAnexoNome,
+                    ...customFormValues
+                  }
+                : g
+            )
+          );
           window.dispatchEvent(new Event("realtime-garantias-update"));
-        } catch (err: any) {
-          console.error("Erro ao salvar edição:", err);
-          alert("Erro ao salvar edição: " + (err?.message || "Erro desconhecido"));
-          return;
+          setTimeout(() => { realtimeFlags.isLocalUpdate = false; }, 2000);
+        } else {
+          setWarranties((prev) =>
+            prev.map((w) => {
+              if (w.id === editingItem.id) {
+                return {
+                  ...w,
+                  itemCode: selectedItemCode,
+                  itemDescription: desc,
+                  manufacturer: selectedManufacturer,
+                  expiryDate,
+                  almoxarifado: selectedAlmoxarifado,
+                  notaFiscal: notaFiscal.trim(),
+                  nota_fiscal: notaFiscal.trim(),
+                  nfEmissionDate: finalNfEmissionDate,
+                  data_emissao_nf: finalNfEmissionDate,
+                  reference: reference.trim(),
+                  referencia_item: reference.trim(),
+                  veiculo: veiculo.trim(),
+                  localizacao: localizacao.trim(),
+                  lastUpdateDate: autoLastUpdateDate,
+                  pieceObservation: finalPieceObs,
+                  observacao_peca: finalPieceObs,
+                  observacao: finalPieceObs,
+                  scrapObservation: scrapObservation.trim(),
+                  observacao_sucata: scrapObservation.trim(),
+                  monthYear: derivedMonthYear,
+                  createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
+                  registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
+                  anexo_url: finalAnexo || "",
+                  anexo_base64: finalAnexo || "",
+                  arquivo_base64: finalAnexo || "",
+                  anexo_nome: finalAnexoNome,
+                  ...customFormValues
+                };
+              }
+              return w;
+            })
+          );
         }
+        alert("Item de garantia atualizado com sucesso!");
       } else {
-        const updated = warranties.map((w) => {
-          if (w.id === editingItem.id) {
-            return {
-              ...w,
-              itemCode: selectedItemCode,
-              itemDescription: desc,
-              manufacturer: selectedManufacturer,
-              expiryDate,
-              almoxarifado: selectedAlmoxarifado,
-              notaFiscal: notaFiscal.trim(),
-              nota_fiscal: notaFiscal.trim(),
-              nfEmissionDate: finalNfEmissionDate,
-              data_emissao_nf: finalNfEmissionDate,
-              reference: reference.trim(),
-              referencia_item: reference.trim(),
-              veiculo: veiculo.trim(),
-              localizacao: localizacao.trim(),
-              lastUpdateDate: autoLastUpdateDate,
-              pieceObservation: finalPieceObs,
-              observacao_peca: finalPieceObs,
-              observacao: finalPieceObs,
-              scrapObservation: scrapObservation.trim(),
-              observacao_sucata: scrapObservation.trim(),
-              monthYear: derivedMonthYear,
-              createdAt: w.createdAt || new Date().toLocaleString("pt-BR"),
-              registeredBy: w.registeredBy || user.name || user.ownerName || "Almoxarife",
-              anexo_url: finalAnexo || "",
-              anexo_base64: finalAnexo || "",
-              arquivo_base64: finalAnexo || "",
-              anexo_nome: finalAnexoNome,
-              ...customFormValues
-            };
-          }
-          return w;
-        });
-        await persistChange(updated);
-      }
-      alert("Item de garantia atualizado com sucesso!");
-    } else {
-      // Add mode
-      const newItem: WarrantyItem = {
-        id: "war-" + Date.now(),
-        itemCode: selectedItemCode,
-        itemDescription: desc,
-        manufacturer: selectedManufacturer,
-        expiryDate,
-        almoxarifado: selectedAlmoxarifado,
-        notaFiscal: notaFiscal.trim(),
-        nota_fiscal: notaFiscal.trim(),
-        nfEmissionDate: finalNfEmissionDate,
-        data_emissao_nf: finalNfEmissionDate,
-        reference: reference.trim(),
-        referencia_item: reference.trim(),
-        veiculo: veiculo.trim(),
-        localizacao: localizacao.trim(),
-        lastUpdateDate: autoLastUpdateDate,
-        pieceObservation: finalPieceObs,
-        observacao_peca: finalPieceObs,
-        observacao: finalPieceObs,
-        scrapObservation: scrapObservation.trim(),
-        observacao_sucata: scrapObservation.trim(),
-        monthYear: derivedMonthYear,
-        createdAt: new Date().toLocaleString("pt-BR"),
-        registeredBy: user.name || user.ownerName || "Almoxarife",
-        anexo_url: base64Anexo,
-        anexo_base64: base64Anexo,
-        arquivo_base64: base64Anexo,
-        anexo_nome: nomeAnexo,
-        ...customFormValues
-      };
-      await persistChange([newItem, ...warranties]);
-      alert("Item de garantia registrado com sucesso!");
-    }
+        // Add mode - Single direct DB call without looping or extra SELECTs
+        const newItem: WarrantyItem = {
+          id: "war-" + Date.now(),
+          itemCode: selectedItemCode,
+          itemDescription: desc,
+          manufacturer: selectedManufacturer,
+          expiryDate,
+          almoxarifado: selectedAlmoxarifado,
+          notaFiscal: notaFiscal.trim(),
+          nota_fiscal: notaFiscal.trim(),
+          nfEmissionDate: finalNfEmissionDate,
+          data_emissao_nf: finalNfEmissionDate,
+          reference: reference.trim(),
+          referencia_item: reference.trim(),
+          veiculo: veiculo.trim(),
+          localizacao: localizacao.trim(),
+          lastUpdateDate: autoLastUpdateDate,
+          pieceObservation: finalPieceObs,
+          observacao_peca: finalPieceObs,
+          observacao: finalPieceObs,
+          scrapObservation: scrapObservation.trim(),
+          observacao_sucata: scrapObservation.trim(),
+          monthYear: derivedMonthYear,
+          createdAt: new Date().toLocaleString("pt-BR"),
+          registeredBy: user.name || user.ownerName || "Almoxarife",
+          anexo_url: base64Anexo,
+          anexo_base64: base64Anexo,
+          arquivo_base64: base64Anexo,
+          anexo_nome: nomeAnexo,
+          ...customFormValues
+        };
 
-    setEditingItem(null);
-    setShowFormModal(false);
+        if (isSupabaseReady()) {
+          realtimeFlags.isLocalUpdate = true;
+          const savedRow = await dbSalvarGarantia({
+            ...newItem,
+            fabricante: selectedManufacturer,
+            garantia_ate: expiryDate,
+            registeredBy: user.name || user.ownerName || "Almoxarife",
+            data_emissao_nf: finalNfEmissionDate,
+            referencia_item: reference.trim(),
+            nota_fiscal: notaFiscal.trim(),
+            veiculo: veiculo.trim(),
+            localizacao: localizacao.trim(),
+            observacao: finalPieceObs,
+            observacao_sucata: scrapObservation.trim(),
+            anexo_url: base64Anexo
+          });
+
+          const finalSavedItem: WarrantyItem = {
+            ...newItem,
+            id: savedRow?.id ? String(savedRow.id) : newItem.id
+          };
+
+          setWarranties((prev) => [finalSavedItem, ...prev]);
+          window.dispatchEvent(new Event("realtime-garantias-update"));
+          setTimeout(() => { realtimeFlags.isLocalUpdate = false; }, 2000);
+        } else {
+          setWarranties((prev) => [newItem, ...prev]);
+        }
+        alert("Item de garantia registrado com sucesso!");
+      }
+
+      setEditingItem(null);
+      setShowFormModal(false);
+    } catch (err: any) {
+      console.error("Erro ao salvar garantia:", err);
+      alert("Erro ao salvar: " + (err?.message || "Erro desconhecido"));
+    } finally {
+      setIsSaving(false);
+      submitEmAndamento = false;
+    }
   };
 
   const handleDeleteItem = (id: string) => {
@@ -1626,9 +1663,18 @@ export default function AlmoxarifeGarantia({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#1B2A4A] text-white rounded-lg text-xs font-extrabold shadow hover:brightness-110 active:scale-95 transition"
+                  disabled={isSaving}
+                  style={{ opacity: isSaving ? 0.6 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                  className="px-5 py-2.5 bg-[#1B2A4A] text-white rounded-lg text-xs font-extrabold shadow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-1.5"
                 >
-                  {editingItem ? "Salvar Alterações" : "Registrar Garantia"}
+                  {isSaving ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    editingItem ? "Salvar Alterações" : "Registrar Garantia"
+                  )}
                 </button>
               </div>
             </form>
