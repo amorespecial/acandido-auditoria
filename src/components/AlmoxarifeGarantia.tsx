@@ -857,14 +857,14 @@ export default function AlmoxarifeGarantia({
         } else {
           setWarranties((prev) => [newItem, ...prev]);
         }
-        alert("Item de garantia registrado com sucesso!");
+        alert("✅ Item de garantia registrado com sucesso!");
       }
 
       setEditingItem(null);
       setShowFormModal(false);
     } catch (err: any) {
       console.error("Erro ao salvar garantia:", err);
-      alert("Erro ao salvar: " + (err?.message || "Erro desconhecido"));
+      alert("❌ Erro ao salvar garantia: " + (err?.message || "Erro de conexão com o banco de dados"));
     } finally {
       setIsSaving(false);
       submitEmAndamento = false;

@@ -1709,39 +1709,22 @@ export const syncLocalStorageGarantiasToSupabase = async (): Promise<number> => 
 
   const dbKeys = new Set<string>();
   existingInDb.forEach((item) => {
-    const alm = String(item.almoxarifado || item.almoxarifado_id || '').toLowerCase().trim();
-    const itm = String(item.item || '').toLowerCase().trim();
-    const mesVal = String(item.mes || '').trim();
-    const anoVal = String(item.ano || '').trim();
-    const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
-    
-    dbKeys.add(`${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`);
     if (item.id) dbKeys.add(String(item.id));
   });
 
   let uploadedCount = 0;
   for (const item of localItems) {
-    const alm = String(item.almoxarifado || item.almoxarifado_id || item.branch || '').toLowerCase().trim();
-    let itm = String(item.item || item.itemDescription || item.itemCode || '').toLowerCase().trim();
-    if (item.itemCode && item.itemDescription && !itm.includes(" - ")) {
-      itm = `${item.itemCode} - ${item.itemDescription}`.toLowerCase().trim();
-    }
-    const mesVal = String(item.mes || (item.monthYear ? item.monthYear.split(' ')[0] : '') || '').trim();
-    const anoVal = String(item.ano || (item.monthYear ? item.monthYear.split(' ')[1] : '') || '').trim();
-    const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
-
-    const compositeKey = `${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`;
     const itemId = item.id ? String(item.id) : null;
 
-    if (dbKeys.has(compositeKey) || (itemId && dbKeys.has(itemId))) {
-      console.log(`[SYNC LOCALSTORAGE] Registro já existente no Supabase (não duplicado):`, compositeKey);
+    if (itemId && dbKeys.has(itemId)) {
+      console.log(`[SYNC LOCALSTORAGE] Registro com ID ${itemId} já existe no Supabase.`);
       continue;
     }
 
     try {
       console.log(`[SYNC LOCALSTORAGE] Forçando upload do registro do localStorage para Supabase:`, item);
-      await dbSalvarGarantia(item);
-      dbKeys.add(compositeKey);
+      const saved = await dbSalvarGarantia(item);
+      if (saved?.id) dbKeys.add(String(saved.id));
       if (itemId) dbKeys.add(itemId);
       uploadedCount++;
     } catch (uploadErr) {
@@ -1793,41 +1776,7 @@ export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
       return [];
     }
 
-    // Deduplicate records keeping the earliest record of each group
-    const seenMap = new Map<string, any>();
-    const duplicateIdsToDelete: string[] = [];
-    const cleanData: any[] = [];
-
-    for (const item of data) {
-      const alm = String(item.almoxarifado || item.almoxarifado_id || '').toLowerCase().trim();
-      const itm = String(item.item || '').toLowerCase().trim();
-      const mesVal = String(item.mes || '').trim();
-      const anoVal = String(item.ano || '').trim();
-      const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
-
-      const key = `${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`;
-      if (!seenMap.has(key)) {
-        seenMap.set(key, item);
-        cleanData.push(item);
-      } else {
-        if (item.id) {
-          duplicateIdsToDelete.push(item.id);
-        }
-      }
-    }
-
-    if (duplicateIdsToDelete.length > 0) {
-      console.warn(`[GARANTIAS] Removendo ${duplicateIdsToDelete.length} registros duplicados do Supabase...`);
-      supabase.from('garantias').delete().in('id', duplicateIdsToDelete).then(({ error: delErr }) => {
-        if (delErr) {
-          console.error("Erro ao deletar duplicatas de garantias:", delErr);
-        } else {
-          console.log(`[GARANTIAS] ${duplicateIdsToDelete.length} duplicatas removidas com sucesso no Supabase.`);
-        }
-      });
-    }
-
-    return cleanData.map((item) => {
+    return data.map((item) => {
       let itemCode = item.item_code || item.item_codigo || "";
       let itemDescription = item.item || item.item_description || item.item_nome || "";
       if (item.item && item.item.includes(" - ")) {
