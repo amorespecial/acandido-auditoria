@@ -1612,10 +1612,13 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     payload.id = garantia.id;
   }
 
+  console.log("[GARANTIAS SUPABASE] Enviando payload para salvamento no Supabase:", payload);
+
   let { data, error } = await supabase.from('garantias').upsert(payload).select();
 
   if (error) {
-    console.warn("Retrying dbSalvarGarantia with safe payload without optional/large attachment columns:", error.message);
+    console.error("[GARANTIAS SUPABASE] Erro no primeiro upsert em dbSalvarGarantia:", error.message, error);
+    console.warn("[GARANTIAS SUPABASE] Retrying dbSalvarGarantia sem coluna anexo_url:", error.message);
     const safePayload = { ...payload };
     delete safePayload.anexo_url;
 
@@ -1624,7 +1627,8 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
     error = retry.error;
 
     if (error) {
-      console.warn("Retrying dbSalvarGarantia with core fields:", error.message);
+      console.error("[GARANTIAS SUPABASE] Erro no segundo upsert sem anexo:", error.message, error);
+      console.warn("[GARANTIAS SUPABASE] Retrying dbSalvarGarantia apenas com campos essenciais:", error.message);
       const corePayload: any = {
         almoxarifado: garantia.almoxarifado || "",
         mes: mesNum,
@@ -1649,12 +1653,105 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
   }
 
   if (error) {
-    console.error("Erro fatal ao salvar garantia no Supabase:", error);
-    throw new Error(error.message || "Erro de conexão ao salvar garantia");
+    console.error("[GARANTIAS SUPABASE] ERRO FATAL ao salvar no Supabase:", error);
+    throw new Error(`Erro ao salvar no Supabase: ${error.message || "Conexão rejeitada"}`);
   }
 
+  console.log("[GARANTIAS SUPABASE] Garantia salva com sucesso no Supabase! ID:", data?.[0]?.id);
   return data?.[0];
 }
+
+export const syncLocalStorageGarantiasToSupabase = async (): Promise<number> => {
+  if (!isSupabaseReady()) return 0;
+
+  const storageKeys = [
+    "garantias_acandido",
+    "acandido_garantias",
+    "garantias",
+    "garantias_local",
+    "acandido_garantias_local",
+    "warranties",
+    "acandido_warranties"
+  ];
+
+  let localItems: any[] = [];
+  for (const key of storageKeys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(`[SYNC LOCALSTORAGE] Encontrados ${parsed.length} registros na chave '${key}' do localStorage.`);
+          localItems = [...localItems, ...parsed];
+        }
+      }
+    } catch (e) {
+      console.warn(`[SYNC LOCALSTORAGE] Erro ao ler chave '${key}':`, e);
+    }
+  }
+
+  if (localItems.length === 0) {
+    console.log("[SYNC LOCALSTORAGE] Nenhum registro pendente no localStorage.");
+    return 0;
+  }
+
+  console.log(`[SYNC LOCALSTORAGE] Verificando ${localItems.length} registros do localStorage contra o Supabase...`);
+
+  let existingInDb: any[] = [];
+  try {
+    const { data, error } = await supabase.from('garantias').select('*');
+    if (!error && data) {
+      existingInDb = data;
+    }
+  } catch (e) {
+    console.error("[SYNC LOCALSTORAGE] Erro ao consultar garantias no Supabase:", e);
+  }
+
+  const dbKeys = new Set<string>();
+  existingInDb.forEach((item) => {
+    const alm = String(item.almoxarifado || item.almoxarifado_id || '').toLowerCase().trim();
+    const itm = String(item.item || '').toLowerCase().trim();
+    const mesVal = String(item.mes || '').trim();
+    const anoVal = String(item.ano || '').trim();
+    const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
+    
+    dbKeys.add(`${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`);
+    if (item.id) dbKeys.add(String(item.id));
+  });
+
+  let uploadedCount = 0;
+  for (const item of localItems) {
+    const alm = String(item.almoxarifado || item.almoxarifado_id || item.branch || '').toLowerCase().trim();
+    let itm = String(item.item || item.itemDescription || item.itemCode || '').toLowerCase().trim();
+    if (item.itemCode && item.itemDescription && !itm.includes(" - ")) {
+      itm = `${item.itemCode} - ${item.itemDescription}`.toLowerCase().trim();
+    }
+    const mesVal = String(item.mes || (item.monthYear ? item.monthYear.split(' ')[0] : '') || '').trim();
+    const anoVal = String(item.ano || (item.monthYear ? item.monthYear.split(' ')[1] : '') || '').trim();
+    const nfVal = String(item.nota_fiscal || item.notaFiscal || '').toLowerCase().trim();
+
+    const compositeKey = `${alm}_${itm}_${mesVal}_${anoVal}_${nfVal}`;
+    const itemId = item.id ? String(item.id) : null;
+
+    if (dbKeys.has(compositeKey) || (itemId && dbKeys.has(itemId))) {
+      console.log(`[SYNC LOCALSTORAGE] Registro já existente no Supabase (não duplicado):`, compositeKey);
+      continue;
+    }
+
+    try {
+      console.log(`[SYNC LOCALSTORAGE] Forçando upload do registro do localStorage para Supabase:`, item);
+      await dbSalvarGarantia(item);
+      dbKeys.add(compositeKey);
+      if (itemId) dbKeys.add(itemId);
+      uploadedCount++;
+    } catch (uploadErr) {
+      console.error(`[SYNC LOCALSTORAGE] Erro ao enviar registro do localStorage para Supabase:`, item, uploadErr);
+    }
+  }
+
+  console.log(`[SYNC LOCALSTORAGE] Sincronização concluída! ${uploadedCount} registros enviados para o Supabase.`);
+  return uploadedCount;
+};
 
 export async function dbBuscarGarantias(almoxarifado: string, mes: string | number, ano: string | number) {
   const mesNum = typeof mes === "number" ? mes : garantiaMonthToNum(mes);

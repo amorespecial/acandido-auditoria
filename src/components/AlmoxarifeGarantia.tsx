@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
-import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers } from "../supabaseService";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers, syncLocalStorageGarantiasToSupabase } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 import { gerarMesesDisponiveis, getMesesDisponiveis } from "../utils/dateUtils";
 
@@ -262,6 +262,11 @@ export default function AlmoxarifeGarantia({
     const loadWarrantiesData = async () => {
       if (isSupabaseReady()) {
         try {
+          // Force automatic sync of any warranties trapped in localStorage to Supabase
+          const syncedCount = await syncLocalStorageGarantiasToSupabase();
+          if (syncedCount > 0) {
+            console.log(`[GARANTIAS] ${syncedCount} registros do localStorage sincronizados para o Supabase.`);
+          }
           const dbData = await dbFetchWarranties();
           if (Array.isArray(dbData)) {
             setWarranties(dbData);
