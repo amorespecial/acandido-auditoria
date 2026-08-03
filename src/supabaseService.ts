@@ -736,7 +736,7 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
       validIniciadoEm = new Date(cycle.openedAt).toISOString();
     }
 
-    const targetStatus = cycle.status === "NENHUM" ? "ABERTO" : cycle.status;
+    const targetStatus = cycle.status;
 
     const updateObj = {
       mes: dbMesNum,
@@ -760,6 +760,26 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
       return rMesNum === dbMesNum || String(r.mes).toLowerCase() === String(cycle.activeMonth).toLowerCase();
     });
 
+    // If opening a new active cycle, deactivate (set FECHADO) all other active cycles first so only one active cycle exists in Supabase
+    if (targetStatus === "ABERTO" || targetStatus === "AGUARDANDO_FECHAMENTO") {
+      let closeOthersQuery = supabase
+        .from('ciclos')
+        .update({ status: 'FECHADO', fechado_em: new Date().toISOString() })
+        .in('status', ['ABERTO', 'aberto', 'AGUARDANDO_FECHAMENTO', 'aguardando_fechamento']);
+
+      if (matchRow?.id) {
+        closeOthersQuery = closeOthersQuery.neq('id', matchRow.id);
+      } else {
+        // Also exclude by mes/ano if matching by mes/ano
+        closeOthersQuery = closeOthersQuery.or(`ano.neq.${dbAnoNum},mes.neq.${dbMesNum}`);
+      }
+
+      const { error: closeErr } = await closeOthersQuery;
+      if (closeErr) {
+        console.warn("[CICLO] Aviso ao desativar ciclos anteriores:", closeErr);
+      }
+    }
+
     if (matchRow) {
       console.log('[CICLO] Atualizando registro existente ID:', matchRow.id);
       const { error: updateErr } = await supabase
@@ -774,6 +794,7 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
 
       if (updateErr) {
         console.error("[CICLO] Erro ao atualizar ciclo:", updateErr);
+        throw updateErr;
       } else {
         console.log('[CICLO] Ciclo atualizado com sucesso no Supabase!');
       }
@@ -793,6 +814,7 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
           });
         if (insertStringErr) {
           console.error("[CICLO] Erro crítico ao inserir ciclo:", insertStringErr);
+          throw insertStringErr;
         } else {
           console.log('[CICLO] Ciclo inserido com sucesso (mes string)!');
         }
@@ -802,6 +824,7 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
     }
   } catch (err) {
     console.error("[CICLO] Exceção em dbSaveCycleState:", err);
+    throw err;
   } finally {
     // Keep realtimeFlags.isLocalUpdate true for 3000ms so Realtime echo does not revert state
     setTimeout(() => {
