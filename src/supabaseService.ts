@@ -617,23 +617,60 @@ export interface CycleState {
   openedBy?: string;
 }
 
+export const dbFetchActiveCycle = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('ciclos')
+      .select('*')
+      .in('status', ['ABERTO', 'aberto', 'AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
+      .order('id', { ascending: false })
+      .limit(1);
+    
+    if (error) {
+      console.error('Erro ao buscar ciclo:', error);
+      return null;
+    }
+    
+    return data && data.length > 0 ? data[0] : null;
+  } catch (e) {
+    console.error('Exceção ao buscar ciclo:', e);
+    return null;
+  }
+};
+
 export async function dbGetCicloAtivo() {
   const { data } = await supabase
     .from('ciclos')
-    .select('id, mes, ano, status, iniciado_em, iniciado_por')
-    .eq('status', 'ABERTO')
-    .single();
-  return data;
+    .select('*')
+    .in('status', ['ABERTO', 'aberto'])
+    .order('id', { ascending: false })
+    .limit(1);
+  return data && data.length > 0 ? data[0] : null;
 }
 
 export async function dbAbrirCiclo(mes: string, ano: string, aberto_por: string, requesterRole?: string) {
   checkPermission(["ADMIN"], requesterRole);
+  await supabase
+    .from('ciclos')
+    .update({ status: 'FECHADO', fechado_em: new Date().toISOString() })
+    .in('status', ['ABERTO', 'aberto', 'AGUARDANDO_FECHAMENTO', 'aguardando_fechamento']);
+
+  const dbMesNum = monthNameToNum(mes);
+  const dbAnoNum = parseInt(ano, 10);
+
   const { data, error } = await supabase
     .from('ciclos')
-    .upsert({ mes, ano, status: 'ABERTO', iniciado_por: aberto_por, iniciado_em: new Date().toISOString() })
-    .select('id, mes, ano, status, iniciado_em, iniciado_por').single();
+    .insert({
+      mes: dbMesNum,
+      ano: dbAnoNum,
+      status: 'ABERTO',
+      iniciado_por: aberto_por,
+      iniciado_em: new Date().toISOString()
+    })
+    .select('*');
+
   if (error) throw error;
-  return data;
+  return data && data.length > 0 ? data[0] : null;
 }
 
 export async function dbFecharCiclo(mes: string, ano: string, requesterRole?: string) {
@@ -641,7 +678,8 @@ export async function dbFecharCiclo(mes: string, ano: string, requesterRole?: st
   const { error } = await supabase
     .from('ciclos')
     .update({ status: 'FECHADO', fechado_em: new Date().toISOString() })
-    .eq('mes', mes).eq('ano', ano);
+    .eq('mes', monthNameToNum(mes))
+    .eq('ano', parseInt(ano, 10));
   if (error) throw error;
 }
 
@@ -652,58 +690,31 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     return defaultState;
   }
 
-  // Fetch the active cycle (ABERTO or aberto) from the database
-  let { data, error } = await supabase
-    .from('ciclos')
-    .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-    .in('status', ['ABERTO', 'aberto'])
-    .order('iniciado_em', { ascending: false })
-    .limit(1);
+  let current = await dbFetchActiveCycle();
 
-  if (error || !data || data.length === 0) {
-    // Fetch critical locked cycle (AGUARDANDO_FECHAMENTO or aguardando_fechamento)
-    const resBloq = await supabase
+  if (!current) {
+    const { data: resLatest } = await supabase
       .from('ciclos')
-      .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-      .in('status', ['AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
-      .order('iniciado_em', { ascending: false })
+      .select('*')
+      .order('id', { ascending: false })
       .limit(1);
-      
-    if (!resBloq.error && resBloq.data && resBloq.data.length > 0) {
-      data = resBloq.data;
-    } else {
-      // Fetch the latest cycle of all (e.g. FECHADO or ARQUIVADO)
-      const resLatest = await supabase
-        .from('ciclos')
-        .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-        .order('iniciado_em', { ascending: false })
-        .limit(1);
-        
-      if (!resLatest.error && resLatest.data && resLatest.data.length > 0) {
-        data = resLatest.data;
-      }
+
+    if (resLatest && resLatest.length > 0) {
+      current = resLatest[0];
     }
   }
 
-  if (!data || data.length === 0) {
+  if (!current) {
     return defaultState;
   }
 
-  // Rule 3: Return exact DB status ("ABERTO", "AGUARDANDO_FECHAMENTO", "FECHADO") without any default overrides
-  const current = data[0];
-  
-  // Normalize month integer or string
   let monthStr = "Janeiro";
   if (current.mes) {
     if (typeof current.mes === "number") {
       monthStr = monthNumToName(current.mes);
     } else {
       const num = parseInt(current.mes, 10);
-      if (!isNaN(num)) {
-        monthStr = monthNumToName(num);
-      } else {
-        monthStr = current.mes;
-      }
+      monthStr = !isNaN(num) ? monthNumToName(num) : current.mes;
     }
   }
 
@@ -711,7 +722,7 @@ export const dbFetchCycleState = async (): Promise<CycleState> => {
     activeMonth: monthStr,
     activeYear: String(current.ano),
     status: normalizeCycleStatus(current.status),
-    openedAt: current.iniciado_em || current.aberto_em,
+    openedAt: current.iniciado_em || current.aberto_em || current.created_at,
     openedBy: current.iniciado_por || current.aberto_por
   };
 };
@@ -769,9 +780,6 @@ export const dbSaveCycleState = async (cycle: CycleState, requesterRole?: string
 
       if (matchRow?.id) {
         closeOthersQuery = closeOthersQuery.neq('id', matchRow.id);
-      } else {
-        // Also exclude by mes/ano if matching by mes/ano
-        closeOthersQuery = closeOthersQuery.or(`ano.neq.${dbAnoNum},mes.neq.${dbMesNum}`);
       }
 
       const { error: closeErr } = await closeOthersQuery;
@@ -1133,7 +1141,22 @@ export const dbFetchAllEvaluationsForPeriod = async (
       .eq('ano', anoStr)
   ]);
 
-  const { data: evaluationsData, error: evalsError } = evaluationsResult;
+  let evaluationsData = evaluationsResult.data;
+  let evalsError = evaluationsResult.error;
+
+  if (evalsError || !evaluationsData || evaluationsData.length === 0) {
+    const fallbackResult = await supabase
+      .from('avaliacoes')
+      .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
+      .eq('mes', mesName)
+      .eq('ano', anoStr);
+    
+    if (!fallbackResult.error && fallbackResult.data && fallbackResult.data.length > 0) {
+      evaluationsData = fallbackResult.data;
+      evalsError = null;
+    }
+  }
+
   const { data: auditModesData, error: modesError } = auditModesResult;
 
   if (evalsError) {
@@ -1165,12 +1188,25 @@ export const dbFetchAllEvaluationsForPeriod = async (
       const almoxarifado = row.almoxarifado;
       if (!almoxarifado) return;
 
-      if (!result[almoxarifado]) {
-        result[almoxarifado] = {};
-      }
+      const branchName = getBranchNameById(almoxarifado);
+      const branchId = getBranchIdByName(almoxarifado);
 
-      const critId = row.criterio_codigo;
-      const branchAuditModes = auditModesMap[almoxarifado] || {};
+      const keysToSet = Array.from(new Set([
+        almoxarifado,
+        branchName,
+        branchId,
+        String(almoxarifado).toUpperCase(),
+        String(branchName).toUpperCase()
+      ])).filter(Boolean);
+
+      keysToSet.forEach(k => {
+        if (!result[k]) {
+          result[k] = {};
+        }
+      });
+
+      const critId = String(row.criterio_codigo);
+      const branchAuditModes = auditModesMap[almoxarifado] || auditModesMap[branchName] || {};
       const finalAuditMode = branchAuditModes[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
 
       let finalNotes = row.descricao_evidencia || "";
@@ -1206,7 +1242,7 @@ export const dbFetchAllEvaluationsForPeriod = async (
         }
       }
 
-      result[almoxarifado][critId] = {
+      const evalObj: Partial<CriterionState> = {
         status: displayStatus,
         pointsObtained: row.pontuacao ?? 0,
         pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
@@ -1219,6 +1255,10 @@ export const dbFetchAllEvaluationsForPeriod = async (
         submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
         auditMode: finalAuditMode as "Presencial" | "A_Distancia"
       };
+
+      keysToSet.forEach(k => {
+        result[k][critId] = evalObj;
+      });
     });
   }
 
@@ -2592,7 +2632,7 @@ export async function dbFetchHistory(): Promise<any[]> {
   if (!isSupabaseReady()) return [];
   let result = await supabase
     .from('historico_avaliacoes')
-    .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em')
+    .select('*')
     .order('fechado_em', { ascending: false })
     .limit(100);
     
@@ -2600,13 +2640,12 @@ export async function dbFetchHistory(): Promise<any[]> {
     console.warn("Could not order by fechado_em in dbFetchHistory, retrying without order:", result.error);
     result = await supabase
       .from('historico_avaliacoes')
-      .select('id, almoxarifado_id, mes, ano, pontuacao_total, status_ciclo, criterios, fechado_em')
+      .select('*')
       .limit(100);
   }
   
   if (result.error) {
     console.error("Error standardizing history in dbFetchHistory:", result.error);
-    return [];
   }
   
   const rawData = result.data || [];
@@ -2622,28 +2661,36 @@ export async function dbFetchHistory(): Promise<any[]> {
     console.warn("Failed to sort history in memory:", e);
   }
   
-  return rawData.map(entry => {
-    const mes = entry.mes || (entry.month_year ? entry.month_year.split(" ")[0] : "");
-    const ano = entry.ano || (entry.month_year ? entry.month_year.split(" ")[1] : "");
-    const monthYear = entry.monthYear || entry.month_year || (mes && ano ? `${mes} ${ano}` : mes || ano || "");
+  const mappedList = rawData.map(entry => {
+    const rawBranch = entry.almoxarifado_id || entry.almoxarifado || entry.branch_id || entry.branchId || entry.branch_name || entry.branchName || "";
+    const bId = getBranchIdByName(rawBranch);
+    const bName = getBranchNameById(rawBranch);
+
+    const rawMes = entry.mes !== undefined && entry.mes !== null ? entry.mes : (entry.month_year ? entry.month_year.split(" ")[0] : "");
+    const mesName = (typeof rawMes === 'number' || (!isNaN(Number(rawMes)) && String(rawMes).trim() !== ""))
+      ? monthNumToName(Number(rawMes)) 
+      : String(rawMes);
+    const anoVal = entry.ano ? String(entry.ano) : (entry.month_year ? entry.month_year.split(" ")[1] : "2026");
+    const monthYear = (mesName && anoVal) ? `${mesName} ${anoVal}` : (entry.monthYear || entry.month_year || "");
+
     const scoreVal = entry.pontuacao_total !== undefined ? entry.pontuacao_total : (entry.score !== undefined ? entry.score : 0);
     const criteriosList = entry.criterios || entry.criteria_state || entry.criteriaState || [];
 
     return {
-      id: entry.id,
-      almoxarifado_id: entry.almoxarifado_id || entry.branch_id || entry.branchId,
-      branchId: entry.almoxarifado_id || entry.branch_id || entry.branchId,
-      branchName: entry.branchName || entry.branch_name,
-      mes: mes,
-      ano: ano,
+      id: String(entry.id),
+      almoxarifado_id: bId,
+      branchId: bId,
+      branchName: bName,
+      mes: mesName,
+      ano: anoVal,
       monthYear: monthYear,
       pontuacao_total: scoreVal,
       score: scoreVal,
       scoreCategory: scoreVal >= 90 ? "EXCELENTE" : (scoreVal >= 80 ? "BOM" : "EM ALERTA"),
       status_ciclo: entry.status_ciclo || entry.status || "ARQUIVADO",
       status: entry.status_ciclo || entry.status || "ARQUIVADO",
-      fechado_em: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated,
-      dateEvaluated: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated,
+      fechado_em: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated || new Date().toISOString(),
+      dateEvaluated: entry.fechado_em || entry.date_evaluated || entry.dateEvaluated || new Date().toISOString(),
       auditorName: entry.auditorName || entry.auditor_name || "Fernando Silva",
       criterios: criteriosList,
       criteriaState: criteriosList,
@@ -2652,6 +2699,99 @@ export async function dbFetchHistory(): Promise<any[]> {
         : (entry.nok_items || entry.nokItems || [])
     };
   });
+
+  // Synthesize history entries from avaliacoes table if any branch/month evaluation exists but is not in historico_avaliacoes
+  try {
+    const { data: evalsData } = await supabase
+      .from('avaliacoes')
+      .select('*');
+
+    if (evalsData && evalsData.length > 0) {
+      const grouped: Record<string, {
+        branchId: string;
+        branchName: string;
+        mesName: string;
+        anoStr: string;
+        criterios: any[];
+        totalScore: number;
+        lastEvaluated: string;
+        auditor: string;
+      }> = {};
+
+      evalsData.forEach((row: any) => {
+        if (!row.almoxarifado) return;
+        const bId = getBranchIdByName(row.almoxarifado);
+        const bName = getBranchNameById(row.almoxarifado);
+
+        const rawMes = row.mes;
+        const mesName = (typeof rawMes === 'number' || (!isNaN(Number(rawMes)) && String(rawMes).trim() !== ""))
+          ? monthNumToName(Number(rawMes))
+          : String(rawMes);
+        const anoStr = String(row.ano || "2026");
+        const monthYear = `${mesName} ${anoStr}`;
+        const key = `${bId}_${monthYear}`;
+
+        if (!grouped[key]) {
+          grouped[key] = {
+            branchId: bId,
+            branchName: bName,
+            mesName,
+            anoStr,
+            criterios: [],
+            totalScore: 0,
+            lastEvaluated: row.avaliado_em || new Date().toISOString(),
+            auditor: row.avaliado_por || "Fernando Silva"
+          };
+        }
+
+        grouped[key].criterios.push({
+          id: String(row.criterio_codigo),
+          name: row.criterio_nome,
+          status: row.resultado || "PENDENTE",
+          pointsObtained: row.pontuacao ?? 0,
+          pointsPossible: ["7", "8", "9", "10"].includes(String(row.criterio_codigo)) ? 5 : 20,
+          notes: row.descricao_evidencia || "",
+          evidenceNotes: row.descricao_evidencia || "",
+          nokEvidenceLinks: Array.isArray(row.links_evidencia) ? row.links_evidencia : []
+        });
+
+        grouped[key].totalScore += (row.pontuacao ?? 0);
+      });
+
+      Object.entries(grouped).forEach(([_, group]) => {
+        const monthYear = `${group.mesName} ${group.anoStr}`;
+        const existsInMapped = mappedList.some(h => h.branchId === group.branchId && (h.monthYear === monthYear || (h.mes === group.mesName && h.ano === group.anoStr)));
+        
+        if (!existsInMapped) {
+          const scoreVal = group.totalScore;
+          mappedList.push({
+            id: `synth-${group.branchId}-${group.mesName}-${group.anoStr}`,
+            almoxarifado_id: group.branchId,
+            branchId: group.branchId,
+            branchName: group.branchName,
+            mes: group.mesName,
+            ano: group.anoStr,
+            monthYear: monthYear,
+            pontuacao_total: scoreVal,
+            score: scoreVal,
+            scoreCategory: scoreVal >= 90 ? "EXCELENTE" : (scoreVal >= 80 ? "BOM" : "EM ALERTA"),
+            status_ciclo: "ARQUIVADO",
+            status: "ARQUIVADO",
+            fechado_em: group.lastEvaluated,
+            dateEvaluated: group.lastEvaluated,
+            auditorName: group.auditor,
+            criterios: group.criterios,
+            criteriaState: group.criterios,
+            nokItems: group.criterios.filter((c: any) => c.status === "NOK").map((c: any) => c.name)
+          });
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("Could not synthesize history from avaliacoes:", err);
+  }
+
+  return mappedList;
 }
 
 export async function dbFetchYearEvaluations(ano: string | number): Promise<any[]> {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus, dbFetchAlmoxarifados } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus, dbFetchAlmoxarifados, getBranchNameById } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 import { getCurrentUser, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
@@ -246,20 +246,7 @@ export default function App() {
     // Set local flag to ignore realtime echoes during update
     realtimeFlags.isLocalUpdate = true;
 
-    // 1. Save to database FIRST and wait for completion
-    if (isSupabaseReady()) {
-      try {
-        await dbSaveCycleState(next);
-      } catch (err) {
-        console.error("[CICLO] Failed to sync cycle state to Supabase on explicit update:", err);
-        setDbConnectionError(true);
-        alert("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
-        realtimeFlags.isLocalUpdate = false;
-        return; // Halt if DB save fails
-      }
-    }
-
-    // 2. ONLY then update state in screen (completely without localStorage)
+    // 1. Update state in screen IMMEDIATELY for instant UI feedback
     setCycleState(next);
 
     // Sync activeMonth/activeYear to match updated cycle if it is currently selected
@@ -274,6 +261,19 @@ export default function App() {
     });
 
     localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(next));
+
+    // 2. Save to database in background
+    if (isSupabaseReady()) {
+      try {
+        await dbSaveCycleState(next);
+      } catch (err) {
+        console.error("[CICLO] Failed to sync cycle state to Supabase on explicit update:", err);
+        setDbConnectionError(true);
+        alert("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
+        realtimeFlags.isLocalUpdate = false;
+        return; // Halt if DB save fails
+      }
+    }
 
     // Release local update flag after 3s to avoid race conditions with Realtime echo
     setTimeout(() => {
@@ -374,80 +374,27 @@ export default function App() {
             console.error("Failed to load initial cycle list:", listErr);
           }
           const initializeCycleState = async () => {
+            if (realtimeFlags.isLocalUpdate) {
+              console.log('[CICLO] initializeCycleState ignorado pois realtimeFlags.isLocalUpdate é true');
+              return;
+            }
             console.log('[CICLO] initializeCycleState chamado');
             try {
-              // PASSO 1 — Supabase é SEMPRE a fonte principal (ABERTO ou AGUARDANDO_FECHAMENTO)
-              const { data, error } = await supabase
-                .from('ciclos')
-                .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-                .in('status', ['ABERTO', 'aberto', 'AGUARDANDO_FECHAMENTO', 'aguardando_fechamento'])
-                .order('iniciado_em', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              console.log('[CICLO] Resultado do banco:', data, error);
-
-              if (!error && data) {
-                let monthStr = "Janeiro";
-                if (data.mes) {
-                  if (typeof data.mes === "number") monthStr = monthNumToName(data.mes);
-                  else {
-                    const num = parseInt(data.mes, 10);
-                    monthStr = !isNaN(num) ? monthNumToName(num) : data.mes;
-                  }
-                }
-                const cicloAtivo = {
-                  activeMonth: monthStr,
-                  activeYear: String(data.ano),
-                  status: normalizeCycleStatus(data.status),
-                  openedAt: data.iniciado_em || data.aberto_em,
-                  openedBy: data.iniciado_por || data.aberto_por
-                };
-                setCycleState(cicloAtivo);
-                setActiveMonth(monthStr);
-                setActiveYear(String(data.ano));
-                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloAtivo));
-                console.log('[CICLO] Estado definido como ABERTO:', cicloAtivo);
+              const dbCycle = await dbFetchCycleState();
+              if (realtimeFlags.isLocalUpdate) return;
+              if (dbCycle) {
+                setCycleState(dbCycle);
+                if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
+                if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
+                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
+                console.log('[CICLO] Estado carregado do banco:', dbCycle);
                 return;
               }
-
-              // PASSO 2 — Se não encontrou ciclo ABERTO, buscar o mais recente do banco
-              const { data: latest, error: latestErr } = await supabase
-                .from('ciclos')
-                .select('id, mes, ano, status, iniciado_em, aberto_em, iniciado_por, aberto_por')
-                .order('iniciado_em', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              console.log('[CICLO] Resultado do banco (ciclo mais recente):', latest, latestErr);
-
-              if (!latestErr && latest) {
-                let monthStr = "Janeiro";
-                if (latest.mes) {
-                  if (typeof latest.mes === "number") monthStr = monthNumToName(latest.mes);
-                  else {
-                    const num = parseInt(latest.mes, 10);
-                    monthStr = !isNaN(num) ? monthNumToName(num) : latest.mes;
-                  }
-                }
-                const cicloLatest = {
-                  activeMonth: monthStr,
-                  activeYear: String(latest.ano),
-                  status: normalizeCycleStatus(latest.status),
-                  openedAt: latest.iniciado_em || latest.aberto_em,
-                  openedBy: latest.iniciado_por || latest.aberto_por
-                };
-                setCycleState(cicloLatest);
-                setActiveMonth(monthStr);
-                setActiveYear(String(latest.ano));
-                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(cicloLatest));
-                console.log('[CICLO] Estado definido com ciclo mais recente:', cicloLatest);
-                return;
-              }
-
             } catch (err) {
               console.error("[CICLO] Erro ao buscar ciclo do Supabase:", err);
             }
+
+            if (realtimeFlags.isLocalUpdate) return;
 
             // PASSO 3 — Se não houver ciclos no banco de dados, marcar como NENHUM ciclo ativo
             console.log('[CICLO] Estado definido como NULL — nenhum ciclo aberto no banco');
@@ -523,8 +470,10 @@ export default function App() {
     console.log(`[Realtime Global Sync App.tsx] Table changed: ${table}`);
 
     if (table === "ciclos") {
+      if (realtimeFlags.isLocalUpdate) return;
       try {
         const dbCycles = await dbFetchAllCycles();
+        if (realtimeFlags.isLocalUpdate) return;
         if (dbCycles) {
           const map: Record<string, any> = {};
           dbCycles.forEach((c) => {
@@ -533,6 +482,7 @@ export default function App() {
           setAllCycles(map);
         }
         const dbCycle = await dbFetchCycleState();
+        if (realtimeFlags.isLocalUpdate) return;
         if (dbCycle && dbCycle.status) {
           setCycleState(dbCycle);
           localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
@@ -673,7 +623,7 @@ export default function App() {
       // No localStorage loading / fallback - evaluations must be fetched from Supabase strictly to ensure same data across sessions
 
       const updatedBranches = defaultBranches.map((branch) => {
-        const dbEvaluations = evaluationsMap[branch.name];
+        const dbEvaluations = evaluationsMap[branch.name] || evaluationsMap[branch.id] || evaluationsMap[getBranchNameById(branch.id)] || evaluationsMap[branch.name.toUpperCase()];
         if (!dbEvaluations || Object.keys(dbEvaluations).length === 0) {
           console.log(`[DEBUG] Branch ${branch.name}: Sem avaliações registradas no Supabase para ${activeMonth}/${activeYear}`);
           return branch;
