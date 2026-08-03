@@ -371,12 +371,20 @@ export default function AdminPanel({
           const monthlyCriteria = branch.criteria.filter((c) => c.id !== "1" && c.id !== "10");
           const allMonthlyEvaluated = monthlyCriteria.every((c) => c.status === "OK" || c.status === "NOK");
           const anyMonthlyEvaluated = monthlyCriteria.some((c) => c.status === "OK" || c.status === "NOK");
-          const hasRegisteredEvaluation = branch.criteria.some((c) => c.status === "OK" || c.status === "NOK");
+          const hasRegisteredEvaluation = branch.criteria.some((c) => 
+            c.status === "OK" || c.status === "NOK" || c.status === "ENVIADO" || 
+            (c.pointsObtained !== undefined && c.pointsObtained > 0) ||
+            (c.submittedAt && c.submittedAt.length > 0) ||
+            (c.notes && c.notes.trim().length > 0)
+          );
           const pendingCount = branch.criteria.filter((c) => c.status === "ENVIADO").length;
 
           const selectedCycleKey = `${selectedMonth}_${selectedYear}`;
-          const currentFilteredCycle = (allCycles && allCycles[selectedCycleKey]) || cycleState;
-          const isNotStarted = currentFilteredCycle.status === "NENHUM";
+          const currentFilteredCycle = (allCycles && allCycles[selectedCycleKey]) || 
+            (cycleState?.activeMonth === selectedMonth && cycleState?.activeYear === selectedYear ? cycleState : { status: "NENHUM" });
+          
+          // CRITICAL: Ciclo não iniciado MUST appear ONLY if there are no registered evaluations for this branch/month AND currentFilteredCycle is NENHUM
+          const isNotStarted = !hasRegisteredEvaluation && currentFilteredCycle.status === "NENHUM";
           const isArchived = currentFilteredCycle.status === "ARQUIVADO";
 
           let badgeColor = "bg-stone-150 text-stone-700 font-extrabold";
@@ -390,7 +398,15 @@ export default function AdminPanel({
             badgeColor = "bg-emerald-600 text-white font-extrabold";
             badgeText = "Arquivado";
           } else {
-            if (!allMonthlyEvaluated) {
+            if (hasRegisteredEvaluation) {
+              if (allMonthlyEvaluated) {
+                badgeColor = "bg-emerald-600 text-white font-extrabold";
+                badgeText = "AVALIADO";
+              } else {
+                badgeColor = "bg-amber-500 text-white font-extrabold";
+                badgeText = "EM ANDAMENTO";
+              }
+            } else if (!allMonthlyEvaluated) {
               badgeColor = "bg-amber-500 text-white font-extrabold";
               badgeText = "PENDENTE";
             } else {

@@ -1465,7 +1465,13 @@ export default function App() {
       const cycleStatusToUse = query_match ? query_match.status : (isCurrentPeriod ? currentPeriodStatus : "NENHUM");
       
       // A cycle is active (evaluations are loadable/visible) if its status is defined and is NOT NENHUM, or if there are already evaluations saved.
-      const hasSavedEvaluations = b.criteria && b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+      const hasSavedEvaluations = b.criteria && b.criteria.some(c => 
+        c.status === "OK" || c.status === "NOK" || c.status === "ENVIADO" || 
+        (c.pointsObtained !== undefined && c.pointsObtained > 0) ||
+        (c.submittedAt && c.submittedAt.length > 0) ||
+        (c.notes && c.notes.trim().length > 0) ||
+        (c.submittedPhotos && Array.isArray(c.submittedPhotos) && c.submittedPhotos.length > 0)
+      );
       const isCycleActive = (cycleStatusToUse !== "NENHUM") || hasSavedEvaluations;
       const liveActiveScore = isCycleActive ? finalScore : 0;
 
