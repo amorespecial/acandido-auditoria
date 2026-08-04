@@ -2415,29 +2415,99 @@ export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, 
 // ======================= UNIMOBIN CERTIFICADOS =======================
 export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, ano: string, colaborador_nome: string, dados: any, requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
-  // If fileData is too large, use a placeholder instead of sending megabytes over PostgREST/PostgreSQL
-  const inputData = dados.fileData || dados.file_data || null;
-  const safeFileData = (inputData && inputData.length > 50000)
-    ? "placeholder-heavy-data"
-    : inputData;
+  if (!isSupabaseReady()) return;
+
+  const rawFileData = dados.fileData || dados.file_data || dados.anexo_url || null;
+  let fileUrl = rawFileData;
+
+  // Attempt upload to Supabase Storage if fileData is a base64 string
+  if (rawFileData && typeof rawFileData === 'string' && (rawFileData.startsWith('data:') || rawFileData.length > 1000)) {
+    try {
+      const sanitizedCollab = colaborador_nome.replace(/[^a-zA-Z0-9]/g, '_');
+      const ext = dados.fileName?.split('.').pop() || 'pdf';
+      const storagePath = `unimobin/${almoxarifado_id}_${mes}_${ano}_${sanitizedCollab}_${Date.now()}.${ext}`;
+      fileUrl = await uploadFile('evidencias-almoxarife', storagePath, rawFileData);
+    } catch (uploadErr) {
+      console.warn("[dbSalvarCertificado] Storage upload warning, using original data URL/placeholder:", uploadErr);
+      if (rawFileData.length > 50000) {
+        fileUrl = "placeholder-heavy-data";
+      }
+    }
+  }
 
   let safeUploadedAt = dados.uploadedAt || dados.uploaded_at || new Date().toISOString();
   if (typeof safeUploadedAt === 'string' && safeUploadedAt.includes('/')) {
     safeUploadedAt = new Date().toISOString();
   }
 
-  const { error } = await supabase
+  const payload: any = {
+    almoxarifado_id,
+    mes,
+    ano,
+    colaborador_nome,
+    status: dados.status || 'Aguardando envio',
+    file_name: dados.fileName || dados.file_name || null,
+    file_type: dados.fileType || dados.file_type || null,
+    file_data: fileUrl,
+    anexo_url: fileUrl,
+    uploaded_at: safeUploadedAt,
+    enviado_em: safeUploadedAt
+  };
+
+  console.log("[dbSalvarCertificado] Salvando payload no Supabase:", payload);
+
+  let { error } = await supabase
     .from('unimobin_certificados')
-    .upsert({
-      almoxarifado_id, mes, ano, colaborador_nome,
+    .upsert(payload, { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
+
+  // Fallback 1: If onConflict constraint doesn't match DB schema, check if row exists manually
+  if (error) {
+    console.warn("[dbSalvarCertificado ERROR on initial upsert]:", error.message, error);
+    
+    const { data: existing } = await supabase
+      .from('unimobin_certificados')
+      .select('id')
+      .eq('almoxarifado_id', almoxarifado_id)
+      .eq('mes', mes)
+      .eq('ano', ano)
+      .eq('colaborador_nome', colaborador_nome)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { error: updateErr } = await supabase
+        .from('unimobin_certificados')
+        .update(payload)
+        .eq('id', existing.id);
+      error = updateErr;
+    } else {
+      const { error: insertErr } = await supabase
+        .from('unimobin_certificados')
+        .insert(payload);
+      error = insertErr;
+    }
+  }
+
+  // Fallback 2: If optional columns cause schema failure, retry with core fields
+  if (error) {
+    console.warn("[dbSalvarCertificado] Retrying with core fields:", error.message);
+    const corePayload = {
+      almoxarifado_id,
+      mes,
+      ano,
+      colaborador_nome,
       status: dados.status || 'Aguardando envio',
       file_name: dados.fileName || dados.file_name || null,
-      file_type: dados.fileType || dados.file_type || null,
-      file_data: safeFileData,
-      uploaded_at: safeUploadedAt,
-      enviado_em: safeUploadedAt
-    },
-      { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
+      file_data: fileUrl,
+      uploaded_at: safeUploadedAt
+    };
+    const { error: coreErr } = await supabase
+      .from('unimobin_certificados')
+      .upsert(corePayload);
+    if (!coreErr) {
+      error = null;
+    }
+  }
+
   if (error) {
     console.error("[dbSalvarCertificado ERROR DETAILED]:", {
       message: error.message,
@@ -2445,24 +2515,16 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       details: error.details,
       hint: error.hint
     });
-    throw error;
+    throw new Error(`Erro no Supabase (${error.code || 'DB'}): ${error.message || 'Falha ao gravar certificado'}`);
   }
 
   // Sincronização de almoxarifados duplos:
   const twinId = getTwinBranchId(almoxarifado_id);
   if (twinId) {
+    const twinPayload = { ...payload, almoxarifado_id: twinId };
     const { error: twinError } = await supabase
       .from('unimobin_certificados')
-      .upsert({
-        almoxarifado_id: twinId, mes, ano, colaborador_nome,
-        status: dados.status || 'Aguardando envio',
-        file_name: dados.fileName || dados.file_name || null,
-        file_type: dados.fileType || dados.file_type || null,
-        file_data: safeFileData,
-        uploaded_at: safeUploadedAt,
-        enviado_em: safeUploadedAt
-      },
-        { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
+      .upsert(twinPayload, { onConflict: 'almoxarifado_id,mes,ano,colaborador_nome' });
     if (twinError) {
       console.error("[twin sync certificates] Error:", twinError);
     }
@@ -2470,13 +2532,23 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
 }
 
 export async function dbBuscarCertificados(almoxarifado_id: string, mes: string, ano: string) {
+  if (!isSupabaseReady()) return [];
+
+  const mesNum = monthNameToNum(mes);
+  const mesValues = Array.from(new Set([mes, String(mesNum), mesNum]));
+  const anoValues = Array.from(new Set([ano, String(ano), parseInt(ano, 10)]));
+
   const { data, error } = await supabase
     .from('unimobin_certificados')
-    .select('id, almoxarifado_id, mes, ano, colaborador_nome, status, anexo_url, enviado_por, enviado_em')
+    .select('*')
     .eq('almoxarifado_id', almoxarifado_id)
-    .eq('mes', mes)
-    .eq('ano', ano);
-  if (error) throw error;
+    .in('mes', mesValues)
+    .in('ano', anoValues);
+
+  if (error) {
+    console.error("[dbBuscarCertificados ERROR]:", error);
+    return [];
+  }
   return data || [];
 }
 

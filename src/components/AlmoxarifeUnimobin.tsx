@@ -341,9 +341,10 @@ export default function AlmoxarifeUnimobin({
       // 3. Submit back up to main app state and close subscreen
       await onSubmitEvidence("6", summaryNote, []);
       onBack();
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error confirming and completing certificate send:", e);
-      alert("Houve um erro de sincronização com o banco de dados. Os certificados não puderam ser gravados no banco de dados. Por favor, verifique sua conexão e tente novamente.");
+      const detailMsg = e?.message || e?.details || "Erro de conexão com o banco de dados";
+      alert(`Erro de sincronização no Supabase: ${detailMsg}. Por favor, tente novamente.`);
     } finally {
       setIsSending(false);
     }
