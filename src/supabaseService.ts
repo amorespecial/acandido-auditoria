@@ -1725,78 +1725,8 @@ export async function dbSalvarGarantia(garantia: any, requesterRole?: string) {
 }
 
 export const syncLocalStorageGarantiasToSupabase = async (): Promise<number> => {
-  if (!isSupabaseReady()) return 0;
-
-  const storageKeys = [
-    "garantias_acandido",
-    "acandido_garantias",
-    "garantias",
-    "garantias_local",
-    "acandido_garantias_local",
-    "warranties",
-    "acandido_warranties"
-  ];
-
-  let localItems: any[] = [];
-  for (const key of storageKeys) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log(`[SYNC LOCALSTORAGE] Encontrados ${parsed.length} registros na chave '${key}' do localStorage.`);
-          localItems = [...localItems, ...parsed];
-        }
-      }
-    } catch (e) {
-      console.warn(`[SYNC LOCALSTORAGE] Erro ao ler chave '${key}':`, e);
-    }
-  }
-
-  if (localItems.length === 0) {
-    console.log("[SYNC LOCALSTORAGE] Nenhum registro pendente no localStorage.");
-    return 0;
-  }
-
-  console.log(`[SYNC LOCALSTORAGE] Verificando ${localItems.length} registros do localStorage contra o Supabase...`);
-
-  let existingInDb: any[] = [];
-  try {
-    const { data, error } = await supabase.from('garantias').select('*');
-    if (!error && data) {
-      existingInDb = data;
-    }
-  } catch (e) {
-    console.error("[SYNC LOCALSTORAGE] Erro ao consultar garantias no Supabase:", e);
-  }
-
-  const dbKeys = new Set<string>();
-  existingInDb.forEach((item) => {
-    if (item.id) dbKeys.add(String(item.id));
-  });
-
-  let uploadedCount = 0;
-  for (const item of localItems) {
-    const itemId = item.id ? String(item.id) : null;
-
-    if (itemId && dbKeys.has(itemId)) {
-      console.log(`[SYNC LOCALSTORAGE] Registro com ID ${itemId} já existe no Supabase.`);
-      continue;
-    }
-
-    try {
-      console.log(`[SYNC LOCALSTORAGE] Forçando upload do registro do localStorage para Supabase:`, item);
-      const saved = await dbSalvarGarantia(item);
-      if (saved?.id) dbKeys.add(String(saved.id));
-      if (itemId) dbKeys.add(itemId);
-      uploadedCount++;
-    } catch (uploadErr) {
-      console.error(`[SYNC LOCALSTORAGE] Erro ao enviar registro do localStorage para Supabase:`, item, uploadErr);
-    }
-  }
-
-  console.log(`[SYNC LOCALSTORAGE] Sincronização concluída! ${uploadedCount} registros enviados para o Supabase.`);
-  return uploadedCount;
+  // Desativado para evitar injeção de dados falsos ou antigos do localStorage no Supabase
+  return 0;
 };
 
 export async function dbBuscarGarantias(almoxarifado: string, mes: string | number, ano: string | number) {
@@ -1806,7 +1736,9 @@ export async function dbBuscarGarantias(almoxarifado: string, mes: string | numb
   try {
     let query = supabase.from('garantias').select('*').eq('mes', mesNum).eq('ano', anoNum);
     if (almoxarifado && almoxarifado !== "TODOS") {
-      query = query.ilike('almoxarifado', `%${almoxarifado.replace("ALMOXARIFADO ", "").trim()}%`);
+      const cleanName = almoxarifado.replace(/^ALMOXARIFADO\s+/i, "").trim();
+      const candidates = Array.from(new Set([almoxarifado, cleanName, `ALMOXARIFADO ${cleanName}`])).filter(Boolean);
+      query = query.in('almoxarifado', candidates);
     }
     const { data, error } = await query;
     if (error) {
@@ -1820,13 +1752,16 @@ export async function dbBuscarGarantias(almoxarifado: string, mes: string | numb
   }
 }
 
-export const dbFetchWarranties = async (): Promise<WarrantyItem[]> => {
+export const dbFetchWarranties = async (almoxarifadoFilter?: string): Promise<WarrantyItem[]> => {
   if (!isSupabaseReady()) return [];
   try {
-    let { data, error } = await supabase
-      .from('garantias')
-      .select('*')
-      .order('registrado_em', { ascending: false });
+    let query = supabase.from('garantias').select('*');
+    if (almoxarifadoFilter && almoxarifadoFilter !== "TODOS") {
+      const cleanName = almoxarifadoFilter.replace(/^ALMOXARIFADO\s+/i, "").trim();
+      const candidates = Array.from(new Set([almoxarifadoFilter, cleanName, `ALMOXARIFADO ${cleanName}`])).filter(Boolean);
+      query = query.in('almoxarifado', candidates);
+    }
+    let { data, error } = await query.order('registrado_em', { ascending: false });
 
     if (error) {
       const retry = await supabase.from('garantias').select('*');

@@ -253,22 +253,24 @@ export default function AlmoxarifeGarantia({
     (b) => b.ownerName.toLowerCase() === user.ownerName.toLowerCase()
   );
 
+  // Use activeBranch from App-level switcher if provided, otherwise default to first owned branch
+  const activeBranch = propActiveBranch || (ownedBranches.length > 0 ? ownedBranches[0] : null);
+
   const [presetItems, setPresetItems] = useState<Array<{ code: string; description: string }>>(() => getPresetItems());
   const [presetManufacturers, setPresetManufacturers] = useState<string[]>(() => getManufacturers());
-  const [warranties, setWarranties] = useState<WarrantyItem[]>(initialWarranties);
+  const [warranties, setWarranties] = useState<WarrantyItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const loadWarrantiesData = async () => {
+      // Limpa o estado para evitar dados de consultas anteriores em memória ao trocar de usuário ou almoxarifado
+      setWarranties([]);
       if (isSupabaseReady()) {
         try {
-          // Force automatic sync of any warranties trapped in localStorage to Supabase
-          const syncedCount = await syncLocalStorageGarantiasToSupabase();
-          if (syncedCount > 0) {
-            console.log(`[GARANTIAS] ${syncedCount} registros do localStorage sincronizados para o Supabase.`);
-          }
-          const dbData = await dbFetchWarranties();
-          if (Array.isArray(dbData)) {
+          const targetBranchName = activeBranch ? activeBranch.name : undefined;
+          const dbData = await dbFetchWarranties(targetBranchName);
+          if (active && Array.isArray(dbData)) {
             setWarranties(dbData);
           }
         } catch (e) {
@@ -292,10 +294,11 @@ export default function AlmoxarifeGarantia({
     window.addEventListener("realtime-garantias-update", loadWarrantiesData);
     window.addEventListener("realtime-global-update", handleGlobalRealtime);
     return () => {
+      active = false;
       window.removeEventListener("realtime-garantias-update", loadWarrantiesData);
       window.removeEventListener("realtime-global-update", handleGlobalRealtime);
     };
-  }, []);
+  }, [activeBranch?.id, activeBranch?.name, user?.id, user?.name]);
 
   const [garantiaConfig, setGarantiaConfig] = useState(() => {
     try {
@@ -398,9 +401,6 @@ export default function AlmoxarifeGarantia({
     };
   }, []);
 
-  // Use activeBranch from App-level switcher if provided, otherwise default to first owned branch
-  const activeBranch = propActiveBranch || (ownedBranches.length > 0 ? ownedBranches[0] : null);
-
   const isPresencial = activeBranch?.criteria?.find((c) => c.id === "9")?.auditMode === "Presencial";
 
   const [branchMonthFilters, setBranchMonthFilters] = useState<Record<string, string>>({});
@@ -500,7 +500,7 @@ export default function AlmoxarifeGarantia({
     if (isSupabaseReady()) {
       try {
         await dbSaveWarranties(updated);
-        const freshData = await dbFetchWarranties();
+        const freshData = await dbFetchWarranties(activeBranch ? activeBranch.name : undefined);
         if (Array.isArray(freshData) && freshData.length > 0) {
           setWarranties(freshData);
         } else {
@@ -882,7 +882,7 @@ export default function AlmoxarifeGarantia({
         if (isSupabaseReady()) {
           try {
             await dbDeleteWarranty(id);
-            const freshData = await dbFetchWarranties();
+            const freshData = await dbFetchWarranties(activeBranch ? activeBranch.name : undefined);
             setWarranties(freshData);
             window.dispatchEvent(new Event("realtime-garantias-update"));
           } catch (e) {
@@ -897,9 +897,9 @@ export default function AlmoxarifeGarantia({
   // Filter local warranties list for the active branch and the active branch's selected monthly filter
   const filteredWarranties = warranties.filter((w) => {
     if (!activeBranch) return false;
-    const normW = (w.almoxarifado || "").toLowerCase().replace("almoxarifado ", "").trim();
-    const normB = (activeBranch.name || "").toLowerCase().replace("almoxarifado ", "").trim();
-    const isCurrentBranch = normW.includes(normB) || normB.includes(normW);
+    const normW = (w.almoxarifado || "").toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+    const normB = (activeBranch.name || "").toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+    const isCurrentBranch = normW === normB || w.almoxarifado === activeBranch.id || w.almoxarifado === activeBranch.name;
     const isFilteredMonth = w.monthYear === activeBranchMonthFilter;
     return isCurrentBranch && isFilteredMonth;
   });
