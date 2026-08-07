@@ -211,10 +211,26 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
     // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.name)
     const targetAlmox = branch ? branch.name : selectedAlmoxarifado;
     if (targetAlmox !== "TODOS") {
-      // Normalize comparison to prevent minor spacing differences
-      const normalizedWName = (w.almoxarifado || "").toLowerCase().trim();
-      const normalizedTarget = targetAlmox.toLowerCase().trim();
-      if (!normalizedWName.includes(normalizedTarget) && !normalizedTarget.includes(normalizedWName)) {
+      const cleanWName = (w.almoxarifado || "").toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+      const cleanTarget = targetAlmox.toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+
+      const matchedBranchByTarget = allBranches.find(
+        (b) => b.id === targetAlmox || b.name.toLowerCase().replace(/^almoxarifado\s+/i, "").trim() === cleanTarget
+      );
+      const matchedBranchByW = allBranches.find(
+        (b) => b.id === w.almoxarifado || b.name.toLowerCase().replace(/^almoxarifado\s+/i, "").trim() === cleanWName
+      );
+
+      let isMatch = false;
+      if (cleanWName === cleanTarget) {
+        isMatch = true;
+      } else if (matchedBranchByTarget && matchedBranchByW && matchedBranchByTarget.id === matchedBranchByW.id) {
+        isMatch = true;
+      } else if (matchedBranchByTarget && (w.almoxarifado === matchedBranchByTarget.id || w.almoxarifado === matchedBranchByTarget.name)) {
+        isMatch = true;
+      }
+
+      if (!isMatch) {
         return false;
       }
     }

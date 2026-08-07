@@ -122,9 +122,28 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
     // 1. Almoxarifado Filter (if locked by branch prop, we restrict to branch.id)
     const targetAlmox = branch ? branch.id : selectedAlmoxarifado;
     if (targetAlmox !== "TODOS") {
-      const occBranchId = getBranchIdByName(occ.branchId || occ.branchName || occ.filial || "");
+      const rawOccBranch = occ.branchId || occ.branchName || occ.filial || "";
+      const occBranchId = getBranchIdByName(rawOccBranch);
       const targetBranchId = getBranchIdByName(targetAlmox);
-      if (occBranchId && targetBranchId && occBranchId !== targetBranchId) {
+
+      const cleanOccName = rawOccBranch.toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+      
+      const targetBranchObj = allBranches.find(
+        (b) => b.id === targetAlmox || b.name.toLowerCase().replace(/^almoxarifado\s+/i, "").trim() === targetAlmox.toLowerCase().replace(/^almoxarifado\s+/i, "").trim()
+      );
+      const cleanTargetName = targetBranchObj
+        ? targetBranchObj.name.toLowerCase().replace(/^almoxarifado\s+/i, "").trim()
+        : targetAlmox.toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+      const resolvedTargetId = targetBranchObj ? targetBranchObj.id : targetBranchId;
+
+      let isMatch = false;
+      if (occBranchId && resolvedTargetId && occBranchId === resolvedTargetId) {
+        isMatch = true;
+      } else if (cleanOccName && cleanTargetName && cleanOccName === cleanTargetName) {
+        isMatch = true;
+      }
+
+      if (!isMatch) {
         return false;
       }
     }

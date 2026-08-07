@@ -2552,29 +2552,175 @@ export async function dbBuscarCertificados(almoxarifado_id: string, mes: string,
   return data || [];
 }
 
-export const dbFetchColaboradoresUnimobin = async () => {
+export const dbFetchColaboradoresUnimobin = async (branchId?: string) => {
   if (!isSupabaseReady()) {
     return [];
   }
 
-  // Fallback map colaboradores_unimobin from unimobin_certificados or returning base profiles
-  const { data, error } = await supabase.from('unimobin_certificados').select('id, colaborador_nome, status');
-  if (error || !data) return [];
-  return data.map(item => ({
-    id: item.id,
-    name: item.colaborador_nome,
-    status: (item.status as CollaboratorCertificate['status']) || "Aguardando envio",
-    cargo: "Motorista/Colaborador"
-  }));
+  try {
+    const { data, error } = await supabase.from('colaboradores_unimobin').select('*');
+
+    if (error) {
+      console.warn("[dbFetchColaboradoresUnimobin] Error reading colaboradores_unimobin table:", error.message);
+    }
+
+    let collabs: Array<{ id: string; name: string; branchId: string; cargo?: string }> = [];
+
+    if (data && data.length > 0) {
+      collabs = data
+        .map((item: any) => ({
+          id: String(item.id || `collab-${item.almoxarifado_id || item.branch_id}-${Date.now()}`),
+          name: String(item.colaborador_nome || item.nome || item.name || "").trim(),
+          branchId: String(item.almoxarifado_id || item.branch_id || "").trim(),
+          cargo: item.cargo || "Motorista/Colaborador"
+        }))
+        .filter(c => c.name.length > 0);
+    }
+
+    // If table is completely empty in database, initialize default initial collaborators
+    if (collabs.length === 0) {
+      console.log("[dbFetchColaboradoresUnimobin] Database table is empty. Initializing default collaborators in Supabase...");
+      const baseMapping: Record<string, string[]> = {
+        "unitrans-jp": ["Robson", "Cassiano", "João", "Wesley", "Jeferson"],
+        "santa-maria-jp": ["Robson", "Cassiano", "João", "Wesley", "Jeferson"],
+        "fretamento-jaboatao": ["Sérgio", "Alexandro", "Cristian"],
+        "rodoviario-jaboatao": ["Sérgio", "Alexandro", "Cristian"],
+        "fretamento-goiana": ["Ezequiel", "Leo"],
+        "expresso-nacional": ["Paulo", "Wegeles", "Vagner"],
+        "acandido-cg": ["Paulo", "Wegeles", "Vagner"],
+        "trans-cg-bayeux": ["Matheus"],
+        "rodoviario-cabedelo": ["Matheus"],
+        "unissana-rn": ["Raimundo"],
+        "reunidas-nat": ["Joel"],
+        "fretamento-maracanau": ["Arline"],
+        "rodoviario-fortaleza": ["Arline"],
+        "fretamento-pb": ["Lucas"],
+      };
+
+      const seedRows: any[] = [];
+      Object.entries(baseMapping).forEach(([bId, names]) => {
+        names.forEach((name, i) => {
+          const rowId = `collab-${bId}-${i}-${Date.now()}`;
+          seedRows.push({
+            id: rowId,
+            almoxarifado_id: bId,
+            branch_id: bId,
+            colaborador_nome: name,
+            nome: name,
+            name: name,
+            cargo: "Motorista/Colaborador"
+          });
+          collabs.push({
+            id: rowId,
+            name,
+            branchId: bId,
+            cargo: "Motorista/Colaborador"
+          });
+        });
+      });
+
+      supabase.from('colaboradores_unimobin').upsert(seedRows, { onConflict: 'id' })
+        .then(({ error: seedErr }) => {
+          if (seedErr) console.warn("[dbFetchColaboradoresUnimobin Seed Warning]:", seedErr.message);
+          else console.log("[dbFetchColaboradoresUnimobin] Default collaborators seeded into Supabase.");
+        }).catch(err => console.warn("[dbFetchColaboradoresUnimobin Seed Exception]:", err));
+    }
+
+    if (branchId) {
+      const targetBId = branchId.toLowerCase().trim();
+      return collabs.filter(c => c.branchId.toLowerCase().trim() === targetBId);
+    }
+
+    return collabs;
+  } catch (err) {
+    console.error("[dbFetchColaboradoresUnimobin Exception]:", err);
+    return [];
+  }
 };
 
-export const dbSaveColaboradorUnimobin = async (name: string, cargo: string, requesterRole?: string) => {
+export const dbSaveColaboradorUnimobin = async (branchId: string, name: string, cargo: string = "Motorista/Colaborador", requesterRole?: string) => {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
   if (!isSupabaseReady()) return;
-  // Just save a blank mock certificate
-  await dbSalvarCertificado("default", "Janeiro", "2026", name, {
-    status: "Aguardando envio"
-  }, requesterRole);
+
+  const rowId = `collab-${branchId}-${Date.now()}`;
+  const trimmedName = name.trim();
+  const trimmedBranchId = branchId.trim();
+
+  const payload: any = {
+    id: rowId,
+    almoxarifado_id: trimmedBranchId,
+    branch_id: trimmedBranchId,
+    colaborador_nome: trimmedName,
+    nome: trimmedName,
+    name: trimmedName,
+    cargo: cargo || "Motorista/Colaborador"
+  };
+
+  console.log("[dbSaveColaboradorUnimobin] Saving collaborator to Supabase:", payload);
+
+  let { error } = await supabase
+    .from('colaboradores_unimobin')
+    .upsert(payload, { onConflict: 'id' });
+
+  if (error) {
+    console.warn("[dbSaveColaboradorUnimobin First Attempt Warning]:", error.message);
+    const minimalPayload = {
+      id: rowId,
+      almoxarifado_id: trimmedBranchId,
+      colaborador_nome: trimmedName
+    };
+    const { error: minErr } = await supabase
+      .from('colaboradores_unimobin')
+      .upsert(minimalPayload);
+
+    if (minErr) {
+      console.error("[dbSaveColaboradorUnimobin Fatal Error]:", minErr);
+      throw new Error(`Erro ao cadastrar colaborador no Supabase: ${minErr.message}`);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
+  }
+};
+
+export const dbDeletarColaboradorUnimobin = async (id: string, branchId?: string, name?: string, requesterRole?: string) => {
+  checkPermission(["ADMIN", "SUPERVISOR"], requesterRole);
+  if (!isSupabaseReady()) return;
+
+  console.log("[dbDeletarColaboradorUnimobin] Deleting collaborator from Supabase:", { id, branchId, name });
+
+  if (id) {
+    const { error: deleteByIdErr } = await supabase
+      .from('colaboradores_unimobin')
+      .delete()
+      .eq('id', id);
+    if (deleteByIdErr) {
+      console.warn("[dbDeletarColaboradorUnimobin deleteById Warning]:", deleteByIdErr.message);
+    }
+  }
+
+  if (branchId && name) {
+    const trimmedBranch = branchId.trim();
+    const trimmedName = name.trim();
+
+    await supabase
+      .from('colaboradores_unimobin')
+      .delete()
+      .or(`almoxarifado_id.eq.${trimmedBranch},branch_id.eq.${trimmedBranch}`)
+      .or(`colaborador_nome.ilike.${trimmedName},nome.ilike.${trimmedName},name.ilike.${trimmedName}`);
+
+    await supabase
+      .from('unimobin_certificados')
+      .delete()
+      .eq('almoxarifado_id', trimmedBranch)
+      .ilike('colaborador_nome', trimmedName)
+      .neq('status', 'Certificado enviado');
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("realtime-unimobin-certificados-update"));
+  }
 };
 
 // ======================= HISTORICO AVALIACOES =======================

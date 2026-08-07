@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
-import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, isSupabaseReady } from "../supabaseService";
+import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, dbFetchColaboradoresUnimobin, isSupabaseReady } from "../supabaseService";
 import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeUnimobinProps {
@@ -83,39 +83,43 @@ export default function AlmoxarifeUnimobin({
     };
   }, []);
 
-  const [certs, setCerts] = useState<CollaboratorCertificate[]>(() => {
-    const baseCerts = getCollaboratorsForBranch(branchId, branchName);
-    const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
-    return baseCerts.map((baseC) => ({
-      ...baseC,
-      status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
-    }));
-  });
+  const [certs, setCerts] = useState<CollaboratorCertificate[]>([]);
 
   React.useEffect(() => {
     let active = true;
     const loadCerts = async () => {
       if (!branchId) return;
-      
-      let dbCerts: any[] = [];
-      if (isSupabaseReady()) {
-        try {
-          dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
-        } catch (err) {
-          console.error("Error loading certificates from Supabase:", err);
+
+      try {
+        let officialCollabs = await dbFetchColaboradoresUnimobin(branchId);
+        if ((!officialCollabs || officialCollabs.length === 0) && !isSupabaseReady()) {
+          officialCollabs = getCollaboratorsForBranch(branchId, branchName).map(c => ({
+            id: c.id,
+            name: c.name,
+            branchId: branchId || ""
+          }));
         }
-      }
-      
-      if (dbCerts && dbCerts.length > 0 && active) {
-        const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
-        setCerts((prev) => {
-          return prev.map((c) => {
+
+        let dbCerts: any[] = [];
+        if (isSupabaseReady()) {
+          try {
+            dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
+          } catch (err) {
+            console.error("Error loading certificates from Supabase:", err);
+          }
+        }
+
+        if (active) {
+          const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
+          const constructed = officialCollabs.map((collab) => {
             const match = dbCerts.find(
-              (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
+              (db) => db.colaborador_nome && db.colaborador_nome.toLowerCase().trim() === collab.name.toLowerCase().trim()
             );
+
             if (match) {
               return {
-                ...c,
+                id: collab.id || `cert-${collab.name}`,
+                name: collab.name,
                 status: (isSentGlobal ? "Certificado enviado" : match.status) as CollaboratorCertificate['status'],
                 fileName: match.file_name,
                 fileType: match.file_type,
@@ -123,19 +127,36 @@ export default function AlmoxarifeUnimobin({
                 uploadedAt: match.uploaded_at
               };
             }
-            return c;
+
+            return {
+              id: collab.id || `cert-${collab.name}`,
+              name: collab.name,
+              status: isSentGlobal ? ("Certificado enviado" as const) : ("Aguardando envio" as const),
+            };
           });
-        });
+
+          setCerts(constructed);
+        }
+      } catch (err) {
+        console.error("Error loading certs in AlmoxarifeUnimobin:", err);
       }
     };
+
     loadCerts();
+
+    const handleRealtime = () => {
+      loadCerts();
+    };
+
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
     return () => {
       active = false;
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
     };
-  }, [branchId, currentMonth, currentYear, criterionState]);
+  }, [branchId, branchName, currentMonth, currentYear, criterionState]);
 
   React.useEffect(() => {
-    if (!branchId || !isSupabaseReady()) return;
+    if (!branchId || !isSupabaseReady() || certs.length === 0) return;
     try {
       certs.forEach((c) => {
         dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
@@ -150,42 +171,6 @@ export default function AlmoxarifeUnimobin({
       console.error("Error saving certs to Supabase on change:", e);
     }
   }, [certs, branchId, currentMonth, currentYear]);
-
-  React.useEffect(() => {
-    const handleRealtime = async () => {
-      if (!branchId || !isSupabaseReady()) return;
-      try {
-        const dbCerts = await dbBuscarCertificados(branchId, currentMonth, currentYear);
-        if (dbCerts && dbCerts.length > 0) {
-          const isSentGlobal = criterionState?.status === "OK" || criterionState?.status === "ENVIADO";
-          setCerts((prev) =>
-            prev.map((c) => {
-              const match = dbCerts.find(
-                (db) => db.colaborador_nome.toLowerCase().trim() === c.name.toLowerCase().trim()
-              );
-              if (match) {
-                return {
-                  ...c,
-                  status: (isSentGlobal ? "Certificado enviado" : match.status) as CollaboratorCertificate['status'],
-                  fileName: match.file_name,
-                  fileType: match.file_type,
-                  fileData: match.file_data,
-                  uploadedAt: match.uploaded_at
-                };
-              }
-              return c;
-            })
-          );
-        }
-      } catch (err) {
-        console.error("Error loading certificates on realtime event:", err);
-      }
-    };
-    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
-    return () => {
-      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
-    };
-  }, [branchId, currentMonth, currentYear, criterionState]);
 
   const [isSending, setIsSending] = useState(false);
 

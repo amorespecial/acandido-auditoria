@@ -33,7 +33,10 @@ import {
   dbFetchPresetItems,
   dbSavePresetItems,
   dbFetchPresetManufacturers,
-  dbSavePresetManufacturers
+  dbSavePresetManufacturers,
+  dbFetchColaboradoresUnimobin,
+  dbSaveColaboradorUnimobin,
+  dbDeletarColaboradorUnimobin
 } from "../supabaseService";
 import { supabase } from "../supabaseClient";
 import { DraggableFieldList } from "./DraggableFieldList";
@@ -873,36 +876,35 @@ export default function AdminConfiguracoes({
 
   // ================= STATE: COLABORADORES =================
   const [selectedCollabBranchId, setSelectedCollabBranchId] = useState<string>(branches[0]?.id || "");
-  const [collabList, setCollabList] = useState<MiniCollaborator[]>(() => {
-    // Prefill with some default collaborations from mapIdToNames in mockData
-    const defaultCollabProfiles: MiniCollaborator[] = [];
-    const baseMapping: Record<string, string[]> = {
-      "unitrans-jp": ["Robson", "Cassiano", "João", "Wesley", "Jeferson"],
-      "santa-maria-jp": ["Robson", "Cassiano", "João", "Wesley", "Jeferson"],
-      "fretamento-jaboatao": ["Sérgio", "Alexandro", "Cristian"],
-      "rodoviario-jaboatao": ["Sérgio", "Alexandro", "Cristian"],
-      "fretamento-goiana": ["Ezequiel", "Leo"],
-      "expresso-nacional": ["Paulo", "Wegeles", "Vagner"],
-      "acandido-cg": ["Paulo", "Wegeles", "Vagner"],
-      "trans-cg-bayeux": ["Matheus"],
-      "rodoviario-cabedelo": ["Matheus"],
-      "unissana-rn": ["Raimundo"],
-      "reunidas-nat": ["Joel"],
-      "fretamento-maracanau": ["Arline"],
-      "rodoviario-fortaleza": ["Arline"],
-      "fretamento-pb": ["Lucas"],
+  const [collabList, setCollabList] = useState<MiniCollaborator[]>([]);
+  const [isCollabLoading, setIsCollabLoading] = useState(false);
+
+  const loadCollabList = React.useCallback(async () => {
+    setIsCollabLoading(true);
+    try {
+      const dbCollabs = await dbFetchColaboradoresUnimobin();
+      setCollabList(dbCollabs);
+    } catch (err) {
+      console.error("[AdminConfiguracoes] Error loading colaboradores from Supabase:", err);
+    } finally {
+      setIsCollabLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCollabList();
+  }, [loadCollabList]);
+
+  useEffect(() => {
+    const handleRealtime = () => {
+      console.log("[AdminConfiguracoes] Realtime update event received for colaboradores_unimobin");
+      loadCollabList();
     };
-    Object.entries(baseMapping).forEach(([bId, names]) => {
-      names.forEach((name, i) => {
-        defaultCollabProfiles.push({
-          id: `collab-profile-${bId}-${i}-${Date.now()}`,
-          name,
-          branchId: bId
-        });
-      });
-    });
-    return defaultCollabProfiles;
-  });
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    return () => {
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    };
+  }, [loadCollabList]);
 
   const [newCollabName, setNewCollabName] = useState("");
 
@@ -1404,18 +1406,24 @@ export default function AdminConfiguracoes({
   };
 
   // ================= COLABORADORES Unimobin =================
-  const handleAddCollab = () => {
-    if (!newCollabName.trim()) return;
+  const handleAddCollab = async () => {
+    if (!newCollabName.trim() || !selectedCollabBranchId) return;
 
-    const profile: MiniCollaborator = {
-      id: `collab-profile-${selectedCollabBranchId}-${Date.now()}`,
-      name: newCollabName.trim(),
-      branchId: selectedCollabBranchId
-    };
+    const nameToAdd = newCollabName.trim();
+    const branchToAdd = selectedCollabBranchId;
 
-    setCollabList(prev => [...prev, profile]);
-    setNewCollabName("");
-    alert("Colaborador cadastrado com sucesso para o curso Unimobin!");
+    try {
+      setIsCollabLoading(true);
+      await dbSaveColaboradorUnimobin(branchToAdd, nameToAdd);
+      setNewCollabName("");
+      await loadCollabList();
+      alert("Colaborador cadastrado com sucesso para o curso Unimobin!");
+    } catch (e: any) {
+      console.error("Error adding collaborator:", e);
+      alert(`Erro ao cadastrar colaborador no Supabase: ${e?.message || e}`);
+    } finally {
+      setIsCollabLoading(false);
+    }
   };
 
   const handleRemoveCollab = (id: string, name: string) => {
@@ -1423,10 +1431,19 @@ export default function AdminConfiguracoes({
       isOpen: true,
       title: "Confirmar Remoção de Colaborador",
       message: `Deseja remover permanentemente o colaborador ${name} da lista de treinamento do Unimobin?`,
-      onConfirm: () => {
-        setCollabList(prev => prev.filter((c) => c.id !== id));
-        setCustomConfirm(null);
-        alert(`Colaborador ${name} removido com sucesso.`);
+      onConfirm: async () => {
+        try {
+          setIsCollabLoading(true);
+          await dbDeletarColaboradorUnimobin(id, selectedCollabBranchId, name);
+          setCustomConfirm(null);
+          await loadCollabList();
+          alert(`Colaborador ${name} removido com sucesso.`);
+        } catch (e: any) {
+          console.error("Error removing collaborator:", e);
+          alert(`Erro ao remover colaborador no Supabase: ${e?.message || e}`);
+        } finally {
+          setIsCollabLoading(false);
+        }
       }
     });
   };

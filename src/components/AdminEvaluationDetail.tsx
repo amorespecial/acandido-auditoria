@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus, CollaboratorCertificate } fro
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { getMesesDisponiveis } from "../utils/dateUtils";
@@ -231,16 +231,24 @@ export default function AdminEvaluationDetail({
     const handleRealtime = async () => {
       if (selectedCriterion?.id === "6" && branch?.id && isSupabaseReady()) {
         try {
+          let officialCollabs = await dbFetchColaboradoresUnimobin(branch.id);
+          if (!officialCollabs || officialCollabs.length === 0) {
+            officialCollabs = getCollaboratorsForBranch(branch.id, branch.name).map(c => ({
+              id: c.id,
+              name: c.name,
+              branchId: branch.id
+            }));
+          }
           const dbCerts = await dbBuscarCertificados(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
-          const baseCerts = getCollaboratorsForBranch(branch.id, branch.name);
           const isSentGlobal = selectedCriterion?.status === "OK" || selectedCriterion?.status === "ENVIADO";
-          const loaded = baseCerts.map((baseC) => {
+          const loaded = officialCollabs.map((collab) => {
             const savedMatch = dbCerts.find(
-              (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === baseC.name.trim().toLowerCase()
+              (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === collab.name.trim().toLowerCase()
             );
             if (savedMatch) {
               return {
-                ...baseC,
+                id: collab.id || `cert-${collab.name}`,
+                name: collab.name,
                 status: isSentGlobal ? ("Certificado enviado" as const) : ((savedMatch.status as CollaboratorCertificate['status']) || "Aguardando envio"),
                 uploadedAt: savedMatch.uploaded_at,
                 fileName: savedMatch.file_name,
@@ -250,8 +258,9 @@ export default function AdminEvaluationDetail({
               };
             }
             return {
-              ...baseC,
-              status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
+              id: collab.id || `cert-${collab.name}`,
+              name: collab.name,
+              status: isSentGlobal ? ("Certificado enviado" as const) : ("Aguardando envio" as const),
             };
           });
           setAuditorCerts(loaded);
@@ -785,42 +794,46 @@ export default function AdminEvaluationDetail({
 
     if (crit.id === "6") {
       const isSentGlobal = crit.status === "OK" || crit.status === "ENVIADO";
-      const baseCerts = getCollaboratorsForBranch(branch.id, branch.name);
       
       const loadSupabaseCerts = async () => {
-        if (isSupabaseReady()) {
-          try {
-            const dbCerts = await dbBuscarCertificados(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
-            const loaded = baseCerts.map((baseC) => {
-              const savedMatch = dbCerts.find(
-                (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === baseC.name.trim().toLowerCase()
-              );
-              if (savedMatch) {
-                return {
-                  ...baseC,
-                  status: isSentGlobal ? ("Certificado enviado" as const) : (savedMatch.status as any),
-                  uploadedAt: savedMatch.uploaded_at,
-                  fileName: savedMatch.file_name,
-                  fileSize: 0,
-                  fileType: savedMatch.file_type,
-                  fileData: savedMatch.file_data
-                };
-              }
-              return {
-                ...baseC,
-                status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
-              };
-            });
-            setAuditorCerts(loaded);
-          } catch (err) {
-            console.error("Error loading auditor unimobin certificates from Supabase:", err);
+        try {
+          let officialCollabs = await dbFetchColaboradoresUnimobin(branch.id);
+          if (!officialCollabs || officialCollabs.length === 0) {
+            officialCollabs = getCollaboratorsForBranch(branch.id, branch.name).map(c => ({
+              id: c.id,
+              name: c.name,
+              branchId: branch.id
+            }));
           }
-        } else {
-          const loaded = baseCerts.map((baseC) => ({
-            ...baseC,
-            status: isSentGlobal ? ("Certificado enviado" as const) : baseC.status,
-          }));
+          let dbCerts: any[] = [];
+          if (isSupabaseReady()) {
+            dbCerts = await dbBuscarCertificados(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear);
+          }
+          const loaded = officialCollabs.map((collab) => {
+            const savedMatch = dbCerts.find(
+              (sc) => sc && sc.colaborador_nome && sc.colaborador_nome.trim().toLowerCase() === collab.name.trim().toLowerCase()
+            );
+            if (savedMatch) {
+              return {
+                id: collab.id || `cert-${collab.name}`,
+                name: collab.name,
+                status: isSentGlobal ? ("Certificado enviado" as const) : (savedMatch.status as any),
+                uploadedAt: savedMatch.uploaded_at,
+                fileName: savedMatch.file_name,
+                fileSize: 0,
+                fileType: savedMatch.file_type,
+                fileData: savedMatch.file_data
+              };
+            }
+            return {
+              id: collab.id || `cert-${collab.name}`,
+              name: collab.name,
+              status: isSentGlobal ? ("Certificado enviado" as const) : ("Aguardando envio" as const),
+            };
+          });
           setAuditorCerts(loaded);
+        } catch (err) {
+          console.error("Error loading auditor unimobin certificates from Supabase:", err);
         }
       };
       loadSupabaseCerts();
@@ -2581,9 +2594,9 @@ export default function AdminEvaluationDetail({
               {selectedCriterion.id === "9" && (() => {
                 const auditorFilteredWarranties = warranties.filter((w) => {
                   if (!w.almoxarifado) return false;
-                  const normW = (w.almoxarifado || "").toLowerCase().replace("almoxarifado ", "").trim();
-                  const normB = (branch.name || "").toLowerCase().replace("almoxarifado ", "").trim();
-                  const isBranchMatch = normW.includes(normB) || normB.includes(normW);
+                  const normW = (w.almoxarifado || "").toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+                  const normB = (branch.name || "").toLowerCase().replace(/^almoxarifado\s+/i, "").trim();
+                  const isBranchMatch = normW === normB || w.almoxarifado === branch.id || w.almoxarifado === branch.name;
                   return isBranchMatch && w.monthYear === auditorMonthFilter;
                 });
 

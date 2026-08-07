@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
-import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM, dbBuscarCertificados, isSupabaseReady } from "../supabaseService";
+import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM, dbBuscarCertificados, dbFetchColaboradoresUnimobin, isSupabaseReady } from "../supabaseService";
 import { getCollaboratorsForBranch } from "../mockData";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase } from "../supabaseClient";
@@ -12,7 +12,16 @@ function UnimobinSummary({ branchId, branchName, month, year }: { branchId: stri
     let active = true;
     async function load() {
       if (!branchId) return;
-      const baseCerts = getCollaboratorsForBranch(branchId, branchName);
+      
+      let officialCollabs = await dbFetchColaboradoresUnimobin(branchId);
+      if ((!officialCollabs || officialCollabs.length === 0) && !isSupabaseReady()) {
+        officialCollabs = getCollaboratorsForBranch(branchId, branchName).map(c => ({
+          id: c.id,
+          name: c.name,
+          branchId: branchId || ""
+        }));
+      }
+
       let sentCount = 0;
       if (isSupabaseReady()) {
         try {
@@ -23,11 +32,21 @@ function UnimobinSummary({ branchId, branchName, month, year }: { branchId: stri
         } catch (e) {}
       }
       if (active) {
-        setCertInfo({ total: baseCerts.length, sent: sentCount });
+        setCertInfo({ total: officialCollabs.length, sent: sentCount });
       }
     }
+
     load();
-    return () => { active = false; };
+
+    const handleRealtime = () => {
+      load();
+    };
+
+    window.addEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    return () => {
+      active = false;
+      window.removeEventListener("realtime-unimobin-certificados-update", handleRealtime);
+    };
   }, [branchId, branchName, month, year]);
 
   if (!certInfo || certInfo.total === 0) return null;
