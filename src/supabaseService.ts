@@ -627,13 +627,13 @@ export const dbFetchActiveCycle = async () => {
       .limit(1);
     
     if (error) {
-      console.error('Erro ao buscar ciclo:', error);
+      console.warn('Aviso ao buscar ciclo:', error);
       return null;
     }
     
     return data && data.length > 0 ? data[0] : null;
   } catch (e) {
-    console.error('Exceção ao buscar ciclo:', e);
+    console.warn('Exceção ao buscar ciclo:', e);
     return null;
   }
 };
@@ -2297,26 +2297,29 @@ export const dbSaveTop10Envio = async (almoxarifado: string, mesName: string, an
 };
 
 // ======================= LAYOUT CONFIG =======================
-export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string, ano: string, localizacao: string, instrucoes: string, requesterRole?: string) {
+export async function dbSalvarLayoutConfig(almoxarifado_id: string, mes: string | number, ano: string | number, localizacao: string, instrucoes: string, configurado_por?: string, requesterRole?: string) {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
-  const mesInt = typeof mes === "number" ? mes : monthNameToNum(mes);
+  const mesInt = typeof mes === "number" ? mes : monthNameToNum(String(mes));
   const anoInt = typeof ano === "number" ? ano : parseInt(String(ano), 10);
+
+  const payload = { 
+    almoxarifado_id, 
+    mes: mesInt, 
+    ano: anoInt, 
+    localizacao, 
+    instrucoes: instrucoes || "", 
+    configurado_por: configurado_por || "Auditor",
+    updated_at: new Date().toISOString() 
+  };
 
   const { error } = await supabase
     .from('layout_config')
-    .upsert({ 
-      almoxarifado_id, 
-      mes: mesInt, 
-      ano: anoInt, 
-      localizacao, 
-      instrucoes, 
-      updated_at: new Date().toISOString() 
-    }, { onConflict: 'almoxarifado_id,mes,ano' });
+    .upsert(payload, { onConflict: 'almoxarifado_id,mes,ano' });
   if (error) throw error;
 }
 
-export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string, ano: string) {
-  const mesInt = typeof mes === "number" ? mes : monthNameToNum(mes);
+export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string | number, ano: string | number) {
+  const mesInt = typeof mes === "number" ? mes : monthNameToNum(String(mes));
   const anoInt = typeof ano === "number" ? ano : parseInt(String(ano), 10);
 
   const { data } = await supabase
@@ -2325,26 +2328,46 @@ export async function dbBuscarLayoutConfig(almoxarifado_id: string, mes: string,
     .eq('almoxarifado_id', almoxarifado_id)
     .eq('mes', mesInt)
     .eq('ano', anoInt)
-    .single();
-  return data;
+    .maybeSingle();
+
+  if (data) return data;
+
+  // Fallback se mes foi armazenado como string
+  const { data: dataFallback } = await supabase
+    .from('layout_config')
+    .select('localizacao, instrucoes, configurado_por, updated_at')
+    .eq('almoxarifado_id', almoxarifado_id)
+    .eq('mes', String(mes))
+    .eq('ano', String(ano))
+    .maybeSingle();
+
+  return dataFallback;
 }
 
 export const dbFetchLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string) => {
-  if (!isSupabaseReady()) return null;
-  const data = await dbBuscarLayoutConfig(almoxarifado, mesName, anoStr);
-  if (!data) return null;
-  return {
-    location: data.localizacao,
-    instructions: data.instrucoes,
-    configurado_por: data.configurado_por || "Almoxarife",
-    configurado_em: data.updated_at
-  };
+  if (isSupabaseReady()) {
+    try {
+      const data = await dbBuscarLayoutConfig(almoxarifado, mesName, anoStr);
+      if (data) {
+        return {
+          location: data.localizacao,
+          instructions: data.instrucoes,
+          configurado_por: data.configurado_por || "Auditor",
+          configurado_em: data.updated_at
+        };
+      }
+    } catch (e) {
+      console.warn("Erro ao buscar layout_config no Supabase:", e);
+    }
+  }
+
+  return null;
 };
 
-export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string, requesterRole?: string) => {
+export const dbSaveLayoutConfig = async (almoxarifado: string, mesName: string, anoStr: string, localizacao: string, user: string, requesterRole?: string, instrucoes?: string) => {
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
   if (!isSupabaseReady()) return;
-  await dbSalvarLayoutConfig(almoxarifado, mesName, anoStr, localizacao, "", requesterRole);
+  await dbSalvarLayoutConfig(almoxarifado, mesName, anoStr, localizacao, instrucoes || "", user, requesterRole);
 };
 
 // ======================= UNIMOBIN CERTIFICADOS =======================

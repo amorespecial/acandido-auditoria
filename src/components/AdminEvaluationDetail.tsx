@@ -306,11 +306,16 @@ export default function AdminEvaluationDetail({
           cycleStateParsed.activeMonth,
           cycleStateParsed.activeYear,
           layoutLocationInput.trim(),
-          userName
+          userName,
+          undefined,
+          layoutInstructionsInput.trim()
         );
       } else {
         throw new Error("Conexão com o banco de dados (Supabase) indisponível.");
       }
+
+      // Notificar outros componentes do mesmo navegador via evento customizado
+      window.dispatchEvent(new Event("realtime-layout-config-update"));
 
       setLayoutConfigUpdatedCount(prev => prev + 1);
       setShowLayoutConfigModal(false);

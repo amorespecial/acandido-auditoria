@@ -40,7 +40,7 @@ export default function AlmoxarifeLayout({
 
   React.useEffect(() => {
     const loadLayout = async () => {
-      if (branchId && isSupabaseReady()) {
+      if (branchId) {
         try {
           const config = await dbFetchLayoutConfig(branchId, activeMonth, activeYear);
           setLayoutConfig(config);
