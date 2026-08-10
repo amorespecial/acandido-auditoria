@@ -306,8 +306,6 @@ export default function AdminEvaluationDetail({
           cycleStateParsed.activeMonth,
           cycleStateParsed.activeYear,
           layoutLocationInput.trim(),
-          userName,
-          undefined,
           layoutInstructionsInput.trim()
         );
       } else {
