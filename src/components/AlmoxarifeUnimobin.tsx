@@ -155,41 +155,55 @@ export default function AlmoxarifeUnimobin({
     };
   }, [branchId, branchName, currentMonth, currentYear, criterionState]);
 
-  React.useEffect(() => {
-    if (!branchId || !isSupabaseReady() || certs.length === 0) return;
-    try {
-      certs.forEach((c) => {
-        dbSalvarCertificado(branchId, currentMonth, currentYear, c.name, {
-          status: c.status,
-          fileName: c.fileName || null,
-          fileType: c.fileType || null,
-          fileData: c.fileData || null,
-          uploadedAt: c.uploadedAt || new Date().toISOString()
-        }).catch((err) => console.error("Error background saving certificate:", err));
-      });
-    } catch (e) {
-      console.error("Error saving certs to Supabase on change:", e);
-    }
-  }, [certs, branchId, currentMonth, currentYear]);
-
+  const [uploadingCertId, setUploadingCertId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
-  const handleFileChange = (id: string, file: File) => {
+  const handleFileChange = async (certId: string, certName: string, file: File) => {
+    console.log('[Unimobin Upload] Iniciando upload:', file.name, file.size, file.type);
+
     if (file.size > 10 * 1024 * 1024) {
-      alert("Erro: O arquivo excede o limite máximo de 10 MB.");
+      alert("Arquivo muito grande. Máximo 10MB.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = e.target?.result as string;
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!tiposPermitidos.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|pdf)$/i)) {
+      alert("Tipo de arquivo não permitido. Use JPG, PNG ou PDF.");
+      return;
+    }
+
+    setUploadingCertId(certId);
+
+    try {
+      // 1. Converter para base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const uploadedDate = new Date().toLocaleDateString("pt-BR");
+
+      // 2. Salvar no Supabase PRIMEIRO
+      if (branchId && isSupabaseReady()) {
+        await dbSalvarCertificado(branchId, currentMonth, currentYear, certName, {
+          status: "Certificado enviado",
+          fileName: file.name,
+          fileType: file.type,
+          fileData: base64,
+          uploadedAt: uploadedDate
+        });
+      }
+
+      // 3. Atualizar estado local APENAS APÓS confirmar save no Supabase
       setCerts((prev) =>
         prev.map((item) => {
-          if (item.id === id) {
+          if (item.id === certId) {
             return {
               ...item,
               status: "Certificado enviado" as const,
-              uploadedAt: new Date().toLocaleDateString("pt-BR"),
+              uploadedAt: uploadedDate,
               fileName: file.name,
               fileSize: file.size,
               fileType: file.type,
@@ -199,8 +213,48 @@ export default function AlmoxarifeUnimobin({
           return item;
         })
       );
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('[Unimobin Upload] Erro:', err);
+      alert('Erro ao salvar certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
+    } finally {
+      setUploadingCertId(null);
+    }
+  };
+
+  const handleRemoveFile = async (certId: string, certName: string) => {
+    setUploadingCertId(certId);
+    try {
+      if (branchId && isSupabaseReady()) {
+        await dbSalvarCertificado(branchId, currentMonth, currentYear, certName, {
+          status: "Aguardando envio",
+          fileName: null,
+          fileType: null,
+          fileData: null,
+          uploadedAt: null
+        });
+      }
+      setCerts((prev) =>
+        prev.map((item) => {
+          if (item.id === certId) {
+            return {
+              ...item,
+              status: "Aguardando envio" as const,
+              uploadedAt: undefined,
+              fileName: undefined,
+              fileSize: undefined,
+              fileType: undefined,
+              fileData: undefined
+            };
+          }
+          return item;
+        })
+      );
+    } catch (err: any) {
+      console.error('[Unimobin Upload] Erro ao remover certificado:', err);
+      alert('Erro ao remover certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
+    } finally {
+      setUploadingCertId(null);
+    }
   };
 
   const handleViewFile = (cert: CollaboratorCertificate) => {
@@ -409,25 +463,9 @@ export default function AlmoxarifeUnimobin({
                               {!isFinalized && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setCerts((prev) =>
-                                      prev.map((item) => {
-                                        if (item.id === c.id) {
-                                          return {
-                                            ...item,
-                                            status: "Aguardando envio" as const,
-                                            uploadedAt: undefined,
-                                            fileName: undefined,
-                                            fileSize: undefined,
-                                            fileType: undefined,
-                                            fileData: undefined
-                                          };
-                                        }
-                                        return item;
-                                      })
-                                    );
-                                  }}
-                                  className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                                  disabled={uploadingCertId === c.id}
+                                  onClick={() => handleRemoveFile(c.id, c.name)}
+                                  className="p-1 text-rose-600 hover:bg-rose-50 rounded disabled:opacity-50"
                                   title="Remover arquivo"
                                 >
                                   <span className="material-symbols-outlined text-[16px]">close</span>
@@ -444,15 +482,16 @@ export default function AlmoxarifeUnimobin({
                                   <p className="font-bold text-[#1B2A4A]">Anexar certificado do colaborador{isCertReq && <span className="text-[#F11E26]"> *</span>}</p>
                                   <p className="text-slate-400 text-[9px]">JPG, PNG ou PDF • máx. 10 MB</p>
                                 </div>
-                                <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-200 text-[#1B2A4A] py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block">
-                                  Escolher arquivo
+                                <label className={`cursor-pointer bg-white hover:bg-slate-100 border border-slate-200 text-[#1B2A4A] py-1 px-3 rounded text-[9.5px] font-black transition-all shadow-3xs active:scale-95 inline-block ${uploadingCertId === c.id ? "opacity-50 pointer-events-none" : ""}`}>
+                                  {uploadingCertId === c.id ? "Enviando e salvando..." : "Escolher arquivo"}
                                   <input
                                     type="file"
                                     accept=".jpg,.jpeg,.png,.pdf"
+                                    disabled={uploadingCertId === c.id}
                                     className="hidden"
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
-                                      if (file) handleFileChange(c.id, file);
+                                      if (file) handleFileChange(c.id, c.name, file);
                                     }}
                                   />
                                 </label>

@@ -2392,10 +2392,8 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       const storagePath = `unimobin/${almoxarifado_id}_${mes}_${ano}_${sanitizedCollab}_${Date.now()}.${ext}`;
       fileUrl = await uploadFile('evidencias-almoxarife', storagePath, rawFileData);
     } catch (uploadErr) {
-      console.warn("[dbSalvarCertificado] Storage upload warning, using original data URL/placeholder:", uploadErr);
-      if (rawFileData.length > 50000) {
-        fileUrl = "placeholder-heavy-data";
-      }
+      console.warn("[dbSalvarCertificado] Storage upload warning, using base64 directly in DB table:", uploadErr);
+      fileUrl = rawFileData;
     }
   }
 

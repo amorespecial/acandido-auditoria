@@ -330,7 +330,6 @@ export default function App() {
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
   const [dbConnectionError, setDbConnectionError] = useState(false);
-  const [showLiveUpdateToast, setShowLiveUpdateToast] = useState(false);
 
   const [allNonMovingSummaries, setAllNonMovingSummaries] = useState<any[]>([]);
 
@@ -456,15 +455,9 @@ export default function App() {
     checkConnectionAndLoadCycle();
   }, []);
 
-  // 2. Centralized Realtime Sync hook for live state updates with anti-looping and instant feedback
+  // 2. Centralized Realtime Sync hook for live state updates with anti-looping
   useRealtimeSync(async (payload) => {
     if (realtimeFlags.isLocalUpdate) return;
-
-    // Show live update notification toast
-    setShowLiveUpdateToast(true);
-    const toastTimer = setTimeout(() => {
-      setShowLiveUpdateToast(false);
-    }, 2000);
 
     const { table } = payload;
     console.log(`[Realtime Global Sync App.tsx] Table changed: ${table}`);
@@ -1937,12 +1930,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans select-none pb-12">
-      {showLiveUpdateToast && (
-        <div className="fixed top-20 right-4 bg-emerald-600 text-white font-semibold text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 z-50 border border-emerald-500/30 transition-all duration-300 animate-slide-in">
-          <span className="text-sm">🔄</span>
-          <span>Dados atualizados em tempo real!</span>
-        </div>
-      )}
       {dbConnectionError && (
         <div className="w-full bg-red-600 text-white font-medium text-center py-3 px-4 text-sm flex items-center justify-center gap-2 shadow-inner z-50">
           <span>⚠ Erro de conexão com o banco de dados. Tente recarregar a página.</span>
@@ -1960,10 +1947,11 @@ export default function App() {
               <span className="w-2 h-2 bg-[#F11E26] rounded-full self-baseline mb-1 sm:mb-1.5 ml-1 animate-pulse"></span>
             </div>
             <div className="h-5 w-px bg-white/20"></div>
-            <div>
+            <div className="flex items-center gap-2">
               <p className="text-[11px] text-red-200 font-extrabold tracking-widest uppercase leading-none">
                 SISTEMA DE AUDITORIA
               </p>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Conexão em tempo real ativa"></span>
             </div>
 
             {/* Global Manual status badge visible to all */}
