@@ -170,10 +170,11 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
       date: simulatedDateStr, // Operational system date
       timestamp: Date.now(),
       status: "Sem Estoque Mín/Máx", // Starting status
-      filial: "JABOATÃO", // Automatic Jaboatão unit injection
+      filial: targetBranch.name,
       branchId: targetBranch.id, // Target physical garage selected
       branchName: targetBranch.name,
       obs: undefined, // waiting for almoxarifado resolution
+      registrado_por: user.name || "Supervisor",
       ...dynamicData
     };
 

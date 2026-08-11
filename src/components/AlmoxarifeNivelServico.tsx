@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
-import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig, getBranchIdByName } from "../supabaseService";
+import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig, getBranchIdByName, isSameBranch } from "../supabaseService";
 
 interface AlmoxarifeNivelServicoProps {
   onBack: () => void;
@@ -161,30 +161,41 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   // Dynamic filter logic
   const filteredOccurrences = occurrences.filter((occ) => {
-    // Filter specifically by active branchId using normalized branch mapping
-    const occBranchId = getBranchIdByName(occ.branchId || occ.branchName || occ.filial || "");
-    const targetBranchId = getBranchIdByName(branchId);
-    if (occBranchId && targetBranchId && occBranchId !== targetBranchId) return false;
+    // 1. Filter specifically by active branchId using robust isSameBranch
+    const occBranchRaw = occ.branchId || occ.branchName || occ.filial || "";
+    if (branchId && !isSameBranch(occBranchRaw, branchId)) {
+      return false;
+    }
 
     // 2. Month-specific filtration
-    // If occurrence has a date, verify it matches selected month (e.g. "Junho" corresponds to month 06)
-    if (occ.date) {
-      const parts = occ.date.split("-");
-      if (parts.length === 3) {
-        const monthNum = parseInt(parts[1], 10);
+    if (selectedMonth !== "TODOS" && occ.date) {
+      let monthNum = -1;
+      if (occ.date.includes("-")) {
+        const parts = occ.date.split("-");
+        if (parts.length === 3) {
+          monthNum = parts[0].length === 4 ? parseInt(parts[1], 10) : parseInt(parts[1], 10);
+        }
+      } else if (occ.date.includes("/")) {
+        const parts = occ.date.split("/");
+        if (parts.length === 3) {
+          monthNum = parseInt(parts[1], 10);
+        }
+      }
+
+      if (monthNum >= 1 && monthNum <= 12) {
         const monthsList = [
           "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
           "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
         ];
         const occMonthName = monthsList[monthNum - 1];
-        if (occMonthName !== selectedMonth) return false;
+        if (occMonthName.toLowerCase() !== selectedMonth.toLowerCase()) {
+          return false;
+        }
       }
     }
 
     // 3. Tab filter: Ativos vs Resolvidos
     const isResolved = occ.status === "RESOLVIDO" || occ.status === "Chegou"; 
-    // Wait, the prompt says "parando de contar apenas quando o status mudar para RESOLVIDO".
-    // We treat RESOLVIDO and CHEGOU as resolved/closed. Let's make ATIVOS show pending ones.
     if (activeTab === "ATIVOS") {
       return !isResolved;
     } else {
@@ -317,6 +328,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="w-full text-sm font-black border border-slate-200 pl-3 pr-10 py-2.5 bg-slate-50 rounded-xl text-[#1B2A4A] appearance-none focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
           >
+            <option value="TODOS">Todos os Meses</option>
             {["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"].map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}

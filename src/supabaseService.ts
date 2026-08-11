@@ -938,18 +938,52 @@ export async function dbBuscarTodasAvaliacoes(mes: string | number, ano: string 
 }
 
 export const getBranchIdByName = (name: string): string => {
-  const norm = (name || "").toUpperCase().trim();
-  if (norm.includes("UNITRANS JP")) return "unitrans-jp";
-  if (norm.includes("SANTA MARIA JP")) return "santa-maria-jp";
-  if (norm.includes("TRANS CG BAYEUX")) return "trans-cg-bayeux";
+  if (!name) return "";
+  const cleanStr = name.trim().toLowerCase();
+  if (cleanStr === "fretamento-jaboatao") return "fretamento-jaboatao";
+  if (cleanStr === "rodoviario-jaboatao") return "rodoviario-jaboatao";
+  if (cleanStr === "unitrans-jp") return "unitrans-jp";
+  if (cleanStr === "santa-maria-jp") return "santa-maria-jp";
+  if (cleanStr === "trans-cg-bayeux") return "trans-cg-bayeux";
+  if (cleanStr === "expresso-nacional") return "expresso-nacional";
+  if (cleanStr === "acandido-cg") return "acandido-cg";
+  if (cleanStr === "rodoviario-cabedelo") return "rodoviario-cabedelo";
+  if (cleanStr === "rodoviario-fortaleza") return "rodoviario-fortaleza";
+  if (cleanStr === "fretamento-maracanau") return "fretamento-maracanau";
+  if (cleanStr === "reunidas-nat") return "reunidas-nat";
+  if (cleanStr === "fretamento-pb") return "fretamento-pb";
+  if (cleanStr === "unissana-rn" || cleanStr === "unissanta-rn") return "unissanta-rn";
+
+  const norm = cleanStr.toUpperCase().replace(/-/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (norm.includes("UNITRANS")) return "unitrans-jp";
+  if (norm.includes("SANTA MARIA")) return "santa-maria-jp";
+  if (norm.includes("BAYEUX")) return "trans-cg-bayeux";
   if (norm.includes("TRANS CG")) return "expresso-nacional";
-  if (norm.includes("A.CÂNDIDO CG") || norm.includes("CANDIDO CG")) return "acandido-cg";
-  if (norm.includes("RODOVIARIO JABOATAO") || norm.includes("RODOVIÁRIO JABOATÃO")) return "rodoviario-jaboatao";
-  if (norm.includes("FRETAMENTO JABOATAO") || norm.includes("FRETAMENTO JABOATÃO")) return "fretamento-jaboatao";
-  if (norm.includes("RODOVIARIO CABEDELO") || norm.includes("RODOVIÁRIO CABEDELO")) return "rodoviario-cabedelo";
-  if (norm.includes("RODOVIARIO FORTALEZA") || norm.includes("RODOVIÁRIO FORTALEZA")) return "rodoviario-fortaleza";
-  if (norm.includes("FRETAMENTO MARACANAU") || norm.includes("FRETAMENTO MARACANAÚ")) return "fretamento-maracanau";
-  return name.toLowerCase().replace(/\s+/g, "-");
+  if (norm.includes("CANDIDO")) return "acandido-cg";
+  if (norm.includes("RODOVIARIO") && norm.includes("JABOATAO")) return "rodoviario-jaboatao";
+  if (norm.includes("FRETAMENTO") && norm.includes("JABOATAO")) return "fretamento-jaboatao";
+  if (norm.includes("CABEDELO")) return "rodoviario-cabedelo";
+  if (norm.includes("FORTALEZA")) return "rodoviario-fortaleza";
+  if (norm.includes("MARACANAU")) return "fretamento-maracanau";
+  if (norm.includes("REUNIDAS")) return "reunidas-nat";
+  if (norm.includes("FRETAMENTO") && norm.includes("PB")) return "fretamento-pb";
+  if (norm.includes("UNISSANTA") || norm.includes("UNISSANA")) return "unissanta-rn";
+  return cleanStr.replace(/\s+/g, "-");
+};
+
+export const isSameBranch = (branchA: string, branchB: string): boolean => {
+  if (!branchA || !branchB) return false;
+  if (branchA === branchB) return true;
+
+  const idA = getBranchIdByName(branchA);
+  const idB = getBranchIdByName(branchB);
+  if (idA && idB && idA === idB) return true;
+
+  const cleanA = branchA.toLowerCase().replace(/^almoxarifado\s+/i, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const cleanB = branchB.toLowerCase().replace(/^almoxarifado\s+/i, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (cleanA === cleanB) return true;
+
+  return false;
 };
 
 const twinPairs = [
@@ -1878,35 +1912,46 @@ export async function dbSalvarNivelServico(registro: any, requesterRole?: string
   checkPermission(["ADMIN", "SUPERVISOR", "ALMOXARIFE"], requesterRole);
   const rawBranch = registro.almoxarifado_id || registro.branchId || registro.branchName || registro.filial || "";
   const canonicalBranchId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
+  const canonicalBranchName = registro.branchName || registro.almoxarifado || registro.filial || getBranchNameById(canonicalBranchId) || canonicalBranchId;
+
+  const payload: any = {
+    almoxarifado_id: canonicalBranchId,
+    almoxarifado: canonicalBranchName,
+    veiculo: registro.veiculo || "",
+    codigo_material: registro.codigo_material || registro.codigoMaterial || "",
+    material_falta: registro.material_falta || registro.material || "",
+    solicitante: registro.solicitante || "",
+    data_ocorrencia: registro.data_ocorrencia || registro.date || new Date().toISOString().split("T")[0],
+    status: registro.status || "EM ABERTO",
+    observacao: registro.observacao || registro.obs || "",
+    dias_aberto: registro.dias_aberto || 0,
+    data_resolucao: registro.data_resolucao || registro.resolvedAt || null,
+    registrado_por: registro.registrado_por || "Supervisor",
+    updated_at: new Date().toISOString()
+  };
+
+  if (registro.id && !registro.id.startsWith("tmp") && !registro.id.startsWith("occ-")) {
+    payload.id = registro.id;
+  }
 
   const { error } = await supabase
     .from('nivel_servico')
-    .upsert({
-      id: registro.id && !registro.id.startsWith("tmp") ? registro.id : undefined,
-      almoxarifado_id: canonicalBranchId,
-      veiculo: registro.veiculo || "",
-      codigo_material: registro.codigo_material || registro.codigoMaterial || "",
-      material_falta: registro.material_falta || registro.material || "",
-      solicitante: registro.solicitante || "",
-      data_ocorrencia: registro.data_ocorrencia || registro.date || new Date().toISOString().split("T")[0],
-      status: registro.status || "EM ABERTO",
-      observacao: registro.observacao || registro.obs || "",
-      dias_aberto: registro.dias_aberto || 0,
-      data_resolucao: registro.data_resolucao || registro.resolvedAt || null,
-      registrado_por: registro.registrado_por || "Supervisor",
-      updated_at: new Date().toISOString()
-    });
-  if (error) throw error;
+    .upsert(payload);
+
+  if (error) {
+    console.error("Error upserting nivel_servico:", error);
+    throw error;
+  }
 }
 
 export async function dbBuscarNivelServico(almoxarifado_id: string) {
   const { data, error } = await supabase
     .from('nivel_servico')
-    .select('id, almoxarifado_id, veiculo, codigo_material, material_falta, solicitante, data_ocorrencia, status, observacao, dias_aberto, data_resolucao, registrado_por, created_at')
-    .eq('almoxarifado_id', almoxarifado_id)
+    .select('id, almoxarifado_id, almoxarifado, veiculo, codigo_material, material_falta, solicitante, data_ocorrencia, status, observacao, dias_aberto, data_resolucao, registrado_por, created_at')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  if (!data) return [];
+  return data.filter(item => isSameBranch(item.almoxarifado_id || item.almoxarifado || "", almoxarifado_id));
 }
 
 export const dbDeleteOccurrence = async (id: string, requesterRole?: string): Promise<boolean> => {
@@ -1939,16 +1984,20 @@ export async function dbFetchNivelServicioEntries() {
 
 export const dbFetchOccurrences = async (): Promise<MaterialOccurrence[]> => {
   if (!isSupabaseReady()) return [];
-  const { data, error } = await supabase.from('nivel_servico').select('id, almoxarifado_id, almoxarifado, status, material_falta, data_ocorrencia, veiculo, solicitante, codigo_material, observacao, dias_aberto, data_resolucao, registrado_por, created_at').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('nivel_servico')
+    .select('id, almoxarifado_id, almoxarifado, status, material_falta, data_ocorrencia, veiculo, solicitante, codigo_material, observacao, dias_aberto, data_resolucao, registrado_por, created_at')
+    .order('created_at', { ascending: false });
+
   if (error || !data) return [];
   return data.map(o => {
-    const rawBranch = o.almoxarifado_id || "";
-    const bId = (rawBranch.includes("-") && !rawBranch.includes(" ")) ? rawBranch : (getBranchIdByName(rawBranch) || rawBranch);
-    const bName = getBranchNameById(bId) || rawBranch;
+    const rawBranch = o.almoxarifado_id || o.almoxarifado || "";
+    const bId = getBranchIdByName(rawBranch) || rawBranch;
+    const bName = getBranchNameById(bId) || o.almoxarifado || rawBranch;
     const validStatus = (o.status as MaterialOccurrence['status']) || "EM ABERTO";
     return {
       id: o.id,
-      material: o.material_falta,
+      material: o.material_falta || "",
       date: o.data_ocorrencia || "",
       status: validStatus,
       branchId: bId,

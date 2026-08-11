@@ -1954,33 +1954,35 @@ export default function App() {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Conexão em tempo real ativa"></span>
             </div>
 
-            {/* Global Manual status badge visible to all */}
-            <div className="ml-2">
-              {cycleState.status === "ABERTO" && (
-                <span className="inline-flex bg-[#FEE8E8] border border-[#F11E26]/40 text-[#F11E26] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
-                  <span className="w-2 h-2 rounded-full bg-[#F11E26]"></span>
-                  CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
-                </span>
-              )}
-              {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
-                <span className="inline-flex bg-[#FEF3C7] border border-[#D97706]/40 text-[#D97706] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
-                  <span className="w-2 h-2 rounded-full bg-[#D97706]"></span>
-                  AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
-                </span>
-              )}
-              {cycleState.status === "FECHADO" && (
-                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
-                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                  CICLO FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
-                </span>
-              )}
-              {cycleState.status === "NENHUM" && (
-                <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
-                  <span className="w-2 h-2 rounded-full bg-[#94A3B8]"></span>
-                  NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
-                </span>
-              )}
-            </div>
+            {/* Global Manual status badge visible to all except SUPERVISOR */}
+            {user && user.role !== "SUPERVISOR" && (
+              <div className="ml-2">
+                {cycleState.status === "ABERTO" && (
+                  <span className="inline-flex bg-[#FEE8E8] border border-[#F11E26]/40 text-[#F11E26] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                    <span className="w-2 h-2 rounded-full bg-[#F11E26]"></span>
+                    CICLO ABERTO — {cycleState.activeMonth} {cycleState.activeYear}
+                  </span>
+                )}
+                {cycleState.status === "AGUARDANDO_FECHAMENTO" && (
+                  <span className="inline-flex bg-[#FEF3C7] border border-[#D97706]/40 text-[#D97706] font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                    <span className="w-2 h-2 rounded-full bg-[#D97706]"></span>
+                    AGUARDANDO FECHAMENTO — {cycleState.activeMonth} {cycleState.activeYear}
+                  </span>
+                )}
+                {cycleState.status === "FECHADO" && (
+                  <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    CICLO FECHADO — {cycleState.activeMonth} {cycleState.activeYear}
+                  </span>
+                )}
+                {cycleState.status === "NENHUM" && (
+                  <span className="inline-flex bg-slate-800 border border-slate-600 text-slate-300 font-bold px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider items-center gap-1.5 shadow-sm select-none">
+                    <span className="w-2 h-2 rounded-full bg-[#94A3B8]"></span>
+                    NENHUM CICLO ATIVO — Aguardando abertura pelo auditor
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
