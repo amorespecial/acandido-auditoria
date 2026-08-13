@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
-import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady } from "../supabaseService";
+import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_TOP10_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeContagemProps {
   onBack: () => void;
-  onSubmitEvidence: (criterionId: string, comments: string, photos: string[], top10Quantities?: number[]) => void;
+  onSubmitEvidence: (
+    criterionId: string,
+    comments: string,
+    photos: string[],
+    top10Quantities?: number[],
+    onProgress?: (msg: string, percent: number) => void
+  ) => Promise<any> | void;
   criterionState?: CriterionState;
   top10?: Array<{ code: string; name: string }>;
   branchId: string;
@@ -165,6 +171,8 @@ export default function AlmoxarifeContagem({
     return criterionState?.evidenceNotes || "";
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState("");
+  const [uploadProgressPct, setUploadProgressPct] = useState(0);
   const [activeImgLightbox, setActiveImgLightbox] = useState<string | null>(null);
 
   // Drag and drop states per item code
@@ -188,18 +196,20 @@ export default function AlmoxarifeContagem({
       return photoOk && qtyOk && customOk;
     });
 
-  // Handle local File conversions to Base64
-  const processFile = (itemCode: string, file: File) => {
+  // Handle local File conversions with compression
+  const processFile = async (itemCode: string, file: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setUploadedPhotos((prev) => ({
-        ...prev,
-        [itemCode]: dataUrl
-      }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await comprimirImagem(file, 800, 1200, 0.7);
+      if (compressed) {
+        setUploadedPhotos((prev) => ({
+          ...prev,
+          [itemCode]: compressed
+        }));
+      }
+    } catch (err) {
+      console.error("Erro ao comprimir imagem de item:", err);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, itemCode: string) => {
@@ -239,24 +249,40 @@ export default function AlmoxarifeContagem({
   };
 
   // Submit all photos back up to parent state
-  const handleFormSubmission = (e: React.FormEvent) => {
+  const handleFormSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSubmitBtnAllowed) {
-      alert("Por favor, anexe a foto de todos os itens antes de enviar os dados.");
+      alert("Por favor, preencha todos os campos obrigatórios e anexe as fotos antes de enviar.");
       return;
     }
     setIsSubmitting(true);
+    setUploadProgressMsg("Iniciando envio...");
+    setUploadProgressPct(5);
 
-    setTimeout(() => {
+    try {
       const finalComment = commentsInput.trim() || `Evidências fotográficas do TOP 10 concluídas para o ciclo de ${activeMonth} de ${activeYear}.`;
       // Map photos in the strict order of items
       const orderedPhotos = items.map((it: any) => uploadedPhotos[it.code] || "");
       const orderedQuantities = items.map((it: any) => Number(quantities[it.code]) || 0);
 
-      onSubmitEvidence("2", finalComment, orderedPhotos, orderedQuantities);
+      await onSubmitEvidence(
+        "2",
+        finalComment,
+        orderedPhotos,
+        orderedQuantities,
+        (msg: string, pct: number) => {
+          setUploadProgressMsg(msg);
+          setUploadProgressPct(pct);
+        }
+      );
+
       setIsSubmitting(false);
       onBack();
-    }, 1200);
+    } catch (err: any) {
+      console.error("Erro ao transmitir TOP 10:", err);
+      alert(`Erro na transmissão do TOP 10: ${err?.message || "Erro de conexão. Tente novamente."}`);
+      setIsSubmitting(false);
+    }
   };
 
   // 3. UI Decision Tree
@@ -666,13 +692,48 @@ export default function AlmoxarifeContagem({
               ></textarea>
             </div>
 
+            {/* Real-time progress bar indicator during submission */}
+            {isSubmitting && (
+              <div className="bg-slate-900 text-white p-4 rounded-xl space-y-3 border border-slate-800 shadow-xl my-3">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span className="text-emerald-300 font-mono text-[11px] uppercase tracking-wide">
+                      {uploadProgressMsg || "Processando envio..."}
+                    </span>
+                  </div>
+                  <span className="font-mono text-emerald-400 font-black text-xs">{uploadProgressPct}%</span>
+                </div>
+
+                <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700 p-0.5">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 shadow-sm"
+                    style={{ width: `${Math.max(5, uploadProgressPct)}%` }}
+                  />
+                </div>
+
+                <div className="text-[10px] font-mono text-slate-400 text-center tracking-wider">
+                  {(() => {
+                    const blocksTotal = 10;
+                    const filled = Math.round((uploadProgressPct / 100) * blocksTotal);
+                    const empty = blocksTotal - filled;
+                    const barStr = "█".repeat(filled) + "░".repeat(empty);
+                    return `[${barStr}] ${uploadProgressPct}%`;
+                  })()}
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={!isSubmitBtnAllowed || isSubmitting}
               className={`w-full py-3.5 rounded-xl text-xs font-extrabold uppercase tracking-widest text-center flex items-center justify-center gap-2 transition shadow ${
-                isSubmitBtnAllowed
+                isSubmitBtnAllowed && !isSubmitting
                   ? "bg-[#1B2A4A] text-white hover:opacity-95 active:scale-95"
-                  : "bg-slate-100 text-slate-450 text-slate-400 cursor-not-allowed border border-slate-150"
+                  : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-150"
               }`}
             >
               {isSubmitting ? (

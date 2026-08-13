@@ -68,18 +68,169 @@ export const base64ToBlob = (base64: string): Blob => {
   }
 };
 
-// Supabase Storage file upload helper with signed URL (1 hour expiration)
+// Helper to safely write to localStorage without crashing on QuotaExceededError
+export function safeSetLocalStorage(key: string, data: any): boolean {
+  if (typeof window === "undefined" || !window.localStorage) return false;
+
+  const sanitizeHistoryData = (items: any[]) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item: any) => {
+      if (!item || typeof item !== 'object') return item;
+      const newItem = { ...item };
+      if (Array.isArray(newItem.criterios)) {
+        newItem.criterios = newItem.criterios.map((c: any) => {
+          if (!c || typeof c !== 'object') return c;
+          const copy = { ...c };
+          if (typeof copy.links_evidencia === 'string' && copy.links_evidencia.startsWith('data:')) {
+            delete copy.links_evidencia;
+          } else if (Array.isArray(copy.links_evidencia)) {
+            copy.links_evidencia = copy.links_evidencia.filter((l: any) => typeof l !== 'string' || !l.startsWith('data:'));
+          }
+          if (typeof copy.descricao_evidencia === 'string' && copy.descricao_evidencia.length > 300) {
+            copy.descricao_evidencia = copy.descricao_evidencia.slice(0, 300) + '...';
+          }
+          return copy;
+        });
+      }
+      return newItem;
+    });
+  };
+
+  try {
+    let payload = data;
+    if (key === "acandido_history" && Array.isArray(data)) {
+      payload = sanitizeHistoryData(data);
+    }
+    const valStr = typeof payload === "string" ? payload : JSON.stringify(payload);
+    localStorage.setItem(key, valStr);
+    return true;
+  } catch (err) {
+    console.warn(`[safeSetLocalStorage] Initial setItem failed for key '${key}':`, err);
+
+    // Attempt cleanup of non-essential cached keys to free up space
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("acandido_materials_parados_") || k.startsWith("acandido_certificates_") || k.includes("_backup_"))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (cleanErr) {
+      console.warn("[safeSetLocalStorage] Clean up attempt failed:", cleanErr);
+    }
+
+    // Retry setItem with sanitized/minimal payload
+    try {
+      let payload = data;
+      if (Array.isArray(data)) {
+        payload = sanitizeHistoryData(data);
+      }
+      const valStr = typeof payload === "string" ? payload : JSON.stringify(payload);
+      localStorage.setItem(key, valStr);
+      return true;
+    } catch (secondErr) {
+      console.warn(`[safeSetLocalStorage] Second setItem attempt failed for key '${key}':`, secondErr);
+      return false;
+    }
+  }
+}
+
+// Client-side image compression helper
+export async function comprimirImagem(
+  fileSource: File | Blob | string,
+  maxSizeKB: number = 800,
+  maxDim: number = 1200,
+  quality: number = 0.7
+): Promise<string> {
+  if (!fileSource) return "";
+  if (typeof fileSource === "string" && !fileSource.startsWith("data:image")) {
+    return fileSource;
+  }
+
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    const img = new Image();
+
+    const processImage = () => {
+      let width = img.width || 1200;
+      let height = img.height || 1200;
+
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height / width) * maxDim);
+          width = maxDim;
+        } else {
+          width = Math.round((width / height) * maxDim);
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+      try {
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(dataUrl);
+      } catch (e) {
+        if (typeof fileSource === "string") resolve(fileSource);
+        else resolve("");
+      }
+    };
+
+    img.onerror = () => {
+      if (typeof fileSource === "string") resolve(fileSource);
+      else resolve("");
+    };
+
+    if (typeof fileSource === "string") {
+      img.onload = processImage;
+      img.src = fileSource;
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.onload = processImage;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => {
+        resolve("");
+      };
+      reader.readAsDataURL(fileSource);
+    }
+  });
+}
+
+// Supabase Storage file upload helper with compression and public URL support
 export const uploadFile = async (
-  bucket: 'evidencias-almoxarife' | 'evidencias-auditor',
+  bucket: 'evidencias-almoxarife' | 'evidencias-auditor' | 'evidencias' | string,
   filePath: string,
-  fileSource: File | Blob | string // string means base64
+  fileSource: File | Blob | string // string means base64 or URL
 ): Promise<string> => {
   try {
+    if (typeof fileSource === 'string' && !fileSource.startsWith('data:') && !fileSource.startsWith('blob:')) {
+      return fileSource; // Already an uploaded URL
+    }
+
+    let compressedSource = fileSource;
+    if (typeof fileSource === 'string' && fileSource.startsWith('data:image')) {
+      compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+    } else if (fileSource instanceof File || fileSource instanceof Blob) {
+      if (fileSource.type.startsWith('image/')) {
+        compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+      }
+    }
+
     let blob: Blob;
-    if (typeof fileSource === 'string') {
-      blob = base64ToBlob(fileSource);
+    if (typeof compressedSource === 'string') {
+      blob = base64ToBlob(compressedSource);
     } else {
-      blob = fileSource;
+      blob = compressedSource;
     }
 
     const cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
@@ -92,23 +243,44 @@ export const uploadFile = async (
       return `https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600`;
     }
 
-    const { error } = await supabase.storage.from(bucket).upload(cleanPath, blob, {
+    const primaryBucket = bucket || 'evidencias-almoxarife';
+    let targetBucket = primaryBucket;
+
+    let { error } = await supabase.storage.from(primaryBucket).upload(cleanPath, blob, {
       cacheControl: '3600',
       upsert: true
     });
 
+    if (error && (error.message?.includes('not found') || (error as any).statusCode === 404)) {
+      const fallbackBucket = primaryBucket === 'evidencias-almoxarife' ? 'evidencias' : 'evidencias-almoxarife';
+      console.warn(`Bucket ${primaryBucket} error, attempting fallback bucket ${fallbackBucket}:`, error);
+      targetBucket = fallbackBucket;
+      const fallbackResult = await supabase.storage.from(fallbackBucket).upload(cleanPath, blob, {
+        cacheControl: '3600',
+        upsert: true
+      });
+      error = fallbackResult.error;
+    }
+
     if (error) {
-      console.error(`Error uploading to Supabase Storage (${bucket}):`, error);
+      console.error(`Error uploading to Supabase Storage (${targetBucket}):`, error);
       throw new Error(`Falha no upload do arquivo: ${error.message || "Erro de envio no Storage"}`);
     }
 
+    // Try public URL first
+    const { data: publicUrlData } = supabase.storage.from(targetBucket).getPublicUrl(cleanPath);
+    if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.endsWith('/')) {
+      return publicUrlData.publicUrl;
+    }
+
+    // Fallback to 1-year signed URL
     const { data, error: signedError } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(cleanPath, 3600);
+      .from(targetBucket)
+      .createSignedUrl(cleanPath, 31536000);
 
     if (signedError || !data?.signedUrl) {
       console.error("Error creating signed URL:", signedError);
-      throw signedError || new Error("Falha ao gerar URL assinada do arquivo");
+      throw signedError || new Error("Falha ao gerar URL da imagem enviada.");
     }
 
     return data.signedUrl;
@@ -117,6 +289,44 @@ export const uploadFile = async (
     throw err instanceof Error ? err : new Error(String(err?.message || "Erro ao realizar upload do arquivo."));
   }
 };
+
+// Retry handler for uploads with progressive compression
+export const uploadFotoWithRetry = async (
+  bucket: string = 'evidencias-almoxarife',
+  filePath: string,
+  fileSource: File | Blob | string,
+  tentativas = 3,
+  onRetry?: (message: string) => void
+): Promise<string> => {
+  let compressedSource = fileSource;
+  if (typeof fileSource === "string" && fileSource.startsWith("data:image")) {
+    compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+  } else if (fileSource instanceof File || fileSource instanceof Blob) {
+    if (fileSource.type.startsWith("image/")) {
+      compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+    }
+  }
+
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await uploadFile(bucket, filePath, compressedSource);
+    } catch (err) {
+      console.warn(`[uploadFotoWithRetry] Tentativa ${i + 1}/${tentativas} falhou para ${filePath}:`, err);
+      if (i < tentativas - 1) {
+        if (onRetry) {
+          onRetry("Foto muito grande. Reduzindo qualidade e tentando novamente...");
+        }
+        compressedSource = await comprimirImagem(compressedSource, 500, 900, 0.5);
+        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("Upload falhou após 3 tentativas");
+};
+
+export const uploadFoto = uploadFotoWithRetry;
 
 // ==========================================
 // ROLE AND PERMISSION VALIDATION HELPERS (FASE 7)
@@ -1160,44 +1370,79 @@ export const dbFetchAllEvaluationsForPeriod = async (
 
   const mesNum = monthNameToNum(mesName);
   const anoNum = parseInt(anoStr, 10);
+  const mesNumStr = String(mesNum);
 
-  // Run both queries in parallel to fetch all data for the period at once
-  const [evaluationsResult, auditModesResult] = await Promise.all([
-    supabase
-      .from('avaliacoes')
-      .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
-      .eq('mes', mesNum)
-      .eq('ano', anoNum),
-    supabase
+  let evaluationsData: any[] | null = null;
+  let evalsError: any = null;
+  let auditModesData: any[] | null = null;
+  let modesError: any = null;
+
+  // Execute audit_modes and avaliacoes queries safely
+  try {
+    const modesPromise = supabase
       .from('audit_modes')
       .select('almoxarifado_id, criterio_id, modo')
-      .eq('mes', mesName)
-      .eq('ano', anoStr)
-  ]);
+      .or(`mes.eq."${mesName}",mes.eq.${mesNum},mes.eq."${mesNumStr}"`)
+      .or(`ano.eq."${anoStr}",ano.eq.${anoNum}`);
 
-  let evaluationsData = evaluationsResult.data;
-  let evalsError = evaluationsResult.error;
-
-  if (evalsError || !evaluationsData || evaluationsData.length === 0) {
-    const fallbackResult = await supabase
+    const evalsPromise = supabase
       .from('avaliacoes')
       .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
-      .eq('mes', mesName)
-      .eq('ano', anoStr);
+      .or(`mes.eq.${mesNum},mes.eq."${mesName}",mes.eq."${mesNumStr}"`)
+      .or(`ano.eq.${anoNum},ano.eq."${anoStr}"`);
+
+    const [modesRes, evalsRes] = await Promise.all([modesPromise, evalsPromise]);
     
-    if (!fallbackResult.error && fallbackResult.data && fallbackResult.data.length > 0) {
-      evaluationsData = fallbackResult.data;
-      evalsError = null;
+    auditModesData = modesRes.data;
+    modesError = modesRes.error;
+
+    evaluationsData = evalsRes.data;
+    evalsError = evalsRes.error;
+  } catch (err) {
+    console.warn("[dbFetchAllEvaluationsForPeriod] Parallel fetch exception:", err);
+  }
+
+  // Fallback 1: Direct numeric equality query if combined query timed out or errored
+  if (evalsError || !evaluationsData) {
+    try {
+      const retryResult = await supabase
+        .from('avaliacoes')
+        .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
+        .eq('mes', mesNum)
+        .eq('ano', anoNum);
+
+      if (!retryResult.error && retryResult.data) {
+        evaluationsData = retryResult.data;
+        evalsError = null;
+      }
+    } catch (e) {
+      console.warn("[dbFetchAllEvaluationsForPeriod] Fallback numeric query failed:", e);
     }
   }
 
-  const { data: auditModesData, error: modesError } = auditModesResult;
+  // Fallback 2: String month name equality query
+  if (evalsError || !evaluationsData || evaluationsData.length === 0) {
+    try {
+      const fallbackResult = await supabase
+        .from('avaliacoes')
+        .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em, audit_mode, modo_auditoria')
+        .eq('mes', mesName)
+        .eq('ano', anoStr);
+      
+      if (!fallbackResult.error && fallbackResult.data && fallbackResult.data.length > 0) {
+        evaluationsData = fallbackResult.data;
+        evalsError = null;
+      }
+    } catch (e) {
+      console.warn("[dbFetchAllEvaluationsForPeriod] Fallback string query failed:", e);
+    }
+  }
 
   if (evalsError) {
-    console.error("Error in dbFetchAllEvaluationsForPeriod (avaliacoes):", evalsError);
+    console.warn("Error in dbFetchAllEvaluationsForPeriod (avaliacoes):", evalsError);
   }
   if (modesError) {
-    console.error("Error in dbFetchAllEvaluationsForPeriod (audit_modes):", modesError);
+    console.warn("Error in dbFetchAllEvaluationsForPeriod (audit_modes):", modesError);
   }
 
   const result: Record<string, Record<string, Partial<CriterionState>>> = {};
@@ -1408,6 +1653,255 @@ export const dbSaveEvaluation = async (
 };
 
 // ======================= ALMOXARIFE EVIDENCE SUBMISSIONS =======================
+export async function salvarTop10Completo(dados: {
+  almoxarifadoId: string;
+  mes: string;
+  ano: string;
+  quantidades: number[];
+  fotos: string[];
+  enviadoPor: string;
+  comentario: string;
+  onProgress?: (msg: string, percent: number) => void;
+}) {
+  const fotosUrls: string[] = [];
+  const total = dados.fotos.length;
+
+  for (let i = 0; i < total; i++) {
+    const foto = dados.fotos[i];
+    const pct = total > 0 ? Math.round(((i + 1) / (total + 1)) * 85) : 85;
+    if (dados.onProgress) {
+      dados.onProgress(`Enviando foto ${i + 1} de ${total}...`, pct);
+    }
+
+    if (!foto) {
+      fotosUrls.push('');
+      continue;
+    }
+
+    if (foto.startsWith('http://') || foto.startsWith('https://')) {
+      fotosUrls.push(foto);
+      continue;
+    }
+
+    try {
+      const ext = foto.split(';')[0]?.split('/')[1] || 'jpg';
+      const cleanExt = ext.split('+')[0] || 'jpg';
+      const fileName = `top10/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_${Date.now()}.${cleanExt}`;
+
+      const url = await uploadFotoWithRetry(
+        'evidencias-almoxarife',
+        fileName,
+        foto,
+        3,
+        (retryMsg) => {
+          if (dados.onProgress) {
+            dados.onProgress(`Reenviando foto ${i + 1} de ${total}...`, pct);
+          }
+        }
+      );
+      fotosUrls.push(url);
+    } catch (err) {
+      console.error('Falha no upload da foto do TOP 10:', err);
+      try {
+        const minPhoto = await comprimirImagem(foto, 400, 800, 0.4);
+        const minName = `top10/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_min_${Date.now()}.jpg`;
+        const minUrl = await uploadFile('evidencias-almoxarife', minName, minPhoto);
+        fotosUrls.push(minUrl);
+      } catch (finalErr) {
+        console.error('Falha fatal no upload da foto do TOP 10:', finalErr);
+        fotosUrls.push('');
+      }
+    }
+  }
+
+  if (dados.onProgress) {
+    dados.onProgress(`Gravando dados do TOP 10 no servidor...`, 90);
+  }
+
+  if (isSupabaseReady()) {
+    // 1. Upsert top10_envios
+    const { error: t10Err } = await supabase
+      .from('top10_envios')
+      .upsert({
+        almoxarifado_id: dados.almoxarifadoId,
+        mes: dados.mes,
+        ano: dados.ano,
+        quantidades: dados.quantidades,
+        fotos: fotosUrls,
+        enviado_por: dados.enviadoPor,
+        uploaded_at: new Date().toISOString()
+      }, { onConflict: 'almoxarifado_id,mes,ano' });
+
+    if (t10Err) {
+      console.error("Erro ao dar upsert em top10_envios:", t10Err);
+    }
+
+    // 2. Upsert avaliacoes
+    const mesNum = monthNameToNum(dados.mes);
+    const anoNum = parseInt(dados.ano, 10);
+    const finalDesc = JSON.stringify({
+      notes: dados.comentario,
+      top10AlmoxarifeQuantities: dados.quantidades,
+      top10AuditorQuantities: []
+    });
+
+    let currentAuditMode = "A_Distancia";
+    try {
+      const branchId = getBranchIdByName(dados.almoxarifadoId);
+      const { data: modeData } = await supabase
+        .from('audit_modes')
+        .select('modo')
+        .eq('almoxarifado_id', branchId)
+        .eq('mes', dados.mes)
+        .eq('ano', dados.ano)
+        .eq('criterio_id', "2")
+        .maybeSingle();
+      if (modeData && modeData.modo) {
+        currentAuditMode = modeData.modo;
+      }
+    } catch (e) {}
+
+    const { error: evalErr } = await supabase
+      .from('avaliacoes')
+      .upsert({
+        almoxarifado: dados.almoxarifadoId,
+        mes: mesNum,
+        ano: anoNum,
+        criterio_codigo: "2",
+        criterio_nome: "TOP 10",
+        resultado: "PENDENTE",
+        pontuacao: 0,
+        descricao_evidencia: finalDesc,
+        links_evidencia: fotosUrls,
+        avaliado_por: dados.enviadoPor,
+        avaliado_em: new Date().toISOString(),
+        audit_mode: currentAuditMode,
+        modo_auditoria: currentAuditMode
+      }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+
+    if (evalErr) {
+      console.error("Erro ao dar upsert em avaliacoes para TOP 10:", evalErr);
+      throw evalErr;
+    }
+  }
+
+  if (dados.onProgress) {
+    dados.onProgress(`Concluído!`, 100);
+  }
+
+  return { sucesso: true, fotos: fotosUrls };
+}
+
+export async function salvarLayoutCompleto(dados: {
+  almoxarifadoId: string;
+  mes: string;
+  ano: string;
+  fotos: string[];
+  enviadoPor: string;
+  comentario: string;
+  onProgress?: (msg: string, percent: number) => void;
+}) {
+  const fotosUrls: string[] = [];
+  const total = dados.fotos.length;
+
+  for (let i = 0; i < total; i++) {
+    const foto = dados.fotos[i];
+    const pct = total > 0 ? Math.round(((i + 1) / (total + 1)) * 85) : 85;
+    if (dados.onProgress) {
+      dados.onProgress(`Enviando foto ${i + 1} de ${total}...`, pct);
+    }
+
+    if (!foto) continue;
+
+    if (foto.startsWith('http://') || foto.startsWith('https://')) {
+      fotosUrls.push(foto);
+      continue;
+    }
+
+    try {
+      const ext = foto.split(';')[0]?.split('/')[1] || 'jpg';
+      const cleanExt = ext.split('+')[0] || 'jpg';
+      const fileName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_${Date.now()}.${cleanExt}`;
+
+      const url = await uploadFotoWithRetry(
+        'evidencias-almoxarife',
+        fileName,
+        foto,
+        3,
+        (retryMsg) => {
+          if (dados.onProgress) {
+            dados.onProgress(`Reenviando foto ${i + 1} de ${total}...`, pct);
+          }
+        }
+      );
+      fotosUrls.push(url);
+    } catch (err) {
+      console.error('Falha no upload da foto do layout:', err);
+      try {
+        const minPhoto = await comprimirImagem(foto, 400, 800, 0.4);
+        const minName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_min_${Date.now()}.jpg`;
+        const minUrl = await uploadFile('evidencias-almoxarife', minName, minPhoto);
+        fotosUrls.push(minUrl);
+      } catch (finalErr) {
+        console.error('Falha fatal no upload da foto do layout:', finalErr);
+      }
+    }
+  }
+
+  if (dados.onProgress) {
+    dados.onProgress(`Gravando dados do Layout no servidor...`, 90);
+  }
+
+  if (isSupabaseReady()) {
+    const mesNum = monthNameToNum(dados.mes);
+    const anoNum = parseInt(dados.ano, 10);
+
+    let currentAuditMode = "A_Distancia";
+    try {
+      const branchId = getBranchIdByName(dados.almoxarifadoId);
+      const { data: modeData } = await supabase
+        .from('audit_modes')
+        .select('modo')
+        .eq('almoxarifado_id', branchId)
+        .eq('mes', dados.mes)
+        .eq('ano', dados.ano)
+        .eq('criterio_id', "4")
+        .maybeSingle();
+      if (modeData && modeData.modo) {
+        currentAuditMode = modeData.modo;
+      }
+    } catch (e) {}
+
+    const { error: evalErr } = await supabase
+      .from('avaliacoes')
+      .upsert({
+        almoxarifado: dados.almoxarifadoId,
+        mes: mesNum,
+        ano: anoNum,
+        criterio_codigo: "4",
+        criterio_nome: "LayOut",
+        resultado: "PENDENTE",
+        pontuacao: 0,
+        descricao_evidencia: dados.comentario,
+        links_evidencia: fotosUrls,
+        avaliado_por: dados.enviadoPor,
+        avaliado_em: new Date().toISOString(),
+        audit_mode: currentAuditMode,
+        modo_auditoria: currentAuditMode
+      }, { onConflict: 'almoxarifado,mes,ano,criterio_codigo' });
+
+    if (evalErr) {
+      console.error("Erro ao dar upsert em avaliacoes para LayOut:", evalErr);
+      throw evalErr;
+    }
+  }
+
+  if (dados.onProgress) {
+    dados.onProgress(`Concluído!`, 100);
+  }
+
+  return { sucesso: true, fotos: fotosUrls };
+}
 export const dbFetchAlmoxarifeSubmissions = async (almoxarifado: string, mesName: string, anoStr: string) => {
   if (!isSupabaseReady()) return [];
   // Fallback map envios_almoxarife to top10_envios
@@ -2933,7 +3427,7 @@ export async function dbFetchHistory(): Promise<any[]> {
   try {
     const { data: evalsData } = await supabase
       .from('avaliacoes')
-      .select('*');
+      .select('id, almoxarifado, mes, ano, criterio_codigo, criterio_nome, resultado, pontuacao, descricao_evidencia, links_evidencia, avaliado_por, avaliado_em');
 
     if (evalsData && evalsData.length > 0) {
       const grouped: Record<string, {

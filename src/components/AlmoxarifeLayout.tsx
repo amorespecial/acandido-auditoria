@@ -1,11 +1,17 @@
 import React, { useState } from "react";
 import { CriterionState } from "../types";
-import { dbFetchLayoutConfig, dbFetchLayoutFieldConfig, isSupabaseReady } from "../supabaseService";
+import { dbFetchLayoutConfig, dbFetchLayoutFieldConfig, isSupabaseReady, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_LAYOUT_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeLayoutProps {
   onBack: () => void;
-  onSubmitEvidence: (criterionId: string, comments: string, photos: string[]) => void;
+  onSubmitEvidence: (
+    criterionId: string,
+    comments: string,
+    photos: string[],
+    top10Quantities?: number[],
+    onProgress?: (msg: string, percent: number) => void
+  ) => Promise<any> | void;
   criterionState?: CriterionState;
   branchId: string;
   activeMonth: string;
@@ -36,6 +42,8 @@ export default function AlmoxarifeLayout({
     return criterionState?.evidenceNotes || "";
   });
   const [isSending, setIsSending] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState("");
+  const [uploadProgressPct, setUploadProgressPct] = useState(0);
   const [layoutConfig, setLayoutConfig] = useState<any>(null);
 
   React.useEffect(() => {
@@ -68,23 +76,23 @@ export default function AlmoxarifeLayout({
     ? layoutConfig.location 
     : "Aguardando definição da localização pelo auditor.";
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach((file) => {
-      if (photos.length >= 5) return;
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          setPhotos((prev) => {
-            if (prev.length >= 5) return prev;
-            return [...prev, reader.result as string];
-          });
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (photos.length >= 5) break;
+      try {
+        const compressed = await comprimirImagem(file, 800, 1200, 0.7);
+        if (compressed) {
+          setPhotos((prev) => (prev.length < 5 ? [...prev, compressed] : prev));
         }
-      };
-      reader.readAsDataURL(file as any);
-    });
+      } catch (err) {
+        console.error("Erro ao comprimir imagem:", err);
+      }
+    }
+    e.target.value = "";
   };
 
   const handleSimulatePreset = () => {
@@ -140,7 +148,7 @@ export default function AlmoxarifeLayout({
 
   const [showFieldErrors, setShowFieldErrors] = useState(false);
 
-  const handleConfirmSubmission = (e: React.FormEvent) => {
+  const handleConfirmSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowFieldErrors(true);
 
@@ -161,16 +169,32 @@ export default function AlmoxarifeLayout({
       }
     }
     setIsSending(true);
+    setUploadProgressMsg("Iniciando envio das fotos...");
+    setUploadProgressPct(5);
 
-    setTimeout(() => {
+    try {
       const finalComments =
         commentInput ||
         `LayOut da localização auditada deste ciclo enviado. Organização e limpeza de canaletas, prateleiras de código e arrumação física efetuadas com sucesso.`;
 
-      onSubmitEvidence("4", finalComments, photos);
+      await onSubmitEvidence(
+        "4",
+        finalComments,
+        photos,
+        undefined,
+        (msg: string, pct: number) => {
+          setUploadProgressMsg(msg);
+          setUploadProgressPct(pct);
+        }
+      );
+
       setIsSending(false);
       onBack();
-    }, 1200);
+    } catch (err: any) {
+      console.error("Erro ao enviar evidência do LayOut:", err);
+      alert(`Erro na transmissão do LayOut: ${err?.message || "Erro de conexão. Tente novamente."}`);
+      setIsSending(false);
+    }
   };
 
   const isPhotoRequired = layoutFieldsConfig.fotos !== false;
@@ -360,12 +384,47 @@ export default function AlmoxarifeLayout({
           return null;
         })}
 
+        {/* Real-time progress bar indicator during submission */}
+        {isSending && (
+          <div className="bg-slate-900 text-white p-4 rounded-xl space-y-3 border border-slate-800 shadow-xl my-3 font-sans">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <div className="flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-emerald-300 font-mono text-[11px] uppercase tracking-wide">
+                  {uploadProgressMsg || "Processando envio..."}
+                </span>
+              </div>
+              <span className="font-mono text-emerald-400 font-black text-xs">{uploadProgressPct}%</span>
+            </div>
+
+            <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700 p-0.5">
+              <div
+                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 shadow-sm"
+                style={{ width: `${Math.max(5, uploadProgressPct)}%` }}
+              />
+            </div>
+
+            <div className="text-[10px] font-mono text-slate-400 text-center tracking-wider">
+              {(() => {
+                const blocksTotal = 10;
+                const filled = Math.round((uploadProgressPct / 100) * blocksTotal);
+                const empty = blocksTotal - filled;
+                const barStr = "█".repeat(filled) + "░".repeat(empty);
+                return `[${barStr}] ${uploadProgressPct}%`;
+              })()}
+            </div>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={isSubmitDisabled}
           className={`w-full py-3 rounded-lg text-xs font-bold shadow-md transition-all text-center flex items-center justify-center gap-2 select-none ${
             isSubmitDisabled
-              ? "bg-slate-250 text-slate-400 cursor-not-allowed border border-slate-200 bg-slate-200"
+              ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-200"
               : "bg-[#1B2A4A] hover:opacity-95 text-white active:scale-95"
           }`}
         >

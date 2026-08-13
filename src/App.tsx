@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Branch, AppUser, CriterionState } from "./types";
 import { initialBranches } from "./mockData";
-import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus, dbFetchAlmoxarifados, getBranchNameById } from "./supabaseService";
+import { seedDatabaseIfEmpty, dbFetchEvaluations, dbFetchAllEvaluationsForPeriod, dbSaveEvaluation, isSupabaseReady, dbFetchCycleState, dbSaveCycleState, dbFetchAllCycles, uploadFile, uploadFotoWithRetry, comprimirImagem, dbSubmitAlmoxarifeEvidence, dbFetchUsers, dbFetchSchedules, dbFetchHistory, dbSaveHistory, dbSalvarHistorico, dbFetchAllNonMovingSummaries, monthNumToName, CycleState, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, normalizeCycleStatus, dbFetchAlmoxarifados, getBranchNameById, safeSetLocalStorage, salvarTop10Completo, salvarLayoutCompleto } from "./supabaseService";
 import { supabase, realtimeFlags } from "./supabaseClient";
 import { useRealtimeSync } from "./useRealtimeSync";
 import { getCurrentUser, canAccessBranch, canManageUsers, canCloseCycle, canEditSettings, canDeleteHistory, canManageWarranty, canManageOccurrences, canManageCertificates } from "./authorization";
@@ -28,6 +28,12 @@ import SupervisorPanel from "./components/SupervisorPanel";
 const toast = {
   error: (message: string) => {
     alert(message);
+  },
+  info: (message: string) => {
+    console.info("[Toast Info]", message);
+  },
+  success: (message: string) => {
+    console.log("[Toast Success]", message);
   }
 };
 
@@ -426,7 +432,7 @@ export default function App() {
           try {
             const dbHistory = await dbFetchHistory();
             if (dbHistory) {
-              localStorage.setItem("acandido_history", JSON.stringify(dbHistory));
+              safeSetLocalStorage("acandido_history", dbHistory);
               window.dispatchEvent(new Event("realtime-historico-update"));
             }
           } catch (histErr) {
@@ -441,7 +447,7 @@ export default function App() {
             const dbData = await dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre);
             if (dbData && dbData.length > 0) {
               setAllNonMovingSummaries(dbData);
-              localStorage.setItem("acandido_material_sem_movimentacao", JSON.stringify(dbData));
+              safeSetLocalStorage("acandido_material_sem_movimentacao", dbData);
             }
           } catch (matsErr) {
             console.error("Failed to fetch initial materials parados summaries in App.tsx:", matsErr);
@@ -974,7 +980,7 @@ export default function App() {
         const filteredHistoryList = historyList.filter(
           (entry) => entry.monthYear !== "Janeiro 2026"
         );
-        localStorage.setItem("acandido_history", JSON.stringify(filteredHistoryList));
+        safeSetLocalStorage("acandido_history", filteredHistoryList);
         if (isSupabaseReady()) {
           try {
             await dbSaveHistory(filteredHistoryList);
@@ -1590,7 +1596,13 @@ export default function App() {
   };
 
   // Almoxarife submit files/evidence to dynamic state
-  const handleAlmoxarifeSubmitEvidence = async (criterionId: string, comments: string, photos: string[], top10Quantities?: number[]) => {
+  const handleAlmoxarifeSubmitEvidence = async (
+    criterionId: string,
+    comments: string,
+    photos: string[],
+    top10Quantities?: number[],
+    onProgress?: (msg: string, percent: number) => void
+  ) => {
     if (cycleState.status !== "ABERTO") {
       alert("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
       return;
@@ -1601,35 +1613,113 @@ export default function App() {
     const currentBranch = branches.find((b) => b.id === activeBranchId);
     if (!currentBranch) return;
 
-    let processedPhotos = [...photos];
-    if (isSupabaseReady()) {
-      processedPhotos = await Promise.all(
-        photos.map(async (photo, index) => {
-          if (photo.startsWith("data:image")) {
-            try {
-              const ext = photo.split(';')[0].split('/')[1] || 'jpg';
-              const cleanExt = ext.split('+')[0]; // Safe extension
-              const fileName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}.${cleanExt}`;
-              const signedUrl = await uploadFile('evidencias-almoxarife', fileName, photo);
-              return signedUrl;
-            } catch (err) {
-              console.error("Failed to upload submission photo:", err);
-              toast.error("Não foi possível enviar a imagem de evidência.");
-              return photo;
-            }
+    let processedPhotos: string[] = [];
+
+    // 1. Dispatch directly to specialized saving functions for TOP 10 and Layout to guarantee completeness
+    if (criterionId === "1" || criterionId === "2") {
+      const res = await salvarTop10Completo({
+        almoxarifadoId: currentBranch.name,
+        mes: activeMonth,
+        ano: activeYear,
+        quantidades: top10Quantities || [],
+        fotos: photos,
+        enviadoPor: user?.name || "Almoxarife",
+        comentario: comments,
+        onProgress
+      });
+      processedPhotos = res.fotos;
+    } else if (criterionId === "4") {
+      const res = await salvarLayoutCompleto({
+        almoxarifadoId: currentBranch.name,
+        mes: activeMonth,
+        ano: activeYear,
+        fotos: photos,
+        enviadoPor: user?.name || "Almoxarife",
+        comentario: comments,
+        onProgress
+      });
+      processedPhotos = res.fotos;
+    } else {
+      // General handler for other criteria
+      if (isSupabaseReady()) {
+        const uploadedList: string[] = [];
+        let retryWarned = false;
+
+        for (let index = 0; index < photos.length; index++) {
+          const photo = photos[index];
+          const pct = photos.length > 0 ? Math.round(((index + 1) / (photos.length + 1)) * 85) : 85;
+          if (onProgress) {
+            onProgress(`Enviando foto ${index + 1} de ${photos.length}...`, pct);
           }
-          return photo;
-        })
-      );
+
+          if (photo && (photo.startsWith("data:image") || photo.startsWith("blob:"))) {
+            try {
+              const ext = photo.split(';')[0]?.split('/')[1] || 'jpg';
+              const cleanExt = ext.split('+')[0] || 'jpg';
+              const fileName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}.${cleanExt}`;
+
+              const storageUrl = await uploadFotoWithRetry(
+                'evidencias-almoxarife',
+                fileName,
+                photo,
+                3,
+                (retryMsg) => {
+                  if (!retryWarned) {
+                    console.warn("[Upload Retry]", retryMsg);
+                    retryWarned = true;
+                  }
+                }
+              );
+              uploadedList.push(storageUrl);
+            } catch (err) {
+              console.error(`Failed to upload submission photo ${index}:`, err);
+              try {
+                const tinyPhoto = await comprimirImagem(photo, 300, 600, 0.4);
+                const fallbackName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}_min.jpg`;
+                const fallbackUrl = await uploadFile('evidencias-almoxarife', fallbackName, tinyPhoto);
+                uploadedList.push(fallbackUrl);
+              } catch (finalErr) {
+                console.error("Fatal error uploading photo:", finalErr);
+                uploadedList.push('');
+              }
+            }
+          } else if (photo) {
+            uploadedList.push(photo);
+          }
+        }
+        processedPhotos = uploadedList;
+
+        if (onProgress) {
+          onProgress(`Gravando no servidor...`, 90);
+        }
+
+        await dbSubmitAlmoxarifeEvidence(
+          currentBranch.name,
+          activeMonth,
+          activeYear,
+          criterionId,
+          user?.name || "Almoxarife",
+          comments,
+          processedPhotos,
+          top10Quantities
+        );
+      } else {
+        processedPhotos = [...photos];
+      }
     }
 
+    if (onProgress) {
+      onProgress(`Concluído!`, 100);
+    }
+
+    // 2. Local state update ONLY AFTER successful server persistence
     const updatedCriteria = currentBranch.criteria.map((c) => {
       if (c.id === criterionId) {
         const now = new Date();
         const formattedDate = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
         return {
           ...c,
-          status: "ENVIADO" as const, // Sent to auditor for evaluation review
+          status: "ENVIADO" as const,
           evidenceNotes: comments,
           submittedPhotos: processedPhotos,
           top10AlmoxarifeQuantities: top10Quantities,
@@ -1674,7 +1764,6 @@ export default function App() {
 
         handleUpdateCriteria(twinId, twinUpdatedCriteria);
 
-        // Copiar os certificados do Curso Unimobin para o almoxarifado vinculado dentro do mesmo ciclo ativo
         if (criterionId === "6") {
           try {
             const mainKey = `acandido_certificates_${activeBranchId}_${activeMonth}_${activeYear}`;
@@ -1683,7 +1772,6 @@ export default function App() {
             if (certDataOfMain) {
               const parsedCertificates = JSON.parse(certDataOfMain);
               if (Array.isArray(parsedCertificates)) {
-                // Forçar "Certificado enviado" para todos os colaboradores do vinculado também
                 const updatedCertificates = parsedCertificates.map(c => ({
                   ...c,
                   status: "Certificado enviado" as const
@@ -1715,26 +1803,6 @@ export default function App() {
         }
       }
     }
-
-    if (isSupabaseReady()) {
-      try {
-        await dbSubmitAlmoxarifeEvidence(
-          currentBranch.name,
-          activeMonth,
-          activeYear,
-          criterionId,
-          user?.name || "Almoxarife",
-          comments,
-          processedPhotos,
-          top10Quantities
-        );
-      } catch (err) {
-        console.error("Failed to insert into envios_almoxarife:", err);
-        if (criterionId === "6") throw err;
-      }
-    }
-
-    alert("Evidência transmitida com sucesso! Fernando Silva receberá uma notificação para auditar seu envio.");
   };
 
   const handleArchiveCycle = async (month: string, year: string, finalScore: number) => {
