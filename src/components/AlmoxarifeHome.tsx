@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Branch, AppUser } from "../types";
-import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM, dbBuscarCertificados, dbFetchColaboradoresUnimobin, isSupabaseReady } from "../supabaseService";
+import { dbFetchBranchSchedules, monthNumToName, MONTH_NAME_TO_NUM, dbBuscarCertificados, dbFetchColaboradoresUnimobin, isSupabaseReady, getPublicImageUrl } from "../supabaseService";
 import { getCollaboratorsForBranch } from "../mockData";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase } from "../supabaseClient";
@@ -67,6 +67,7 @@ interface AlmoxarifeHomeProps {
   activeYear: string;
   calendarData?: any[];
   cycleState?: any;
+  isLoading?: boolean;
 }
 
 export default function AlmoxarifeHome({
@@ -78,6 +79,7 @@ export default function AlmoxarifeHome({
   activeYear,
   calendarData,
   cycleState,
+  isLoading = false,
 }: AlmoxarifeHomeProps) {
   useRealtimeSync();
   // Score parameters
@@ -275,20 +277,33 @@ export default function AlmoxarifeHome({
         <div className="mt-6 flex items-center justify-between bg-white/10 border border-white/15 p-4 rounded-lg">
           <div>
             <p className="text-xs font-bold text-slate-300 uppercase">Pontuação do Mês</p>
-            <p className="text-3xl font-bold text-white mt-1 font-mono">
-              {score}
-              <span className="text-sm text-slate-300 font-medium">/100 pts</span>
-            </p>
+            {isLoading ? (
+              <div className="h-9 w-24 bg-white/20 animate-pulse rounded mt-1" />
+            ) : (
+              <p className="text-3xl font-bold text-white mt-1 font-mono">
+                {score}
+                <span className="text-sm text-slate-300 font-medium">/100 pts</span>
+              </p>
+            )}
           </div>
           <div className="text-right">
-            <span
-              className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
-                isApproved ? "bg-emerald-600 text-white" : "bg-amber-500 text-[#00194C]"
-              }`}
-            >
-              {isApproved ? "OK (Meta Atingida)" : "Em Alerta"}
-            </span>
-            <p className="text-[11px] text-slate-300 font-bold uppercase mt-2">Sua meta é 80 pts</p>
+            {isLoading ? (
+              <div className="flex flex-col items-end gap-2">
+                <div className="h-6 w-32 bg-white/20 animate-pulse rounded-full" />
+                <div className="h-3 w-20 bg-white/20 animate-pulse rounded" />
+              </div>
+            ) : (
+              <>
+                <span
+                  className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
+                    isApproved ? "bg-emerald-600 text-white" : "bg-amber-500 text-[#00194C]"
+                  }`}
+                >
+                  {isApproved ? "OK (Meta Atingida)" : "Em Alerta"}
+                </span>
+                <p className="text-[11px] text-slate-300 font-bold uppercase mt-2">Sua meta é 80 pts</p>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -339,7 +354,30 @@ export default function AlmoxarifeHome({
           <h3 className="text-sm font-black text-[#1B2A4A] tracking-tight">Status e Envios por Item</h3>
 
           <div className="space-y-3">
-          {activeCriteria.map((crit) => {
+          {isLoading ? (
+            Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={`skeleton-crit-${idx}`}
+                className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3 animate-pulse"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className="w-5 h-5 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3"></div>
+                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>
+                    </div>
+                  </div>
+                  <div className="h-5 w-20 bg-slate-200 dark:bg-slate-700 rounded-full shrink-0"></div>
+                </div>
+                <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                  <div className="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                </div>
+              </div>
+            ))
+          ) : (
+            activeCriteria.map((crit) => {
             const isSpecialCard = crit.id === "7" || crit.id === "9" || crit.id === "1";
             if (isSpecialCard) {
               const tabName = crit.id === "9" ? "Garantias" : crit.id === "7" ? "Serviços" : "Calendário";
@@ -650,20 +688,34 @@ export default function AlmoxarifeHome({
                       </p>
                     )}
 
-                    {crit.submittedPhotos && crit.submittedPhotos.length > 0 && (
-                      <div className="grid grid-cols-4 gap-2 mt-2">
-                        {crit.submittedPhotos.map((photo, i) => (
-                          <div key={i} className="relative aspect-square rounded-md overflow-hidden border border-slate-200 bg-white shadow-3xs">
-                            <img
-                              src={photo}
-                              referrerPolicy="no-referrer"
-                              alt="Evidência fotográfica enviada"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const validPhotos = (crit.submittedPhotos || [])
+                        .map((p) => getPublicImageUrl(p))
+                        .filter((p) => p && typeof p === "string" && p.trim().length > 0);
+
+                      if (validPhotos.length === 0) return null;
+
+                      return (
+                        <div className="grid grid-cols-4 gap-2 mt-2">
+                          {validPhotos.map((photo, i) => (
+                            <div key={i} className="relative aspect-square rounded-md overflow-hidden border border-slate-200 bg-white shadow-3xs">
+                              <img
+                                src={photo}
+                                referrerPolicy="no-referrer"
+                                alt="Evidência fotográfica enviada"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const parent = (e.target as HTMLElement).parentElement;
+                                  if (parent) {
+                                    parent.style.display = "none";
+                                  }
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {crit.id === "6" && (
                       <UnimobinSummary
@@ -815,7 +867,7 @@ export default function AlmoxarifeHome({
                 )}
               </div>
             );
-          })}
+          }) )}
         </div>
       </section>
       )}

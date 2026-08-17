@@ -24,18 +24,8 @@ import AlmoxarifeNivelServico from "./components/AlmoxarifeNivelServico";
 import AlmoxarifeGarantia from "./components/AlmoxarifeGarantia";
 import AlmoxarifeHistorico from "./components/AlmoxarifeHistorico";
 import SupervisorPanel from "./components/SupervisorPanel";
-
-const toast = {
-  error: (message: string) => {
-    alert(message);
-  },
-  info: (message: string) => {
-    console.info("[Toast Info]", message);
-  },
-  success: (message: string) => {
-    console.log("[Toast Success]", message);
-  }
-};
+import { ToastContainer } from "./components/ToastContainer";
+import { toast } from "./utils/toast";
 
 const safeStr = (val: any): string => {
   if (val === null || val === undefined) return "";
@@ -275,7 +265,7 @@ export default function App() {
       } catch (err) {
         console.error("[CICLO] Failed to sync cycle state to Supabase on explicit update:", err);
         setDbConnectionError(true);
-        alert("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
+        toast.error("Erro ao salvar o status do ciclo no Supabase. Por favor, tente novamente.");
         realtimeFlags.isLocalUpdate = false;
         return; // Halt if DB save fails
       }
@@ -338,6 +328,7 @@ export default function App() {
   const [dbConnectionError, setDbConnectionError] = useState(false);
 
   const [allNonMovingSummaries, setAllNonMovingSummaries] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Database seeding
@@ -352,7 +343,7 @@ export default function App() {
     }
   }, [user]);
 
-  // 1. Initial connection check and cycle load
+  // 1. Initial connection check and cycle load (parallelized with Promise.allSettled)
   useEffect(() => {
     const checkConnectionAndLoadCycle = async () => {
       if (!isSupabaseReady()) {
@@ -366,91 +357,64 @@ export default function App() {
           setDbConnectionError(true);
         } else {
           setDbConnectionError(false);
-          try {
-            const dbCycles = await dbFetchAllCycles();
-            if (dbCycles && dbCycles.length > 0) {
-              const map: Record<string, any> = {};
-              dbCycles.forEach((c) => {
-                map[`${c.activeMonth}_${c.activeYear}`] = c;
-              });
-              setAllCycles(map);
-            }
-          } catch (listErr) {
-            console.error("Failed to load initial cycle list:", listErr);
+
+          const actMonthLower = activeMonth.toLowerCase();
+          const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
+          const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
+          const activeYearNum = parseInt(activeYear) || 2026;
+
+          // Parallelize all initial metadata requests using Promise.allSettled
+          const [cyclesRes, cycleStateRes, usersRes, schedulesRes, historyRes, nonMovingRes] = await Promise.allSettled([
+            dbFetchAllCycles(),
+            dbFetchCycleState(),
+            dbFetchUsers(),
+            dbFetchSchedules(),
+            dbFetchHistory(),
+            dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre)
+          ]);
+
+          if (cyclesRes.status === "fulfilled" && cyclesRes.value && cyclesRes.value.length > 0) {
+            const map: Record<string, any> = {};
+            cyclesRes.value.forEach((c) => {
+              map[`${c.activeMonth}_${c.activeYear}`] = c;
+            });
+            setAllCycles(map);
           }
-          const initializeCycleState = async () => {
-            if (realtimeFlags.isLocalUpdate) {
-              console.log('[CICLO] initializeCycleState ignorado pois realtimeFlags.isLocalUpdate é true');
-              return;
-            }
-            console.log('[CICLO] initializeCycleState chamado');
-            try {
-              const dbCycle = await dbFetchCycleState();
-              if (realtimeFlags.isLocalUpdate) return;
-              if (dbCycle) {
-                setCycleState(dbCycle);
-                if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
-                if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
-                localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
-                console.log('[CICLO] Estado carregado do banco:', dbCycle);
-                return;
-              }
-            } catch (err) {
-              console.error("[CICLO] Erro ao buscar ciclo do Supabase:", err);
-            }
 
-            if (realtimeFlags.isLocalUpdate) return;
-
-            // PASSO 3 — Se não houver ciclos no banco de dados, marcar como NENHUM ciclo ativo
-            console.log('[CICLO] Estado definido como NULL — nenhum ciclo aberto no banco');
+          if (cycleStateRes.status === "fulfilled" && cycleStateRes.value && !realtimeFlags.isLocalUpdate) {
+            const dbCycle = cycleStateRes.value;
+            if (dbCycle.status) {
+              setCycleState(dbCycle);
+              if (dbCycle.activeMonth) setActiveMonth(dbCycle.activeMonth);
+              if (dbCycle.activeYear) setActiveYear(dbCycle.activeYear);
+              localStorage.setItem("acandido_cycle_state_manual", JSON.stringify(dbCycle));
+            }
+          } else if (!realtimeFlags.isLocalUpdate && cycleState.status === "NENHUM") {
             setCycleState({
               activeMonth: "Janeiro",
               activeYear: "2026",
               status: "NENHUM"
             });
             localStorage.setItem("acandido_cycle_state_manual", JSON.stringify({ activeMonth: "Janeiro", activeYear: "2026", status: "NENHUM" }));
-          };
+          }
 
-          await initializeCycleState();
-          try {
-            const dbUsers = await dbFetchUsers();
-            if (dbUsers) {
-              localStorage.setItem("acandido_users", JSON.stringify(dbUsers));
-              window.dispatchEvent(new Event("storage"));
-            }
-          } catch (usersErr) {
-            console.error("Failed to load initial users in App.tsx:", usersErr);
+          if (usersRes.status === "fulfilled" && usersRes.value) {
+            localStorage.setItem("acandido_users", JSON.stringify(usersRes.value));
+            window.dispatchEvent(new Event("storage"));
           }
-          try {
-            const dbSchedules = await dbFetchSchedules();
-            if (dbSchedules) {
-              setCalendarData(dbSchedules);
-            }
-          } catch (calErr) {
-            console.error("Failed to load initial schedules in App.tsx:", calErr);
-          }
-          try {
-            const dbHistory = await dbFetchHistory();
-            if (dbHistory) {
-              safeSetLocalStorage("acandido_history", dbHistory);
-              window.dispatchEvent(new Event("realtime-historico-update"));
-            }
-          } catch (histErr) {
-            console.error("Failed to load initial history in App.tsx:", histErr);
-          }
-          try {
-            const actMonthLower = activeMonth.toLowerCase();
-            const activeMonthNum = MONTH_NAME_TO_NUM[actMonthLower] || 6;
-            const activeSemestre = activeMonthNum <= 6 ? 1 : 2;
-            const activeYearNum = parseInt(activeYear) || 2026;
 
-            const dbData = await dbFetchAllNonMovingSummaries(activeYearNum, activeSemestre);
-            if (dbData && dbData.length > 0) {
-              setAllNonMovingSummaries(dbData);
-              safeSetLocalStorage("acandido_material_sem_movimentacao", dbData);
-            }
-          } catch (matsErr) {
-            console.error("Failed to fetch initial materials parados summaries in App.tsx:", matsErr);
+          if (schedulesRes.status === "fulfilled" && schedulesRes.value) {
+            setCalendarData(schedulesRes.value);
+          }
+
+          if (historyRes.status === "fulfilled" && historyRes.value) {
+            safeSetLocalStorage("acandido_history", historyRes.value);
+            window.dispatchEvent(new Event("realtime-historico-update"));
+          }
+
+          if (nonMovingRes.status === "fulfilled" && nonMovingRes.value && nonMovingRes.value.length > 0) {
+            setAllNonMovingSummaries(nonMovingRes.value);
+            safeSetLocalStorage("acandido_material_sem_movimentacao", nonMovingRes.value);
           }
         }
       } catch (err) {
@@ -567,7 +531,7 @@ export default function App() {
     }
     localStorage.setItem("acandido_localstorage_cleared", "true");
     setShowMigrationModal(false);
-    alert("Dados locais removidos com sucesso! Todo novo dado agora é salvo diretamente no Supabase.");
+    toast.success("Dados locais removidos com sucesso! Todo novo dado agora é salvo diretamente no Supabase.");
     window.location.reload();
   };
 
@@ -578,103 +542,95 @@ export default function App() {
         console.log("[DEBUG] local update in progress. Skipping fetchEvaluationsFromSupabase from effect trigger.");
         return;
       }
-      let defaultBranches: Branch[] = [];
-      if (isSupabaseReady()) {
-        try {
-          const dbB = await dbFetchAlmoxarifados();
-          if (dbB && dbB.length > 0) {
+      setIsLoading(true);
+      try {
+        let defaultBranches: Branch[] = [];
+        let evaluationsMap: Record<string, any> = {};
+
+        if (isSupabaseReady()) {
+          // Parallelize fetching of branches and evaluations for the period
+          const [branchesRes, evaluationsRes] = await Promise.allSettled([
+            dbFetchAlmoxarifados(),
+            dbFetchAllEvaluationsForPeriod(activeMonth, activeYear)
+          ]);
+
+          if (branchesRes.status === "fulfilled" && branchesRes.value && branchesRes.value.length > 0) {
             let customNamesMap: Record<string, string> = {};
             try {
               const saved = localStorage.getItem("acandido_custom_branch_names");
               if (saved) customNamesMap = JSON.parse(saved);
             } catch (e) {}
-            defaultBranches = dbB.map((b) => ({
+            defaultBranches = branchesRes.value.map((b) => ({
               ...b,
               name: customNamesMap[b.id] || b.name,
             }));
           }
-        } catch (e) {
-          console.error("Error fetching almoxarifados in fetchEvaluationsFromSupabase:", e);
-        }
-      }
-      if (!defaultBranches || defaultBranches.length === 0) {
-        defaultBranches = getCleanDefaultBranches();
-      }
-      
-      let evaluationsMap: Record<string, any> = {};
-      let loadedFromSupabase = false;
 
-      if (isSupabaseReady()) {
-        try {
-          console.log('[DEBUG] Iniciando carregamento de avaliações em lote para:', activeMonth, activeYear);
-          
-          // Bulk fetch all evaluations for this period to avoid parallel query explosion (~30 queries down to 2)
-          const bulkEvaluations = await dbFetchAllEvaluationsForPeriod(activeMonth, activeYear);
-          evaluationsMap = bulkEvaluations;
-          loadedFromSupabase = Object.keys(bulkEvaluations).length > 0;
-        } catch (err) {
-          console.error("[DEBUG] Falha catastrófica ao buscar avaliações do Supabase:", err);
-        }
-      } else {
-        console.warn('[DEBUG] Supabase não configurado ou URL/Key ausentes.');
-      }
-
-      // No localStorage loading / fallback - evaluations must be fetched from Supabase strictly to ensure same data across sessions
-
-      const updatedBranches = defaultBranches.map((branch) => {
-        const dbEvaluations = evaluationsMap[branch.name] || evaluationsMap[branch.id] || evaluationsMap[getBranchNameById(branch.id)] || evaluationsMap[branch.name.toUpperCase()];
-        if (!dbEvaluations || Object.keys(dbEvaluations).length === 0) {
-          console.log(`[DEBUG] Branch ${branch.name}: Sem avaliações registradas no Supabase para ${activeMonth}/${activeYear}`);
-          return branch;
-        }
-
-        const mergedCriteria = branch.criteria.map((crt) => {
-          const matchedDb = dbEvaluations[crt.id];
-          if (matchedDb) {
-            return {
-              ...crt,
-              status: matchedDb.status || crt.status,
-              pointsObtained: matchedDb.pointsObtained !== undefined ? matchedDb.pointsObtained : crt.pointsObtained,
-              notes: matchedDb.notes || crt.notes,
-              evidenceNotes: matchedDb.evidenceNotes || crt.evidenceNotes,
-              nokEvidenceLinks: matchedDb.nokEvidenceLinks || crt.nokEvidenceLinks,
-              nokEvidenceLink: matchedDb.nokEvidenceLink || crt.nokEvidenceLink,
-              nokEvidenceDescription: matchedDb.nokEvidenceDescription || crt.nokEvidenceDescription,
-              top10AuditorQuantities: matchedDb.top10AuditorQuantities || crt.top10AuditorQuantities,
-              nokEvidenceFileName: matchedDb.nokEvidenceFileName || crt.nokEvidenceFileName,
-              nokEvidenceFileType: matchedDb.nokEvidenceFileType || crt.nokEvidenceFileType,
-              nokEvidenceFileData: matchedDb.nokEvidenceFileData || crt.nokEvidenceFileData,
-              isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao,
-              auditMode: matchedDb.auditMode !== undefined ? matchedDb.auditMode : crt.auditMode,
-              submittedPhotos: matchedDb.submittedPhotos || crt.submittedPhotos,
-              submittedAt: matchedDb.submittedAt || crt.submittedAt,
-              top10AlmoxarifeQuantities: matchedDb.top10AlmoxarifeQuantities || crt.top10AlmoxarifeQuantities
-            };
+          if (evaluationsRes.status === "fulfilled" && evaluationsRes.value) {
+            evaluationsMap = evaluationsRes.value;
           }
-          return crt;
+        }
+
+        if (!defaultBranches || defaultBranches.length === 0) {
+          defaultBranches = getCleanDefaultBranches();
+        }
+
+        const updatedBranches = defaultBranches.map((branch) => {
+          const dbEvaluations = evaluationsMap[branch.name] || evaluationsMap[branch.id] || evaluationsMap[getBranchNameById(branch.id)] || evaluationsMap[branch.name.toUpperCase()];
+          if (!dbEvaluations || Object.keys(dbEvaluations).length === 0) {
+            return branch;
+          }
+
+          const mergedCriteria = branch.criteria.map((crt) => {
+            const matchedDb = dbEvaluations[crt.id];
+            if (matchedDb) {
+              return {
+                ...crt,
+                status: matchedDb.status || crt.status,
+                pointsObtained: matchedDb.pointsObtained !== undefined ? matchedDb.pointsObtained : crt.pointsObtained,
+                notes: matchedDb.notes || crt.notes,
+                evidenceNotes: matchedDb.evidenceNotes || crt.evidenceNotes,
+                nokEvidenceLinks: matchedDb.nokEvidenceLinks || crt.nokEvidenceLinks,
+                nokEvidenceLink: matchedDb.nokEvidenceLink || crt.nokEvidenceLink,
+                nokEvidenceDescription: matchedDb.nokEvidenceDescription || crt.nokEvidenceDescription,
+                top10AuditorQuantities: matchedDb.top10AuditorQuantities || crt.top10AuditorQuantities,
+                nokEvidenceFileName: matchedDb.nokEvidenceFileName || crt.nokEvidenceFileName,
+                nokEvidenceFileType: matchedDb.nokEvidenceFileType || crt.nokEvidenceFileType,
+                nokEvidenceFileData: matchedDb.nokEvidenceFileData || crt.nokEvidenceFileData,
+                isAguardandoRealizacao: matchedDb.isAguardandoRealizacao !== undefined ? matchedDb.isAguardandoRealizacao : crt.isAguardandoRealizacao,
+                auditMode: matchedDb.auditMode !== undefined ? matchedDb.auditMode : crt.auditMode,
+                submittedPhotos: matchedDb.submittedPhotos || crt.submittedPhotos,
+                submittedAt: matchedDb.submittedAt || crt.submittedAt,
+                top10AlmoxarifeQuantities: matchedDb.top10AlmoxarifeQuantities || crt.top10AlmoxarifeQuantities
+              };
+            }
+            return crt;
+          });
+
+          // Somar os pontos
+          const scoreTotal = mergedCriteria.reduce(
+            (acc, c) => acc + (c.status === "OK" ? Number(c.pointsPossible) : (Number(c.pointsObtained) || 0)), 0
+          );
+
+          const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
+
+          return {
+            ...branch,
+            criteria: mergedCriteria,
+            currentScore: scoreTotal,
+            pointsObtainedSum: scoreTotal,
+            status,
+            scoreCategory
+          };
         });
 
-        // CRÍTICO: somar os pontos AQUI
-        const scoreTotal = mergedCriteria.reduce(
-          (acc, c) => acc + (c.status === "OK" ? Number(c.pointsPossible) : (Number(c.pointsObtained) || 0)), 0
-        );
-
-        console.log(`[DEBUG] Branch ${branch.name} score final calculado: ${scoreTotal}`);
-
-        const { score, status, scoreCategory } = calculateDerivedMetrics(mergedCriteria);
-
-        return {
-          ...branch,
-          criteria: mergedCriteria,
-          currentScore: scoreTotal,           // ← atualiza o card
-          pointsObtainedSum: scoreTotal,       // ← atualiza o card (ambas as propriedades)
-          status,
-          scoreCategory
-        };
-      });
-
-      setBranches(updatedBranches);
-      setLoadedPeriod({ month: activeMonth, year: activeYear });
+        setBranches(updatedBranches);
+        setLoadedPeriod({ month: activeMonth, year: activeYear });
+      } catch (err) {
+        console.error("Error in fetchEvaluationsFromSupabase:", err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchEvaluationsFromSupabase();
@@ -780,7 +736,7 @@ export default function App() {
             if (matched.status === "SUSPENSO") {
               setUser(null);
               sessionStorage.removeItem("acandido_app_user");
-              alert("Sua conta foi suspensa temporariamente pelo Auditor Geral Fernando Silva.");
+              toast.error("Sua conta foi suspensa temporariamente pelo Auditor Geral Fernando Silva.");
             } else if (JSON.stringify(matched) !== JSON.stringify(currentUser)) {
               setUser(matched);
               sessionStorage.setItem("acandido_app_user", JSON.stringify(matched));
@@ -790,7 +746,7 @@ export default function App() {
             if (currentUser.email !== "estoque01jp@gmail.com") {
               setUser(null);
               sessionStorage.removeItem("acandido_app_user");
-              alert("Sua conta foi desativada ou removida pelo Auditor Geral.");
+              toast.error("Sua conta foi desativada ou removida pelo Auditor Geral.");
             }
           }
         } catch (e) {}
@@ -1503,7 +1459,7 @@ export default function App() {
   }, [branches, calendarData, allNonMovingSummaries, activeMonth, activeYear, allCycles, cycleState]);
 
   // Callback to update criteria (saves into raw state, triggering processedBranches update)
-  const handleUpdateCriteria = (branchId: string, updatedCriteria: CriterionState[]) => {
+  const handleUpdateCriteria = (branchId: string, updatedCriteria: CriterionState[], skipDbSave: boolean = false) => {
     // Mandated validation function to prevent saving invalid non-binary scores
     const validarPontuacao = (criterio: string, valor: number) => {
       const maxValido: { [key: string]: number } = {
@@ -1561,8 +1517,8 @@ export default function App() {
 
           const { score, status, scoreCategory } = calculateDerivedMetrics(finalCriteria);
 
-          // Save evaluations to Supabase in the background
-          if (isSupabaseReady()) {
+          // Save evaluations to Supabase in the background (Auditors/Admins only)
+          if (isSupabaseReady() && !skipDbSave && user?.role !== "ALMOXARIFE") {
             (async () => {
               try {
                 realtimeFlags.activeLocalUpdatesCount += finalCriteria.length;
@@ -1573,7 +1529,9 @@ export default function App() {
                 );
               } catch (err) {
                 console.error("Error batch saving evaluations:", err);
-                toast.error("Erro ao salvar as avaliações do ciclo. Tente novamente.");
+                if (user?.role !== "ALMOXARIFE") {
+                  toast.error("Erro ao salvar as avaliações do ciclo. Tente novamente.");
+                }
               } finally {
                 realtimeFlags.activeLocalUpdatesCount = Math.max(0, realtimeFlags.activeLocalUpdatesCount - finalCriteria.length);
                 // Force a single, clean database fetch once all writes have completed on Supabase
@@ -1604,7 +1562,7 @@ export default function App() {
     onProgress?: (msg: string, percent: number) => void
   ) => {
     if (cycleState.status !== "ABERTO") {
-      alert("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
+      toast.warning("Operação Bloqueada: Não é possível transmitir evidências com o ciclo de envios fechado.");
       return;
     }
 
@@ -1654,9 +1612,7 @@ export default function App() {
 
           if (photo && (photo.startsWith("data:image") || photo.startsWith("blob:"))) {
             try {
-              const ext = photo.split(';')[0]?.split('/')[1] || 'jpg';
-              const cleanExt = ext.split('+')[0] || 'jpg';
-              const fileName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}.${cleanExt}`;
+              const fileName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}.webp`;
 
               const storageUrl = await uploadFotoWithRetry(
                 'evidencias-almoxarife',
@@ -1674,8 +1630,8 @@ export default function App() {
             } catch (err) {
               console.error(`Failed to upload submission photo ${index}:`, err);
               try {
-                const tinyPhoto = await comprimirImagem(photo, 300, 600, 0.4);
-                const fallbackName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}_min.jpg`;
+                const tinyPhoto = await comprimirImagem(photo, 400, 960, 0.6, "image/webp");
+                const fallbackName = `submissions/${activeBranchId}/${criterionId}_${Date.now()}_${index}_min.webp`;
                 const fallbackUrl = await uploadFile('evidencias-almoxarife', fallbackName, tinyPhoto);
                 uploadedList.push(fallbackUrl);
               } catch (finalErr) {
@@ -1729,7 +1685,7 @@ export default function App() {
       return c;
     });
 
-    handleUpdateCriteria(activeBranchId, updatedCriteria);
+    handleUpdateCriteria(activeBranchId, updatedCriteria, true);
 
     const twinPairs = [
       ["unitrans-jp", "santa-maria-jp"],
@@ -1762,7 +1718,7 @@ export default function App() {
           return c;
         });
 
-        handleUpdateCriteria(twinId, twinUpdatedCriteria);
+        handleUpdateCriteria(twinId, twinUpdatedCriteria, true);
 
         if (criterionId === "6") {
           try {
@@ -1863,8 +1819,7 @@ export default function App() {
         await dbSaveCycleState(nextState);
       } catch (err) {
         console.error("Failed to post archive logs or save cycle state to database:", err);
-        toast.error("Falha ao arquivar e consolidar o histórico do ciclo.");
-        alert("Erro ao arquivar e fechar o período no Supabase. Por favor, tente novamente.");
+        toast.error("Erro ao arquivar e fechar o período no Supabase. Por favor, tente novamente.");
         return; // Halt if DB save fails
       }
     }
@@ -1920,8 +1875,7 @@ export default function App() {
         await supabase.from('historico_avaliacoes').delete().eq('mes', month).eq('ano', year);
       } catch (e) {
         console.error("Failed to update cycle or delete history on reopen cycle in Supabase:", e);
-        toast.error("Erro ao reabrir o ciclo de avaliação.");
-        alert("Erro ao reabrir o ciclo no Supabase. Por favor, tente novamente.");
+        toast.error("Erro ao reabrir o ciclo no Supabase. Por favor, tente novamente.");
         return; // Halt if DB operation fails
       }
     }
@@ -1953,7 +1907,7 @@ export default function App() {
     const cleanB = getCleanDefaultBranches();
     setBranches(cleanB);
 
-    alert(`O ciclo de ${month}/${year} foi reaberto com sucesso! Todas as avaliações, pontuações e histórico de evidências anteriores foram restaurados.`);
+    toast.success(`O ciclo de ${month}/${year} foi reaberto com sucesso! Todas as avaliações, pontuações e histórico de evidências anteriores foram restaurados.`);
   };
 
   const handleLogout = () => {
@@ -1993,11 +1947,17 @@ export default function App() {
 
   // Login check
   if (user === null) {
-    return <Login onLogin={(u) => setUser(u)} />;
+    return (
+      <>
+        <ToastContainer />
+        <Login onLogin={(u) => setUser(u)} />
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans select-none pb-12">
+      <ToastContainer />
       {dbConnectionError && (
         <div className="w-full bg-red-600 text-white font-medium text-center py-3 px-4 text-sm flex items-center justify-center gap-2 shadow-inner z-50">
           <span>⚠ Erro de conexão com o banco de dados. Tente recarregar a página.</span>
@@ -2381,6 +2341,7 @@ export default function App() {
                     onArchiveCycle={handleArchiveCycle}
                     user={user}
                     allCycles={allCycles}
+                    isLoading={isLoading}
                   />
                 )}
                 {adminTab === "CONFIGURI" && (
@@ -2586,6 +2547,7 @@ export default function App() {
                       activeYear={activeYear}
                       calendarData={calendarData}
                       cycleState={cycleState}
+                      isLoading={isLoading}
                     />
                   )
                 )}

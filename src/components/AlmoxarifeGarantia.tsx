@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { WarrantyItem, AppUser, Branch } from "../types";
 import { initialWarranties } from "../mockData";
-import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers, syncLocalStorageGarantiasToSupabase } from "../supabaseService";
+import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers, syncLocalStorageGarantiasToSupabase, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 import { gerarMesesDisponiveis, getMesesDisponiveis } from "../utils/dateUtils";
 
@@ -434,7 +434,7 @@ export default function AlmoxarifeGarantia({
   } | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     setAttachmentError("");
     const allowedExtensions = ["jpg", "jpeg", "png", "pdf"];
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
@@ -450,16 +450,39 @@ export default function AlmoxarifeGarantia({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64Str = reader.result as string;
-      setAttachmentFile({
-        name: file.name,
-        base64: base64Str,
-        size: file.size
-      });
-    };
-    reader.readAsDataURL(file);
+    if (ext !== "pdf" && (file.type.startsWith("image/") || ["jpg", "jpeg", "png"].includes(ext))) {
+      try {
+        const compressed = await comprimirImagem(file, 800, 1280, 0.8, "image/webp");
+        setAttachmentFile({
+          name: file.name.replace(/\.(jpe?g|png)$/i, ".webp"),
+          base64: compressed,
+          size: file.size
+        });
+      } catch (err) {
+        console.error("Erro ao comprimir anexo de garantia:", err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64Str = reader.result as string;
+          setAttachmentFile({
+            name: file.name,
+            base64: base64Str,
+            size: file.size
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Str = reader.result as string;
+        setAttachmentFile({
+          name: file.name,
+          base64: base64Str,
+          size: file.size
+        });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveFile = () => {

@@ -116,6 +116,14 @@ export interface InventoryItemToCount {
   visualEvidenceUploaded: boolean;
 }
 
+export interface Top10Item {
+  code: string;
+  description: string;
+  name?: string;
+  localizacao?: string;
+  qty?: number;
+}
+
 export interface AppUser {
   id?: string | number;
   name: string;

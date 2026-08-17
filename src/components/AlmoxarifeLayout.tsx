@@ -84,7 +84,7 @@ export default function AlmoxarifeLayout({
       const file = files[i];
       if (photos.length >= 5) break;
       try {
-        const compressed = await comprimirImagem(file, 800, 1200, 0.7);
+        const compressed = await comprimirImagem(file, 800, 1280, 0.8, "image/webp");
         if (compressed) {
           setPhotos((prev) => (prev.length < 5 ? [...prev, compressed] : prev));
         }

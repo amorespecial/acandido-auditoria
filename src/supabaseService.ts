@@ -50,11 +50,11 @@ export const monthNumToName = (num: number): string => {
   return MONTH_NUM_TO_NAME[num] || "Janeiro";
 };
 
-// Base64 to Blob helper
+// Base64 to Blob helper with WebP priority
 export const base64ToBlob = (base64: string): Blob => {
   try {
     const parts = base64.split(';base64,');
-    const contentType = parts[0].split(':')[1] || 'image/jpeg';
+    const contentType = parts[0].split(':')[1] || 'image/webp';
     const raw = window.atob(parts[1] || parts[0]);
     const rawLength = raw.length;
     const uInt8Array = new Uint8Array(rawLength);
@@ -64,7 +64,7 @@ export const base64ToBlob = (base64: string): Blob => {
     return new Blob([uInt8Array], { type: contentType });
   } catch (e) {
     console.error("Failed to parse base64 to blob", e);
-    return new Blob([], { type: 'image/jpeg' });
+    return new Blob([], { type: 'image/webp' });
   }
 };
 
@@ -137,12 +137,13 @@ export function safeSetLocalStorage(key: string, data: any): boolean {
   }
 }
 
-// Client-side image compression helper
+// Client-side image compression helper (Max width 1280px, WebP quality 0.8)
 export async function comprimirImagem(
   fileSource: File | Blob | string,
   maxSizeKB: number = 800,
-  maxDim: number = 1200,
-  quality: number = 0.7
+  maxDim: number = 1280,
+  quality: number = 0.8,
+  targetFormat: string = "image/webp"
 ): Promise<string> {
   if (!fileSource) return "";
   if (typeof fileSource === "string" && !fileSource.startsWith("data:image")) {
@@ -154,17 +155,13 @@ export async function comprimirImagem(
     const img = new Image();
 
     const processImage = () => {
-      let width = img.width || 1200;
-      let height = img.height || 1200;
+      let width = img.naturalWidth || img.width || 1280;
+      let height = img.naturalHeight || img.height || 720;
 
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = Math.round((height / width) * maxDim);
-          width = maxDim;
-        } else {
-          width = Math.round((width / height) * maxDim);
-          height = maxDim;
-        }
+      // Redimensione a imagem para largura máxima de 1280px (mantendo o aspecto de proporção)
+      if (width > maxDim) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
       }
 
       canvas.width = width;
@@ -176,7 +173,11 @@ export async function comprimirImagem(
         ctx.drawImage(img, 0, 0, width, height);
       }
       try {
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        let dataUrl = canvas.toDataURL(targetFormat, quality);
+        // Fallback se o navegador não suportar WebP no canvas
+        if (!dataUrl.startsWith("data:image/webp") && targetFormat === "image/webp") {
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
+        }
         resolve(dataUrl);
       } catch (e) {
         if (typeof fileSource === "string") resolve(fileSource);
@@ -206,7 +207,7 @@ export async function comprimirImagem(
   });
 }
 
-// Supabase Storage file upload helper with compression and public URL support
+// Supabase Storage file upload helper with WebP compression and public URL support
 export const uploadFile = async (
   bucket: 'evidencias-almoxarife' | 'evidencias-auditor' | 'evidencias' | string,
   filePath: string,
@@ -219,10 +220,10 @@ export const uploadFile = async (
 
     let compressedSource = fileSource;
     if (typeof fileSource === 'string' && fileSource.startsWith('data:image')) {
-      compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+      compressedSource = await comprimirImagem(fileSource, 800, 1280, 0.8, 'image/webp');
     } else if (fileSource instanceof File || fileSource instanceof Blob) {
       if (fileSource.type.startsWith('image/')) {
-        compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+        compressedSource = await comprimirImagem(fileSource, 800, 1280, 0.8, 'image/webp');
       }
     }
 
@@ -233,7 +234,15 @@ export const uploadFile = async (
       blob = compressedSource;
     }
 
-    const cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
+    let mimeType = blob.type || 'image/webp';
+    if (mimeType.includes('webp') || (!mimeType.includes('pdf') && !mimeType.includes('json'))) {
+      mimeType = 'image/webp';
+    }
+
+    let cleanPath = filePath.replace(/^\/+/, ''); // remove leading slash
+    if (mimeType === 'image/webp' && !cleanPath.endsWith('.webp')) {
+      cleanPath = cleanPath.replace(/\.(jpe?g|png)$/i, '') + '.webp';
+    }
 
     if (!isSupabaseReady()) {
       console.warn(`[Supabase Storage Offline] Simulating upload of ${cleanPath} to bucket: ${bucket}`);
@@ -248,7 +257,8 @@ export const uploadFile = async (
 
     let { error } = await supabase.storage.from(primaryBucket).upload(cleanPath, blob, {
       cacheControl: '3600',
-      upsert: true
+      upsert: true,
+      contentType: mimeType
     });
 
     if (error && (error.message?.includes('not found') || (error as any).statusCode === 404)) {
@@ -257,7 +267,8 @@ export const uploadFile = async (
       targetBucket = fallbackBucket;
       const fallbackResult = await supabase.storage.from(fallbackBucket).upload(cleanPath, blob, {
         cacheControl: '3600',
-        upsert: true
+        upsert: true,
+        contentType: mimeType
       });
       error = fallbackResult.error;
     }
@@ -270,7 +281,7 @@ export const uploadFile = async (
     // Try public URL first
     const { data: publicUrlData } = supabase.storage.from(targetBucket).getPublicUrl(cleanPath);
     if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.endsWith('/')) {
-      return publicUrlData.publicUrl;
+      return encodeURI(decodeURI(publicUrlData.publicUrl));
     }
 
     // Fallback to 1-year signed URL
@@ -283,14 +294,46 @@ export const uploadFile = async (
       throw signedError || new Error("Falha ao gerar URL da imagem enviada.");
     }
 
-    return data.signedUrl;
+    return encodeURI(decodeURI(data.signedUrl));
   } catch (err: any) {
     console.error(`[uploadFile Exception] Bucket: ${bucket}, Path: ${filePath}:`, err);
     throw err instanceof Error ? err : new Error(String(err?.message || "Erro ao realizar upload do arquivo."));
   }
 };
 
-// Retry handler for uploads with progressive compression
+/**
+ * Returns a valid, public URL for an image/file stored in Supabase Storage or external link.
+ * Handles storage paths, data URIs, and full URLs with spaces or special characters.
+ */
+export const getPublicImageUrl = (
+  urlOrPath?: string | null,
+  bucket: string = 'evidencias-almoxarife'
+): string => {
+  if (!urlOrPath || typeof urlOrPath !== 'string') return '';
+  const trimmed = urlOrPath.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      return encodeURI(decodeURI(trimmed));
+    } catch {
+      return trimmed;
+    }
+  }
+  // It's a relative storage path (e.g. "top10/..." or "submissions/...")
+  const cleanPath = trimmed.replace(/^\/+/, '');
+  try {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(cleanPath);
+    if (data?.publicUrl) {
+      return encodeURI(decodeURI(data.publicUrl));
+    }
+  } catch (e) {
+    console.warn(`[getPublicImageUrl] Erro ao recuperar URL pública para ${cleanPath}:`, e);
+  }
+  return trimmed;
+};
+
+// Retry handler for uploads with progressive WebP compression
 export const uploadFotoWithRetry = async (
   bucket: string = 'evidencias-almoxarife',
   filePath: string,
@@ -300,23 +343,28 @@ export const uploadFotoWithRetry = async (
 ): Promise<string> => {
   let compressedSource = fileSource;
   if (typeof fileSource === "string" && fileSource.startsWith("data:image")) {
-    compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+    compressedSource = await comprimirImagem(fileSource, 800, 1280, 0.8, "image/webp");
   } else if (fileSource instanceof File || fileSource instanceof Blob) {
     if (fileSource.type.startsWith("image/")) {
-      compressedSource = await comprimirImagem(fileSource, 800, 1200, 0.7);
+      compressedSource = await comprimirImagem(fileSource, 800, 1280, 0.8, "image/webp");
     }
+  }
+
+  let targetPath = filePath;
+  if (!targetPath.endsWith(".pdf") && !targetPath.endsWith(".webp")) {
+    targetPath = targetPath.replace(/\.(jpe?g|png)$/i, "") + ".webp";
   }
 
   for (let i = 0; i < tentativas; i++) {
     try {
-      return await uploadFile(bucket, filePath, compressedSource);
+      return await uploadFile(bucket, targetPath, compressedSource);
     } catch (err) {
-      console.warn(`[uploadFotoWithRetry] Tentativa ${i + 1}/${tentativas} falhou para ${filePath}:`, err);
+      console.warn(`[uploadFotoWithRetry] Tentativa ${i + 1}/${tentativas} falhou para ${targetPath}:`, err);
       if (i < tentativas - 1) {
         if (onRetry) {
           onRetry("Foto muito grande. Reduzindo qualidade e tentando novamente...");
         }
-        compressedSource = await comprimirImagem(compressedSource, 500, 900, 0.5);
+        compressedSource = await comprimirImagem(compressedSource, 500, 960, 0.6, "image/webp");
         await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
       } else {
         throw err;
@@ -1684,9 +1732,9 @@ export async function salvarTop10Completo(dados: {
     }
 
     try {
-      const ext = foto.split(';')[0]?.split('/')[1] || 'jpg';
-      const cleanExt = ext.split('+')[0] || 'jpg';
-      const fileName = `top10/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_${Date.now()}.${cleanExt}`;
+      const safeBranch = dados.almoxarifadoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeMes = dados.mes.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `top10/${safeBranch}/${safeMes}/${dados.ano}/${i}_${Date.now()}.webp`;
 
       const url = await uploadFotoWithRetry(
         'evidencias-almoxarife',
@@ -1703,13 +1751,15 @@ export async function salvarTop10Completo(dados: {
     } catch (err) {
       console.error('Falha no upload da foto do TOP 10:', err);
       try {
-        const minPhoto = await comprimirImagem(foto, 400, 800, 0.4);
-        const minName = `top10/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_min_${Date.now()}.jpg`;
+        const minPhoto = await comprimirImagem(foto, 400, 960, 0.6, "image/webp");
+        const safeBranch = dados.almoxarifadoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const safeMes = dados.mes.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const minName = `top10/${safeBranch}/${safeMes}/${dados.ano}/${i}_min_${Date.now()}.webp`;
         const minUrl = await uploadFile('evidencias-almoxarife', minName, minPhoto);
         fotosUrls.push(minUrl);
       } catch (finalErr) {
         console.error('Falha fatal no upload da foto do TOP 10:', finalErr);
-        fotosUrls.push('');
+        fotosUrls.push(foto.startsWith('data:') ? foto : '');
       }
     }
   }
@@ -1819,9 +1869,7 @@ export async function salvarLayoutCompleto(dados: {
     }
 
     try {
-      const ext = foto.split(';')[0]?.split('/')[1] || 'jpg';
-      const cleanExt = ext.split('+')[0] || 'jpg';
-      const fileName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_${Date.now()}.${cleanExt}`;
+      const fileName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_${Date.now()}.webp`;
 
       const url = await uploadFotoWithRetry(
         'evidencias-almoxarife',
@@ -1838,8 +1886,8 @@ export async function salvarLayoutCompleto(dados: {
     } catch (err) {
       console.error('Falha no upload da foto do layout:', err);
       try {
-        const minPhoto = await comprimirImagem(foto, 400, 800, 0.4);
-        const minName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_min_${Date.now()}.jpg`;
+        const minPhoto = await comprimirImagem(foto, 400, 960, 0.6, "image/webp");
+        const minName = `layout/${dados.almoxarifadoId}/${dados.mes}/${dados.ano}/${i}_min_${Date.now()}.webp`;
         const minUrl = await uploadFile('evidencias-almoxarife', minName, minPhoto);
         fotosUrls.push(minUrl);
       } catch (finalErr) {

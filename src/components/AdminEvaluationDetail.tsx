@@ -3,10 +3,12 @@ import { Branch, CriterionState, EvaluationStatus, CollaboratorCertificate } fro
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, getPublicImageUrl, comprimirImagem } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { getMesesDisponiveis } from "../utils/dateUtils";
+import { Loader2 } from "lucide-react";
+import { toast } from "../utils/toast";
 
 interface AdminEvaluationDetailProps {
   branch: Branch;
@@ -98,9 +100,15 @@ export default function AdminEvaluationDetail({
 
   // TOP 10 monthly configuration states and helper
   const [showTop10ConfigModal, setShowTop10ConfigModal] = useState(false);
-  const [top10ItemsInput, setTop10ItemsInput] = useState<{ code: string; description: string; qty: number }[]>([]);
+  const [top10ItemsInput, setTop10ItemsInput] = useState<{ code: string; description: string; localizacao?: string; qty: number }[]>([]);
   const [top10ConfigUpdatedCount, setTop10ConfigUpdatedCount] = useState(0);
   const [top10Config, setTop10Config] = useState<any>(null);
+
+  // Form Submission and Loading states
+  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+  const [isSavingLayout, setIsSavingLayout] = useState(false);
+  const [isSavingTop10, setIsSavingTop10] = useState(false);
+  const [isUploadingCertId, setIsUploadingCertId] = useState<string | null>(null);
 
   React.useEffect(() => {
     const loadLayout = async () => {
@@ -288,7 +296,7 @@ export default function AdminEvaluationDetail({
 
   const handleSaveLayoutConfig = async () => {
     if (!layoutLocationInput.trim()) {
-      alert("Por favor, insira a localização a ser auditada.");
+      toast.warning("Por favor, insira a localização a ser auditada.");
       return;
     }
     let userName = "Auditor";
@@ -299,6 +307,7 @@ export default function AdminEvaluationDetail({
       }
     } catch (e) {}
 
+    setIsSavingLayout(true);
     try {
       if (isSupabaseReady()) {
         await dbSaveLayoutConfig(
@@ -317,41 +326,49 @@ export default function AdminEvaluationDetail({
 
       setLayoutConfigUpdatedCount(prev => prev + 1);
       setShowLayoutConfigModal(false);
-      alert("Configuração do LayOut para este almoxarifado salva com sucesso!");
+      toast.success("Configuração do LayOut para este almoxarifado salva com sucesso!");
     } catch (error: any) {
       console.error("Failed to save layout config to database:", error);
-      alert("Erro ao salvar configuração do LayOut: " + (error?.message || error || "Erro desconhecido"));
+      toast.error("Erro ao salvar configuração do LayOut: " + (error?.message || error || "Erro desconhecido"));
+    } finally {
+      setIsSavingLayout(false);
     }
   };
 
   const handleOpenTop10Config = () => {
     if (top10Config && top10Config.itens && Array.isArray(top10Config.itens)) {
-      setTop10ItemsInput(top10Config.itens);
+      setTop10ItemsInput(top10Config.itens.map((it: any) => ({
+        code: it.code || "",
+        description: it.description || it.name || "",
+        localizacao: it.localizacao || it.location || "",
+        qty: it.qty ?? 1
+      })));
     } else {
-      setTop10ItemsInput([{ code: "", description: "", qty: 1 }]);
+      setTop10ItemsInput([{ code: "", description: "", localizacao: "", qty: 1 }]);
     }
     setShowTop10ConfigModal(true);
   };
 
   const handleSaveTop10Config = async () => {
     if (top10ItemsInput.length === 0) {
-      alert("Por favor, adicione pelo menos 1 item na lista antes de salvar.");
+      toast.warning("Por favor, adicione pelo menos 1 item na lista antes de salvar.");
       return;
     }
     if (top10ItemsInput.length > 10) {
-      alert("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
+      toast.warning("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
       return;
     }
     for (let i = 0; i < top10ItemsInput.length; i++) {
       const item = top10ItemsInput[i];
       if (!item.code.trim() || !item.description.trim()) {
-        alert(`Por favor, preencha o código e a descrição do item Nº ${i + 1}.`);
+        toast.warning(`Por favor, preencha o código e a descrição do item Nº ${i + 1}.`);
         return;
       }
     }
     const mappedItems = top10ItemsInput.map(it => ({
       code: it.code.trim(),
       description: it.description.trim(),
+      localizacao: (it.localizacao || "").trim(),
       qty: 1
     }));
 
@@ -363,6 +380,7 @@ export default function AdminEvaluationDetail({
       }
     } catch (e) {}
 
+    setIsSavingTop10(true);
     try {
       if (isSupabaseReady()) {
         await dbSaveTop10Config(
@@ -373,29 +391,31 @@ export default function AdminEvaluationDetail({
           userName
         );
       }
+      setTop10ConfigUpdatedCount(prev => prev + 1);
+      setShowTop10ConfigModal(false);
+      window.dispatchEvent(new Event("storage"));
+      toast.success("Lista de TOP 10 deste mês salva com sucesso e enviada ao almoxarife!");
     } catch (error) {
       console.error("Failed to save Top 10 config to database:", error);
+      toast.error("Erro ao salvar a lista do TOP 10 no Supabase.");
+    } finally {
+      setIsSavingTop10(false);
     }
-
-    setTop10ConfigUpdatedCount(prev => prev + 1);
-    setShowTop10ConfigModal(false);
-    window.dispatchEvent(new Event("storage"));
-    alert("Lista de TOP 10 deste mês salva com sucesso e enviada ao almoxarife!");
   };
 
   const handleAddTop10Row = () => {
     if (top10ItemsInput.length >= 10) {
-      alert("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
+      toast.warning("O limite máximo de itens configurados no TOP 10 é de 10 itens.");
       return;
     }
-    setTop10ItemsInput(prev => [...prev, { code: "", description: "", qty: 1 }]);
+    setTop10ItemsInput(prev => [...prev, { code: "", description: "", localizacao: "", qty: 1 }]);
   };
 
   const handleRemoveTop10Row = (index: number) => {
     setTop10ItemsInput(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateTop10Row = (index: number, field: "code" | "description" | "qty", value: any) => {
+  const handleUpdateTop10Row = (index: number, field: "code" | "description" | "localizacao" | "qty", value: any) => {
     setTop10ItemsInput(prev => prev.map((item, idx) => {
       if (idx === index) {
         let val = value;
@@ -581,11 +601,11 @@ export default function AdminEvaluationDetail({
 
   const handleAddMaterial = () => {
     if (!newMaterialCode.trim() || !newMaterialName.trim()) {
-      alert("Por favor, preencha o código e a descrição do material.");
+      toast.warning("Por favor, preencha o código e a descrição do material.");
       return;
     }
     if (branchMaterials.some(m => m.code === newMaterialCode)) {
-      alert("Já existe um material cadastrado com este código.");
+      toast.warning("Já existe um material cadastrado com este código.");
       return;
     }
     const newMat = { code: newMaterialCode.trim(), name: newMaterialName.trim(), status: "OK" as const };
@@ -739,12 +759,12 @@ export default function AdminEvaluationDetail({
 
   const handleOpenEvaluate = async (crit: CriterionState) => {
     if (isCycleClosed) {
-      alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas avaliações.");
+      toast.warning("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas avaliações.");
       return;
     }
 
     if (crit.id === "5") {
-      alert("Item Automático: Este item é calculated automaticamente de acordo com o status de '03 - Nota Fiscal'.");
+      toast.info("Item Automático: Este item é calculado automaticamente de acordo com o status de '03 - Nota Fiscal'.");
       return;
     }
 
@@ -927,10 +947,11 @@ export default function AdminEvaluationDetail({
     if (!selectedCriterion) return;
 
     if (isCycleClosed) {
-      alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas alterações.");
+      toast.warning("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas alterações.");
       return;
     }
 
+    setIsSavingEvaluation(true);
     try {
       // Custom Save for TOP 10 (ID "2")
       if (selectedCriterion.id === "2" && top10Config?.itens) {
@@ -951,7 +972,7 @@ export default function AdminEvaluationDetail({
         });
 
         if (hasEmpty) {
-          alert("Erro de Validação: Por favor, digite a 'Qtd Auditor' de todos os itens antes de salvar a avaliação.");
+          toast.warning("Erro de Validação: Por favor, digite a 'Qtd Auditor' de todos os itens antes de salvar a avaliação.");
           return;
         }
 
@@ -961,7 +982,7 @@ export default function AdminEvaluationDetail({
         if (computedStatus === "NOK") {
           const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
           if (!isNokLinkValid) {
-            alert("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
+            toast.warning("Erro de Validação: Como há itens com divergência (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
             return;
           }
         }
@@ -992,7 +1013,7 @@ export default function AdminEvaluationDetail({
 
         onUpdateCriteria(branch.id, updated);
         setSelectedCriterion(null);
-        alert(`Avaliação do TOP 10 concluída com sucesso! Status Geral: ${computedStatus === "OK" ? "✓ CONFORME (OK)" : "❌ DIVERGENTE (NOK)"}`);
+        toast.success(`Avaliação do TOP 10 concluída com sucesso! Status Geral: ${computedStatus === "OK" ? "✓ CONFORME (OK)" : "❌ DIVERGENTE (NOK)"}`);
         return;
       }
 
@@ -1001,7 +1022,7 @@ export default function AdminEvaluationDetail({
         // Validate that every Inventário item with NOK has a Link da Evidência
         const missingLinkItem = branchCalendar.find(b => b.status === "NOK" && !b.nokEvidenceLink?.trim());
         if (missingLinkItem) {
-          alert("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
+          toast.warning("Erro de Validação: O Link da Evidência é obrigatório para todos os inventários avaliados como NOK.");
           return;
         }
 
@@ -1056,8 +1077,8 @@ export default function AdminEvaluationDetail({
         // 2. Executar setSelectedCriterion(null) — fecha o modal imediatamente
         setSelectedCriterion(null);
 
-        // 3. Mostrar alert de confirmação com status e pontuação
-        alert(`Avaliação de Inventário agendado salva localmente com sucesso!\nStatus Geral do Critério: ${finalStatus}\nPontos Obtidos: ${pointsObtained} de 20 pts.`);
+        // 3. Mostrar toast de confirmação com status e pontuação
+        toast.success(`Avaliação de Inventário agendado salva localmente com sucesso! Status Geral: ${finalStatus} (${pointsObtained} de 20 pts)`);
 
         // 4. Tentar dbSaveSchedules depois, em segundo plano com .catch() sem bloquear — se o Supabase falhar, os dados já foram salvos localmente e o usuário já recebeu feedback
         dbSaveSchedules(globalCalendar)
@@ -1113,7 +1134,7 @@ export default function AdminEvaluationDetail({
       if (enforcedStatus === "NOK") {
         const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
         if (!isNokLinkValid) {
-          alert("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
+          toast.warning("Erro de Validação: Para salvar uma avaliação como NÃO CONFORME (NOK), o LINK 1 é obrigatório e deve iniciar com 'https://'.");
           return;
         }
       }
@@ -1171,9 +1192,12 @@ export default function AdminEvaluationDetail({
       }
 
       setSelectedCriterion(null);
+      toast.success("Avaliação salva com sucesso!");
     } catch (error: any) {
       console.error("[Erro ao Salvar Avaliação]", error);
-      alert("Erro ao salvar avaliação: " + (error.message || error));
+      toast.error("Erro ao salvar avaliação: " + (error.message || error));
+    } finally {
+      setIsSavingEvaluation(false);
     }
   };
 
@@ -1199,7 +1223,7 @@ export default function AdminEvaluationDetail({
 
   const handleToggleAuditMode = async (criterionId: string, newMode: "Presencial" | "A_Distancia") => {
     if (isCycleClosed) {
-      alert("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas configurações de modo de auditoria.");
+      toast.warning("Operação Bloqueada: Não há nenhum ciclo ativo no momento, impossibilitando novas configurações de modo de auditoria.");
       return;
     }
 
@@ -1218,7 +1242,7 @@ export default function AdminEvaluationDetail({
 
         if (error) {
           console.error("Error saving audit mode:", error);
-          alert("Erro ao salvar modo de auditoria: " + error.message);
+          toast.error("Erro ao salvar modo de auditoria: " + error.message);
           return;
         }
 
@@ -1407,7 +1431,7 @@ export default function AdminEvaluationDetail({
       );
       newTab.document.close();
     } else {
-      alert("Bloqueador de pop-ups ativo. Por favor, permita pop-ups para visualizar o arquivo.");
+      toast.warning("Bloqueador de pop-ups ativo. Por favor, permita pop-ups para visualizar o arquivo.");
     }
   };
 
@@ -2242,25 +2266,35 @@ export default function AdminEvaluationDetail({
                     </p>
                   </div>
 
-                  {selectedCriterion.submittedPhotos && selectedCriterion.submittedPhotos.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                      {selectedCriterion.submittedPhotos.map((photo, i) => (
-                        <div key={i} className="relative aspect-square bg-[#1B2A4A]/5 rounded-lg overflow-hidden border border-violet-200">
-                          <img
-                            src={photo}
-                            referrerPolicy="no-referrer"
-                            alt="Evidência"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="border border-dashed border-violet-200 bg-white p-2 text-center text-[10px] text-violet-600 rounded font-semibold flex items-center justify-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">photo_library</span>
-                      Dados digitados integrados
-                    </div>
-                  )}
+                  {(() => {
+                    const validPhotos = (selectedCriterion.submittedPhotos || [])
+                      .map((p) => getPublicImageUrl(p))
+                      .filter((p) => p && typeof p === "string" && p.trim().length > 0);
+
+                    return validPhotos.length > 0 ? (
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {validPhotos.map((photo, i) => (
+                          <div key={i} className="relative aspect-square bg-[#1B2A4A]/5 rounded-lg overflow-hidden border border-violet-200">
+                            <img
+                              src={photo}
+                              referrerPolicy="no-referrer"
+                              alt="Evidência"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const parent = (e.target as HTMLElement).parentElement;
+                                if (parent) parent.style.display = "none";
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="border border-dashed border-violet-200 bg-white p-2 text-center text-[10px] text-violet-600 rounded font-semibold flex items-center justify-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">photo_library</span>
+                        Dados digitados integrados
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -2338,6 +2372,12 @@ export default function AdminEvaluationDetail({
                                   <td className="p-2.5 border-r border-slate-200" style={{ width: '200px', minWidth: '200px' }}>
                                     <span className="text-[9.5px] font-mono font-bold text-slate-400 block uppercase">CÓD. {item.code}</span>
                                     <span className="text-slate-800 font-extrabold text-[#1B2A4A] text-xs block leading-tight">{item.description}</span>
+                                    {item.localizacao && (
+                                      <span className="text-[10px] text-slate-500 font-semibold block mt-0.5 flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-[12px] text-indigo-500">location_on</span>
+                                        {item.localizacao}
+                                      </span>
+                                    )}
                                     {selectedCriterion.submittedAt && (
                                       <span className="text-[9px] font-mono text-slate-400 block mt-1" title="Data/Hora do envio do Almoxarife">
                                         📅 {selectedCriterion.submittedAt}
@@ -2347,49 +2387,65 @@ export default function AdminEvaluationDetail({
                                   
                                   {/* Foto Column */}
                                   <td className="p-2.5 text-center border-r border-slate-200 align-middle" style={{ width: '90px', minWidth: '90px', maxWidth: '90px' }}>
-                                    {photo ? (
-                                      <div className="flex flex-col items-center gap-1.5 justify-center">
-                                        {/* Miniatura clicável */}
-                                        <button
-                                          type="button"
-                                          onClick={() => setActiveLightboxImg(photo)}
-                                          className="group relative w-12 h-12 block rounded-lg overflow-hidden border border-slate-200 hover:border-indigo-600 shadow-3xs transition cursor-pointer"
-                                          title="Clique para ver no lightbox"
-                                        >
-                                          <img src={photo} alt="Envio" className="w-full h-full object-cover group-hover:scale-110 transition duration-150" referrerPolicy="no-referrer" />
-                                          <div className="absolute inset-0 bg-indigo-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[9px] font-bold uppercase">
-                                            Zoom
-                                          </div>
-                                        </button>
-                                        
-                                        {/* Badge "Ver foto" verde clicável que abre em nova aba */}
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const newTab = window.open();
-                                            if (newTab) {
-                                              newTab.document.write(
-                                                `<html><head><title>Visualizar Material - CÓD. ${item.code}</title></head>` +
-                                                `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #111; color: white; font-family: sans-serif;">` +
-                                                `<div style="text-align: center; padding: 20px;">` +
-                                                `<p style="margin-bottom: 12px; font-weight: bold; font-size: 14px; color: #ccc;">Item: ${item.description} (CÓD. ${item.code})</p>` +
-                                                `<img src="${photo}" style="max-width: 100%; max-height: 85vh; object-fit: contain; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-radius: 8px;" />` +
-                                                `</div>` +
-                                                `</body></html>`
-                                              );
-                                              newTab.document.close();
-                                            }
-                                          }}
-                                          className="w-full text-[9px] font-black text-emerald-700 hover:text-emerald-805 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1 py-0.5 rounded cursor-pointer transition uppercase select-none tracking-tight block text-center"
-                                        >
-                                          Ver foto ↗
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 italic">
-                                        Pendente
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const validPhotoUrl = getPublicImageUrl(photo);
+                                      if (!validPhotoUrl) {
+                                        return (
+                                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 italic">
+                                            Pendente
+                                          </span>
+                                        );
+                                      }
+
+                                      return (
+                                        <div className="flex flex-col items-center gap-1.5 justify-center">
+                                          {/* Miniatura clicável */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveLightboxImg(validPhotoUrl)}
+                                            className="group relative w-12 h-12 block rounded-lg overflow-hidden border border-slate-200 hover:border-indigo-600 shadow-3xs transition cursor-pointer"
+                                            title="Clique para ver no lightbox"
+                                          >
+                                            <img
+                                              src={validPhotoUrl}
+                                              alt="Envio"
+                                              className="w-full h-full object-cover group-hover:scale-110 transition duration-150"
+                                              referrerPolicy="no-referrer"
+                                              onError={(e) => {
+                                                const btn = (e.target as HTMLElement).closest('button');
+                                                if (btn) btn.style.display = 'none';
+                                              }}
+                                            />
+                                            <div className="absolute inset-0 bg-indigo-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[9px] font-bold uppercase">
+                                              Zoom
+                                            </div>
+                                          </button>
+                                          
+                                          {/* Badge "Ver foto" verde clicável que abre em nova aba */}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newTab = window.open();
+                                              if (newTab) {
+                                                newTab.document.write(
+                                                  `<html><head><title>Visualizar Material - CÓD. ${item.code}</title></head>` +
+                                                  `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #111; color: white; font-family: sans-serif;">` +
+                                                  `<div style="text-align: center; padding: 20px;">` +
+                                                  `<p style="margin-bottom: 12px; font-weight: bold; font-size: 14px; color: #ccc;">Item: ${item.description} (CÓD. ${item.code})</p>` +
+                                                  `<img src="${validPhotoUrl}" style="max-width: 100%; max-height: 85vh; object-fit: contain; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border-radius: 8px;" />` +
+                                                  `</div>` +
+                                                  `</body></html>`
+                                                );
+                                                newTab.document.close();
+                                              }
+                                            }}
+                                            className="w-full text-[9px] font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1 py-0.5 rounded cursor-pointer transition uppercase select-none tracking-tight block text-center"
+                                          >
+                                            Ver foto ↗
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </td>
 
                                   {/* Qtd Almoxarife Column */}
@@ -2553,25 +2609,40 @@ export default function AdminEvaluationDetail({
                                   type="file"
                                   accept=".jpg,.jpeg,.png,.pdf"
                                   className="hidden"
-                                  onChange={(e) => {
+                                  onChange={async (e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
                                       if (file.size > 10 * 1024 * 1024) {
                                         alert("Erro: O arquivo excede o limite máximo de 10 MB.");
                                         return;
                                       }
-                                      const reader = new FileReader();
-                                      reader.onload = (re) => {
-                                        const base64 = re.target?.result as string;
+                                      try {
+                                        let base64: string;
+                                        let finalType = file.type;
+                                        let finalFileName = file.name;
+
+                                        if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
+                                          base64 = await comprimirImagem(file, 800, 1280, 0.8, "image/webp");
+                                          finalType = "image/webp";
+                                          finalFileName = file.name.replace(/\.(jpe?g|png)$/i, ".webp");
+                                        } else {
+                                          base64 = await new Promise<string>((resolve, reject) => {
+                                            const reader = new FileReader();
+                                            reader.onload = () => resolve(reader.result as string);
+                                            reader.onerror = reject;
+                                            reader.readAsDataURL(file);
+                                          });
+                                        }
+
                                         const updated = auditorCerts.map((item) => {
                                           if (item.id === c.id) {
                                             return {
                                               ...item,
                                               status: "Certificado enviado" as const,
                                               uploadedAt: new Date().toLocaleDateString("pt-BR"),
-                                              fileName: file.name,
+                                              fileName: finalFileName,
                                               fileSize: file.size,
-                                              fileType: file.type,
+                                              fileType: finalType,
                                               fileData: base64
                                             };
                                           }
@@ -2579,8 +2650,9 @@ export default function AdminEvaluationDetail({
                                         });
                                         setAuditorCerts(updated);
                                         localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
-                                      };
-                                      reader.readAsDataURL(file);
+                                      } catch (err) {
+                                        console.error("Erro ao processar certificado:", err);
+                                      }
                                     }
                                   }}
                                 />
@@ -3006,7 +3078,7 @@ export default function AdminEvaluationDetail({
       {/* CONFIGURAR TOP 10 MODAL */}
       {showTop10ConfigModal && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 transition-opacity">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="px-6 py-4 bg-[#1B2A4A] text-white flex justify-between items-center bg-gradient-to-r from-[#1B2A4A] to-[#21355c]">
               <div>
@@ -3044,8 +3116,9 @@ export default function AdminEvaluationDetail({
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     <div className="grid grid-cols-12 gap-2 text-[10px] font-black text-slate-400 uppercase font-mono px-2">
                       <div className="col-span-1 text-center">Nº</div>
-                      <div className="col-span-4">Código do Item</div>
-                      <div className="col-span-6">Descrição</div>
+                      <div className="col-span-3">Código do Item</div>
+                      <div className="col-span-4">Descrição</div>
+                      <div className="col-span-3">Localização</div>
                       <div className="col-span-1 text-right"></div>
                     </div>
 
@@ -3054,7 +3127,7 @@ export default function AdminEvaluationDetail({
                         <div className="col-span-1 text-center font-mono font-bold text-slate-400 text-xs">
                           {idx + 1}
                         </div>
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <input
                             type="text"
                             placeholder="Código"
@@ -3063,12 +3136,21 @@ export default function AdminEvaluationDetail({
                             className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-bold font-mono focus:outline-none focus:border-[#1B2A4A]"
                           />
                         </div>
-                        <div className="col-span-6">
+                        <div className="col-span-4">
                           <input
                             type="text"
                             placeholder="Descrição do material"
                             value={row.description}
                             onChange={(e) => handleUpdateTop10Row(idx, "description", e.target.value)}
+                            className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#1B2A4A]"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="text"
+                            placeholder="Localização (ex: Prateleira A)"
+                            value={row.localizacao || ""}
+                            onChange={(e) => handleUpdateTop10Row(idx, "localizacao", e.target.value)}
                             className="w-full border border-slate-200 bg-white rounded-md px-2 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#1B2A4A]"
                           />
                         </div>

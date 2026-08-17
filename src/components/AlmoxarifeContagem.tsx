@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
-import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady, comprimirImagem } from "../supabaseService";
+import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady, comprimirImagem, getPublicImageUrl } from "../supabaseService";
 import { getOrderedFields, BUILTIN_TOP10_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeContagemProps {
@@ -13,7 +13,7 @@ interface AlmoxarifeContagemProps {
     onProgress?: (msg: string, percent: number) => void
   ) => Promise<any> | void;
   criterionState?: CriterionState;
-  top10?: Array<{ code: string; name: string }>;
+  top10?: Array<{ code: string; name?: string; description?: string; localizacao?: string }>;
   branchId: string;
   activeMonth: string;
   activeYear: string;
@@ -64,9 +64,10 @@ export default function AlmoxarifeContagem({
     };
   }, [branchId, activeMonth, activeYear]);
 
-  const items = monthlyConfig?.itens || top10?.map(it => ({
+  const items = monthlyConfig?.itens || top10?.map((it: any) => ({
     code: it.code,
-    description: it.name,
+    description: it.description || it.name,
+    localizacao: it.localizacao || it.location || "",
     qty: 1
   })) || [];
   const totalItemsCount = items.length;
@@ -196,11 +197,11 @@ export default function AlmoxarifeContagem({
       return photoOk && qtyOk && customOk;
     });
 
-  // Handle local File conversions with compression
+  // Handle local File conversions with compression (Max 1280px width, image/webp 0.8)
   const processFile = async (itemCode: string, file: File) => {
     if (!file) return;
     try {
-      const compressed = await comprimirImagem(file, 800, 1200, 0.7);
+      const compressed = await comprimirImagem(file, 800, 1280, 0.8, "image/webp");
       if (compressed) {
         setUploadedPhotos((prev) => ({
           ...prev,
@@ -423,6 +424,12 @@ export default function AlmoxarifeContagem({
                       <div className="space-y-1">
                         <span className="text-[9px] font-mono font-bold text-slate-400">Nº {idx + 1} • CÓD. {item.code}</span>
                         <p className="font-extrabold text-[#1B2A4A] text-xs leading-snug">{item.description}</p>
+                        {item.localizacao && (
+                          <p className="text-[10.5px] text-slate-600 font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px] text-indigo-600">location_on</span>
+                            <span>Localização: <strong className="text-slate-800 font-bold">{item.localizacao}</strong></span>
+                          </p>
+                        )}
                         <div className="space-y-0.5 text-[10px] block">
                           <p className="text-slate-605 text-slate-600 font-bold">
                             📦 Qtd Almoxarife: <strong className="text-[#1B2A4A] font-extrabold">{criterionState?.top10AlmoxarifeQuantities?.[idx] ?? 0} un</strong>
@@ -448,17 +455,30 @@ export default function AlmoxarifeContagem({
                         </div>
                       </div>
                       <div className="shrink-0">
-                        {pImg ? (
-                          <button
-                            type="button"
-                            onClick={() => setActiveImgLightbox(pImg)}
-                            className="w-14 h-14 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center hover:opacity-90 select-none transition"
-                          >
-                            <img src={pImg} alt="Envio" className="w-full h-full object-cover" />
-                          </button>
-                        ) : (
-                          <span className="text-[10px] italic text-slate-400 font-bold">Sem imagem</span>
-                        )}
+                        {(() => {
+                          const resolvedPhoto = getPublicImageUrl(pImg);
+                          if (!resolvedPhoto) {
+                            return <span className="text-[10px] italic text-slate-400 font-bold">Sem imagem</span>;
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setActiveImgLightbox(resolvedPhoto)}
+                              className="w-14 h-14 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center hover:opacity-90 select-none transition"
+                            >
+                              <img
+                                src={resolvedPhoto}
+                                alt="Envio"
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  const btn = (e.target as HTMLElement).closest('button');
+                                  if (btn) btn.style.display = 'none';
+                                }}
+                              />
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -532,6 +552,12 @@ export default function AlmoxarifeContagem({
                           <h4 className="text-xs font-black text-[#1B2A4A] mt-0.5 leading-snug">
                             {item.description}
                           </h4>
+                          {item.localizacao && (
+                            <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50/80 border border-indigo-100/80 text-indigo-900 text-[11px] font-medium">
+                              <span className="material-symbols-outlined text-[13px] text-indigo-600">location_on</span>
+                              <span>Localização: <strong className="font-bold text-indigo-950">{item.localizacao}</strong></span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Dynamic Ordered Fields for Item */}

@@ -22,6 +22,7 @@ interface AdminPanelProps {
   onArchiveCycle: (month: string, year: string, finalScore: number) => void;
   user?: any;
   allCycles: Record<string, any>;
+  isLoading?: boolean;
 }
 
 export default function AdminPanel({
@@ -36,6 +37,7 @@ export default function AdminPanel({
   onArchiveCycle,
   user,
   allCycles,
+  isLoading = false,
 }: AdminPanelProps) {
   useRealtimeSync();
   const [selectedGroup, setSelectedGroup] = useState<"TODOS" | "A" | "B">("TODOS");
@@ -230,45 +232,65 @@ export default function AdminPanel({
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Total de Unidades</p>
-          <p className="text-3xl font-bold text-[#00194C] mt-2">{filteredBranches.length}</p>
+          {isLoading ? (
+            <div className="h-9 w-16 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-2" />
+          ) : (
+            <p className="text-3xl font-bold text-[#00194C] mt-2">{filteredBranches.length}</p>
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Aprovadas (100 pts)</p>
-          <p className="text-3xl font-bold text-emerald-600 mt-2">
-            {filteredBranches.filter((b) => {
-              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
-              return hasRegistered && b.currentScore >= 100;
-            }).length}
-          </p>
+          {isLoading ? (
+            <div className="h-9 w-16 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-2" />
+          ) : (
+            <p className="text-3xl font-bold text-emerald-600 mt-2">
+              {filteredBranches.filter((b) => {
+                const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+                return hasRegistered && b.currentScore >= 100;
+              }).length}
+            </p>
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Abaixo da Meta</p>
-          <p className="text-3xl font-bold text-[#F11E26] mt-2">
-            {filteredBranches.filter((b) => {
-              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
-              return hasRegistered && b.currentScore < 100;
-            }).length}
-          </p>
+          {isLoading ? (
+            <div className="h-9 w-16 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-2" />
+          ) : (
+            <p className="text-3xl font-bold text-[#F11E26] mt-2">
+              {filteredBranches.filter((b) => {
+                const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+                return hasRegistered && b.currentScore < 100;
+              }).length}
+            </p>
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-sm bg-amber-50/20">
           <p className="text-xs uppercase font-bold tracking-wider text-amber-700">Aguardando Avaliação</p>
-          <p className="text-3xl font-bold text-amber-600 mt-2">
-            {filteredBranches.filter((b) => {
-              const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
-              return !hasRegistered;
-            }).length}
-          </p>
+          {isLoading ? (
+            <div className="h-9 w-16 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-2" />
+          ) : (
+            <p className="text-3xl font-bold text-amber-600 mt-2">
+              {filteredBranches.filter((b) => {
+                const hasRegistered = b.criteria.some(c => c.status === "OK" || c.status === "NOK");
+                return !hasRegistered;
+              }).length}
+            </p>
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs uppercase font-bold tracking-wider text-slate-500">Média de Desempenho</p>
-          <p className="text-3xl font-bold text-[#00194C] mt-2 font-mono">
-            {(() => {
-              const evaluatedBranches = filteredBranches.filter(b => b.criteria.some(c => c.status === "OK" || c.status === "NOK"));
-              if (evaluatedBranches.length === 0) return "0 pts";
-              const total = evaluatedBranches.reduce((acc, b) => acc + b.currentScore, 0);
-              return `${Math.round(total / evaluatedBranches.length)} pts`;
-            })()}
-          </p>
+          {isLoading ? (
+            <div className="h-9 w-20 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-2" />
+          ) : (
+            <p className="text-3xl font-bold text-[#00194C] mt-2 font-mono">
+              {(() => {
+                const evaluatedBranches = filteredBranches.filter(b => b.criteria.some(c => c.status === "OK" || c.status === "NOK"));
+                if (evaluatedBranches.length === 0) return "0 pts";
+                const total = evaluatedBranches.reduce((acc, b) => acc + b.currentScore, 0);
+                return `${Math.round(total / evaluatedBranches.length)} pts`;
+              })()}
+            </p>
+          )}
         </div>
       </div>
 
@@ -367,7 +389,43 @@ export default function AdminPanel({
 
       {/* Bento grid list of Branches */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredBranches.map((branch) => {
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, idx) => (
+            <div
+              key={`skeleton-branch-${idx}`}
+              className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between animate-pulse"
+            >
+              <div>
+                <div className="flex justify-between items-start gap-3 mb-3">
+                  <div className="space-y-2 flex-1">
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                  </div>
+                  <div className="h-5 w-16 bg-slate-200 dark:bg-slate-700 rounded-full shrink-0"></div>
+                </div>
+
+                <div className="flex flex-col items-center justify-center py-4 bg-slate-50/80 rounded-xl mb-4">
+                  <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded mb-1"></div>
+                  <div className="h-2.5 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between">
+                    <div className="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                    <div className="h-3 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full"></div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                <div className="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                <div className="h-9 w-20 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+              </div>
+            </div>
+          ))
+        ) : (
+          filteredBranches.map((branch) => {
           const monthlyCriteria = branch.criteria.filter((c) => c.id !== "1" && c.id !== "10");
           const allMonthlyEvaluated = monthlyCriteria.every((c) => c.status === "OK" || c.status === "NOK");
           const anyMonthlyEvaluated = monthlyCriteria.some((c) => c.status === "OK" || c.status === "NOK");
@@ -521,7 +579,7 @@ export default function AdminPanel({
               </div>
             </div>
           );
-        })}
+        }) )}
       </div>
 
       {/* ================= MODAL: ABRIR NOVO CICLO ================= */}

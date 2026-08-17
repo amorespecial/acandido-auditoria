@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
-import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, dbFetchColaboradoresUnimobin, isSupabaseReady } from "../supabaseService";
+import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, dbFetchColaboradoresUnimobin, isSupabaseReady, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 
 interface AlmoxarifeUnimobinProps {
@@ -175,13 +175,23 @@ export default function AlmoxarifeUnimobin({
     setUploadingCertId(certId);
 
     try {
-      // 1. Converter para base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // 1. Converter para base64 com compressão se for imagem
+      let base64: string;
+      let finalType = file.type;
+      let finalFileName = file.name;
+
+      if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
+        base64 = await comprimirImagem(file, 800, 1280, 0.8, "image/webp");
+        finalType = "image/webp";
+        finalFileName = file.name.replace(/\.(jpe?g|png)$/i, ".webp");
+      } else {
+        base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
 
       const uploadedDate = new Date().toLocaleDateString("pt-BR");
 
@@ -189,8 +199,8 @@ export default function AlmoxarifeUnimobin({
       if (branchId && isSupabaseReady()) {
         await dbSalvarCertificado(branchId, currentMonth, currentYear, certName, {
           status: "Certificado enviado",
-          fileName: file.name,
-          fileType: file.type,
+          fileName: finalFileName,
+          fileType: finalType,
           fileData: base64,
           uploadedAt: uploadedDate
         });
@@ -204,9 +214,9 @@ export default function AlmoxarifeUnimobin({
               ...item,
               status: "Certificado enviado" as const,
               uploadedAt: uploadedDate,
-              fileName: file.name,
+              fileName: finalFileName,
               fileSize: file.size,
-              fileType: file.type,
+              fileType: finalType,
               fileData: base64
             };
           }
