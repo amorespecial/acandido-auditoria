@@ -3,6 +3,8 @@ import { CollaboratorCertificate, CriterionState } from "../types";
 import { getCollaboratorsForBranch } from "../mockData";
 import { dbBuscarCertificados, dbSalvarCertificado, dbFetchUnimobinFieldConfig, dbFetchColaboradoresUnimobin, isSupabaseReady, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_UNIMOBIN_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface AlmoxarifeUnimobinProps {
   onBack: () => void;
@@ -162,13 +164,13 @@ export default function AlmoxarifeUnimobin({
     console.log('[Unimobin Upload] Iniciando upload:', file.name, file.size, file.type);
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("Arquivo muito grande. Máximo 10MB.");
+      toast.warning("Arquivo muito grande. Máximo 10MB.");
       return;
     }
 
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
     if (!tiposPermitidos.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|pdf)$/i)) {
-      alert("Tipo de arquivo não permitido. Use JPG, PNG ou PDF.");
+      toast.warning("Tipo de arquivo não permitido. Use JPG, PNG ou PDF.");
       return;
     }
 
@@ -223,9 +225,10 @@ export default function AlmoxarifeUnimobin({
           return item;
         })
       );
+      toast.success(`Certificado de ${certName} anexado com sucesso!`);
     } catch (err: any) {
       console.error('[Unimobin Upload] Erro:', err);
-      alert('Erro ao salvar certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
+      toast.error('Erro ao salvar certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
     } finally {
       setUploadingCertId(null);
     }
@@ -259,9 +262,10 @@ export default function AlmoxarifeUnimobin({
           return item;
         })
       );
+      toast.success(`Certificado de ${certName} removido com sucesso.`);
     } catch (err: any) {
       console.error('[Unimobin Upload] Erro ao remover certificado:', err);
-      alert('Erro ao remover certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
+      toast.error('Erro ao remover certificado: ' + (err?.message || 'Falha na conexão com o banco de dados.'));
     } finally {
       setUploadingCertId(null);
     }
@@ -333,7 +337,7 @@ export default function AlmoxarifeUnimobin({
       );
       newTab.document.close();
     } else {
-      alert("Bloqueador de pop-ups ativo. Por favor, permita pop-ups para visualizar o arquivo.");
+      toast.warning("Bloqueador de pop-ups ativo. Por favor, permita pop-ups para visualizar o arquivo.");
     }
   };
 
@@ -389,11 +393,12 @@ export default function AlmoxarifeUnimobin({
 
       // 3. Submit back up to main app state and close subscreen
       await onSubmitEvidence("6", summaryNote, []);
+      toast.success("Certificados do Curso Unimobin transmitidos com sucesso!");
       onBack();
     } catch (e: any) {
       console.error("Error confirming and completing certificate send:", e);
       const detailMsg = e?.message || e?.details || "Erro de conexão com o banco de dados";
-      alert(`Erro de sincronização no Supabase: ${detailMsg}. Por favor, tente novamente.`);
+      toast.error(`Erro de sincronização no Supabase: ${detailMsg}. Por favor, tente novamente.`);
     } finally {
       setIsSending(false);
     }
@@ -581,14 +586,11 @@ export default function AlmoxarifeUnimobin({
         <button
           onClick={handleCompleteSend}
           disabled={isSending}
-          className="w-full bg-[#1B2A4A] active:bg-[#0F172B] text-white py-3 rounded-lg text-xs font-bold shadow-md hover:opacity-95 active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+          className="w-full bg-[#1B2A4A] active:bg-[#0F172B] text-white py-3 rounded-lg text-xs font-bold shadow-md hover:opacity-95 active:scale-95 transition-all text-center flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSending ? (
             <>
-              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Loader2 className="animate-spin h-4 w-4 text-white" />
               <span>Transmitindo Certificados...</span>
             </>
           ) : (

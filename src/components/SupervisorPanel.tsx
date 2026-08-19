@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Branch, MaterialOccurrence, AppUser } from "../types";
 import { initialOccurrences } from "../mockData";
 import { dbFetchOccurrences, dbSaveOccurrences, dbFetchSupervisorFieldConfig, isSupabaseReady, getBranchIdByName } from "../supabaseService";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface SupervisorPanelProps {
   user: AppUser;
@@ -12,6 +14,7 @@ interface SupervisorPanelProps {
 export default function SupervisorPanel({ user, branches, onLogout }: SupervisorPanelProps) {
   // Load occurrences from localStorage to enable real-time coordination
   const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(initialOccurrences);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Dynamic fields configured by Auditor
   const [fields, setFields] = useState<any[]>(() => {
@@ -145,45 +148,52 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
       !formValues[f.id]?.trim()
     );
     if (missing.length > 0) {
-      alert(`Por favor, preencha o campo obrigatório: ${missing[0].name}`);
+      toast.warning(`Por favor, preencha o campo obrigatório: ${missing[0].name}`);
       return;
     }
 
-    const simulatedDateStr = getTodayISO(); // System dynamic operational date
+    setIsSubmitting(true);
+    try {
+      const simulatedDateStr = getTodayISO(); // System dynamic operational date
 
-    const targetBranch = targetBranchId === "fretamento-jaboatao"
-      ? { id: "fretamento-jaboatao", name: "FRETAMENTO JABOATÃO" }
-      : { id: "rodoviario-jaboatao", name: "RODOVIÁRIO JABOATÃO" };
+      const targetBranch = targetBranchId === "fretamento-jaboatao"
+        ? { id: "fretamento-jaboatao", name: "FRETAMENTO JABOATÃO" }
+        : { id: "rodoviario-jaboatao", name: "RODOVIÁRIO JABOATÃO" };
 
-    const dynamicData: Record<string, string> = {};
-    fields.forEach(f => {
-      if (f.id !== "solicitante" && f.id !== "codigoMaterial" && f.id !== "codigo" && f.id !== "codigo_material") {
-        dynamicData[f.id] = formValues[f.id] || "";
-      }
-    });
+      const dynamicData: Record<string, string> = {};
+      fields.forEach(f => {
+        if (f.id !== "solicitante" && f.id !== "codigoMaterial" && f.id !== "codigo" && f.id !== "codigo_material") {
+          dynamicData[f.id] = formValues[f.id] || "";
+        }
+      });
 
-    const newOcc: MaterialOccurrence = {
-      id: "occ-" + Date.now(),
-      material: String(dynamicData["material"] || "").trim(),
-      veiculo: String(dynamicData["veiculo"] || "").trim().toUpperCase(),
-      solicitante: user.name, // Automatic logged in user
-      date: simulatedDateStr, // Operational system date
-      timestamp: Date.now(),
-      status: "Sem Estoque Mín/Máx", // Starting status
-      filial: targetBranch.name,
-      branchId: targetBranch.id, // Target physical garage selected
-      branchName: targetBranch.name,
-      obs: undefined, // waiting for almoxarifado resolution
-      registrado_por: user.name || "Supervisor",
-      ...dynamicData
-    };
+      const newOcc: MaterialOccurrence = {
+        id: "occ-" + Date.now(),
+        material: String(dynamicData["material"] || "").trim(),
+        veiculo: String(dynamicData["veiculo"] || "").trim().toUpperCase(),
+        solicitante: user.name, // Automatic logged in user
+        date: simulatedDateStr, // Operational system date
+        timestamp: Date.now(),
+        status: "Sem Estoque Mín/Máx", // Starting status
+        filial: targetBranch.name,
+        branchId: targetBranch.id, // Target physical garage selected
+        branchName: targetBranch.name,
+        obs: undefined, // waiting for almoxarifado resolution
+        registrado_por: user.name || "Supervisor",
+        ...dynamicData
+      };
 
-    const updated = [newOcc, ...occurrences];
-    saveOccurrences(updated);
+      const updated = [newOcc, ...occurrences];
+      saveOccurrences(updated);
 
-    // Reset form values
-    setFormValues({});
-    alert(`Sucesso! Ocorrência registrada para o veículo ${newOcc.veiculo} e enviada com sucesso para o Almoxarifado: ${targetBranch.name}.`);
+      // Reset form values
+      setFormValues({});
+      toast.success(`Sucesso! Ocorrência registrada para o veículo ${newOcc.veiculo} e enviada com sucesso para o Almoxarifado: ${targetBranch.name}.`);
+    } catch (err: any) {
+      toast.error("Erro ao registrar ocorrência: " + (err?.message || err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Filter historic records belonging to Jaboatão or logged user
@@ -404,10 +414,15 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
               {/* SUBMIT FORM ACTION BUTTON */}
               <button
                 type="submit"
-                className="w-full h-[44px] bg-[#00194C] hover:bg-[#001238] active:scale-[0.98] text-white font-semibold rounded-[8px] text-[13px] shadow-md transition-all uppercase flex items-center justify-center gap-2 font-sans cursor-pointer"
+                disabled={isSubmitting}
+                className="w-full h-[44px] bg-[#00194C] hover:bg-[#001238] active:scale-[0.98] text-white font-semibold rounded-[8px] text-[13px] shadow-md transition-all uppercase flex items-center justify-center gap-2 font-sans cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span className="material-symbols-outlined text-[18px]">send</span>
-                Enviar Registro ao Estoque
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-[18px]">send</span>
+                )}
+                {isSubmitting ? "Enviando..." : "Enviar Registro ao Estoque"}
               </button>
 
             </form>

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Branch } from "../types";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { getAnosDisponiveis } from "../utils/dateUtils";
+import { toast } from "../utils/toast";
 
 interface AdminPanelProps {
   branches: Branch[];
@@ -77,7 +78,7 @@ export default function AdminPanel({
     setSelectedMonth(openForm.month);
     setSelectedYear(openForm.year);
     setShowOpenModal(false);
-    alert(`Novo Ciclo de ${openForm.month} ${openForm.year} foi aberto com sucesso para todos os almoxarifes!`);
+    toast.success(`Novo Ciclo de ${openForm.month} ${openForm.year} foi aberto com sucesso para todos os almoxarifes!`);
   };
 
   // Close cycle handler
@@ -90,7 +91,7 @@ export default function AdminPanel({
     onArchiveCycle(cycleState.activeMonth, cycleState.activeYear, avgScore);
     setShowCloseModal(false);
     setChallengeNameInput("");
-    alert(`O ciclo de ${cycleState.activeMonth} ${cycleState.activeYear} foi trancado, arquivado de forma permanente, e agora está em modo somente-leitura!`);
+    toast.success(`O ciclo de ${cycleState.activeMonth} ${cycleState.activeYear} foi trancado, arquivado de forma permanente, e agora está em modo somente-leitura!`);
   };
 
   return (
@@ -171,7 +172,7 @@ export default function AdminPanel({
                   <button
                     onClick={() => {
                       onUpdateCycleState({ ...cycleState, status: "AGUARDANDO_FECHAMENTO" });
-                      alert(`O ciclo de ${cycleState.activeMonth} foi alterado para 'Aguardando Fechamento'! Almoxarifes agora estão trancados em modo de avaliação.`);
+                      toast.info(`O ciclo de ${cycleState.activeMonth} foi alterado para 'Aguardando Fechamento'! Almoxarifes agora estão trancados em modo de avaliação.`);
                     }}
                     className="h-10 px-4 bg-amber-500 hover:bg-amber-600 text-[#00194C] rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                   >
@@ -181,7 +182,7 @@ export default function AdminPanel({
                   <button
                     onClick={() => {
                       onUpdateCycleState({ ...cycleState, status: "ABERTO" });
-                      alert(`O ciclo de ${cycleState.activeMonth} foi reaberto. Almoxarifes já podem reenviar evidências.`);
+                      toast.success(`O ciclo de ${cycleState.activeMonth} foi reaberto. Almoxarifes já podem reenviar evidências.`);
                     }}
                     className="h-10 px-4 bg-[#F11E26] hover:bg-[#C9181F] text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                   >
@@ -191,7 +192,7 @@ export default function AdminPanel({
                 <button
                   onClick={() => {
                     onUpdateCycleState({ ...cycleState, status: "FECHADO" });
-                    alert(`O ciclo de ${cycleState.activeMonth} foi alterado para FECHADO! Os dados permanecem legíveis para consulta mas novos envios estão encerrados.`);
+                    toast.info(`O ciclo de ${cycleState.activeMonth} foi alterado para FECHADO! Os dados permanecem legíveis para consulta mas novos envios estão encerrados.`);
                   }}
                   className="h-10 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow border border-slate-700 transition"
                 >
@@ -205,7 +206,7 @@ export default function AdminPanel({
                 <button
                   onClick={() => {
                     onUpdateCycleState({ ...cycleState, status: "ABERTO" });
-                    alert(`O ciclo de ${cycleState.activeMonth} foi reaberto para ajustes gerais.`);
+                    toast.success(`O ciclo de ${cycleState.activeMonth} foi reaberto para ajustes gerais.`);
                   }}
                   className="h-10 px-4 bg-[#00194C] hover:bg-[#002B7A] text-white border border-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider shadow transition"
                 >

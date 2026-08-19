@@ -3,6 +3,8 @@ import { WarrantyItem, Branch } from "../types";
 import { dbFetchWarranties, dbDeleteWarranty, dbSalvarGarantia } from "../supabaseService";
 import { getAnosDisponiveis } from "../utils/dateUtils";
 import { getWarrantyFieldValue, handleOpenAnexo } from "./AlmoxarifeGarantia";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface AdminGarantiasPanelProps {
   branch?: Branch; // If provided, locks down to this specific branch!
@@ -12,6 +14,7 @@ interface AdminGarantiasPanelProps {
 export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarantiasPanelProps) {
   const [warranties, setWarranties] = useState<WarrantyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [garantiaConfig] = useState(() => {
     try {
@@ -50,9 +53,10 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
         await dbDeleteWarranty(id);
         setWarranties((prev) => prev.filter((w) => w.id !== id));
         window.dispatchEvent(new Event("realtime-garantias-update"));
+        toast.success("Registro de garantia excluído com sucesso.");
       } catch (e) {
         console.error("Erro ao excluir garantia:", e);
-        alert("Erro ao excluir registro de garantia.");
+        toast.error("Erro ao excluir registro de garantia.");
       }
     }
   };
@@ -78,6 +82,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
     e.preventDefault();
     if (!editingWarranty) return;
 
+    setIsSaving(true);
     try {
       const updatedItem: WarrantyItem = {
         ...editingWarranty,
@@ -98,10 +103,12 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
       setWarranties((prev) => prev.map((w) => (w.id === editingWarranty.id ? updatedItem : w)));
       window.dispatchEvent(new Event("realtime-garantias-update"));
       setEditingWarranty(null);
-      alert("Garantia atualizada com sucesso!");
+      toast.success("Garantia atualizada com sucesso!");
     } catch (err) {
       console.error("Erro ao salvar garantia:", err);
-      alert("Erro ao salvar alterações da garantia.");
+      toast.error("Erro ao salvar alterações da garantia.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -297,7 +304,7 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
   // Export CSV Functionality
   const exportToCSV = () => {
     if (filteredWarranties.length === 0) {
-      alert("Nenhum registro encontrado para exportar.");
+      toast.warning("Nenhum registro encontrado para exportar.");
       return;
     }
 
@@ -767,9 +774,11 @@ export default function AdminGarantiasPanel({ branch, allBranches }: AdminGarant
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-[#00194C] hover:bg-[#001033] text-white font-bold text-xs shadow-sm active:scale-95 transition cursor-pointer"
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-lg bg-[#00194C] hover:bg-[#001033] text-white font-bold text-xs shadow-sm active:scale-95 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Salvar Alterações
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {isSaving ? "Salvando..." : "Salvar Alterações"}
                 </button>
               </div>
             </form>

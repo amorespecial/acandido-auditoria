@@ -48,6 +48,8 @@ import {
   BUILTIN_UNIMOBIN_FIELDS,
   isFieldRequired,
 } from "../utils/fieldOrdering";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 const ALMOXARIFADOS_LIST = [
   "Santa Maria JPA",
@@ -481,10 +483,10 @@ export default function AdminConfiguracoes({
         setCalendarData(migrated);
       }
       
-      alert("Datas salvas com sucesso");
+      toast.success("Datas salvas com sucesso!");
     } catch (e: any) {
       console.error(e);
-      alert(`Falha crítica ao salvar o calendário de inventários: ${e?.message || e}`);
+      toast.error(`Falha crítica ao salvar o calendário de inventários: ${e?.message || e}`);
     } finally {
       setIsCalendarLoading(false);
     }
@@ -861,6 +863,8 @@ export default function AdminConfiguracoes({
   // Exclude user state
   const [userToExclude, setUserToExclude] = useState<AppUser | null>(null);
   const [excludeTypedName, setExcludeTypedName] = useState("");
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isSavingBranch, setIsSavingBranch] = useState(false);
 
   // Custom confirmation modal (to bypass iframe confirm limitations)
   const [customConfirm, setCustomConfirm] = useState<{
@@ -1027,92 +1031,97 @@ export default function AdminConfiguracoes({
     setShowUserModal(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userForm.name.trim() || !userForm.email.trim()) {
-      alert("Nome e E-mail são obrigatórios.");
+      toast.warning("Nome e E-mail são obrigatórios.");
       return;
     }
 
-    if (!editingUser) {
-      // Create mode
-      if (!userForm.password) {
-        alert("Senha é obrigatória para novos usuários.");
-        return;
-      }
-      if (userForm.password !== userForm.confirmPassword) {
-        alert("As senhas digitadas não coincidem.");
-        return;
-      }
-      // Check existing email
-      const exists = users.some((u) => u.email.toLowerCase().trim() === userForm.email.toLowerCase().trim());
-      if (exists) {
-        alert("Este e-mail corporativo já está cadastrado.");
-        return;
-      }
+    setIsSavingUser(true);
+    try {
+      if (!editingUser) {
+        // Create mode
+        if (!userForm.password) {
+          toast.warning("Senha é obrigatória para novos usuários.");
+          return;
+        }
+        if (userForm.password !== userForm.confirmPassword) {
+          toast.warning("As senhas digitadas não coincidem.");
+          return;
+        }
+        // Check existing email
+        const exists = users.some((u) => u.email.toLowerCase().trim() === userForm.email.toLowerCase().trim());
+        if (exists) {
+          toast.warning("Este e-mail corporativo já está cadastrado.");
+          return;
+        }
 
-      const newUser: AppUser = {
-        name: userForm.name.trim(),
-        role: userForm.role,
-        email: userForm.email.toLowerCase().trim(),
-        password: userForm.password,
-        ownerName: userForm.name.trim().split(" ")[0],
-        group: userForm.role === "ADMIN" ? "A" : userForm.group,
-        almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
-        status: "ATIVO" as const,
-        cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
-      };
+        const newUser: AppUser = {
+          name: userForm.name.trim(),
+          role: userForm.role,
+          email: userForm.email.toLowerCase().trim(),
+          password: userForm.password,
+          ownerName: userForm.name.trim().split(" ")[0],
+          group: userForm.role === "ADMIN" ? "A" : userForm.group,
+          almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
+          status: "ATIVO" as const,
+          cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
+        };
 
-      if (isSupabaseReady()) {
-        dbSaveUser(newUser).then(() => {
-          loadRealtimeUsers().then(() => {
-            alert("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
-          });
-        }).catch(err => {
-          console.error("Error creating user:", err);
-          alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
-        });
+        if (isSupabaseReady()) {
+          try {
+            await dbSaveUser(newUser);
+            await loadRealtimeUsers();
+            toast.success("Usuário criado com sucesso no Supabase Auth e Banco de Dados!");
+          } catch (err) {
+            console.error("Error creating user:", err);
+            toast.error("⚠ Erro de conexão com o banco de dados. Tente novamente.");
+          }
+        } else {
+          setUsers(prev => [...prev, newUser]);
+          toast.success("Usuário criado com sucesso!");
+        }
       } else {
-        setUsers(prev => [...prev, newUser]);
-        alert("Usuário criado com sucesso!");
-      }
-    } else {
-      // Edit mode
-      if (userForm.password && userForm.password !== userForm.confirmPassword) {
-        alert("As senhas de alteração não coincidem.");
-        return;
+        // Edit mode
+        if (userForm.password && userForm.password !== userForm.confirmPassword) {
+          toast.warning("As senhas de alteração não coincidem.");
+          return;
+        }
+
+        const updatedUser: AppUser = {
+          name: userForm.name.trim(),
+          role: userForm.role,
+          email: editingUser.email.toLowerCase().trim(),
+          password: userForm.password || "",
+          ownerName: userForm.name.trim().split(" ")[0],
+          group: userForm.role === "ADMIN" ? "A" : userForm.group,
+          almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
+          status: editingUser.status || "ATIVO",
+          cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
+        };
+
+        if (isSupabaseReady()) {
+          try {
+            await dbSaveUser(updatedUser);
+            await loadRealtimeUsers();
+            toast.success("Dados do usuário atualizados com sucesso!");
+          } catch (err) {
+            console.error("Error updating user:", err);
+            toast.error("⚠ Erro de conexão com o banco de dados. Tente novamente.");
+          }
+        } else {
+          setUsers(prev =>
+            prev.map((u) => u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim() ? updatedUser : u)
+          );
+          toast.success("Dados do usuário atualizados com sucesso!");
+        }
       }
 
-      const updatedUser: AppUser = {
-        name: userForm.name.trim(),
-        role: userForm.role,
-        email: editingUser.email.toLowerCase().trim(),
-        password: userForm.password || "",
-        ownerName: userForm.name.trim().split(" ")[0],
-        group: userForm.role === "ADMIN" ? "A" : userForm.group,
-        almoxarifados: userForm.role === "ADMIN" ? [] : userForm.almoxarifados,
-        status: editingUser.status || "ATIVO",
-        cargo: userForm.role === "ALMOXARIFE" ? "Almoxarife" : (userForm.role === "SUPERVISOR" ? "Supervisor de Manutenção" : "Auditor Geral")
-      };
-
-      if (isSupabaseReady()) {
-        dbSaveUser(updatedUser).then(() => {
-          loadRealtimeUsers().then(() => {
-            alert("Dados do usuário atualizados com sucesso!");
-          });
-        }).catch(err => {
-          console.error("Error updating user:", err);
-          alert("⚠ Erro de conexão com o banco de dados. Tente novamente.");
-        });
-      } else {
-        setUsers(prev =>
-          prev.map((u) => u.email.toLowerCase().trim() === editingUser.email.toLowerCase().trim() ? updatedUser : u)
-        );
-        alert("Dados do usuário atualizados com sucesso!");
-      }
+      setShowUserModal(false);
+    } finally {
+      setIsSavingUser(false);
     }
-
-    setShowUserModal(false);
   };
 
   const handleToggleUserStatus = (selectedUser: AppUser) => {
@@ -1126,23 +1135,23 @@ export default function AdminConfiguracoes({
     if (isSupabaseReady()) {
       dbSaveUser(updatedUser).then(() => {
         loadRealtimeUsers().then(() => {
-          alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+          toast.success(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
         });
       }).catch(err => {
         console.error("Error toggling user status:", err);
-        alert("⚠ Erro de conexão com o banco de dados.");
+        toast.error("⚠ Erro de conexão com o banco de dados.");
       });
     } else {
       setUsers(prev =>
         prev.map((u) => u.email === selectedUser.email ? updatedUser : u)
       );
-      alert(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
+      toast.success(isSuspended ? `Acesso do usuário ${selectedUser.name} reativado!` : `Acesso do usuário ${selectedUser.name} suspenso (login bloqueado)!`);
     }
   };
 
   const handleRequestExcludeUser = (user: AppUser) => {
     if (user.email === "estoque01jp@gmail.com") {
-      alert("Operação negada: O Auditor Geral Fernando Silva não pode excluir a própria conta.");
+      toast.error("Operação negada: O Auditor Geral Fernando Silva não pode excluir a própria conta.");
       return;
     }
     setUserToExclude(user);
@@ -1152,7 +1161,7 @@ export default function AdminConfiguracoes({
   const handleConfirmExcludeUser = () => {
     if (!userToExclude) return;
     if (excludeTypedName.trim() !== userToExclude.name.trim()) {
-      alert("Nome digitado incorretamente. Verifique maiúsculas e espaços.");
+      toast.warning("Nome digitado incorretamente. Verifique maiúsculas e espaços.");
       return;
     }
 
@@ -1164,15 +1173,15 @@ export default function AdminConfiguracoes({
     if (isSupabaseReady()) {
       dbDeleteUser(userToExclude.email, userToExclude.id).then(() => {
         // Safe success check
-        alert(`Usuário ${userToExclude.name} excluído com sucesso!`);
+        toast.success(`Usuário ${userToExclude.name} excluído com sucesso!`);
         setUserToExclude(null);
       }).catch(err => {
         console.error("Error deleting user from Supabase:", err);
-        alert(`Usuário ${userToExclude.name} excluído localmente com sucesso!`);
+        toast.info(`Usuário ${userToExclude.name} excluído localmente com sucesso!`);
         setUserToExclude(null);
       });
     } else {
-      alert(`Usuário ${userToExclude.name} excluído com sucesso!`);
+      toast.success(`Usuário ${userToExclude.name} excluído com sucesso!`);
       setUserToExclude(null);
     }
   };
@@ -1180,7 +1189,7 @@ export default function AdminConfiguracoes({
   // ================= ALMOXARIFADOS EDIT & TRANSITIONS =================
   const handleSaveNewBranch = async () => {
     if (!newBranchForm.name.trim()) {
-      alert("Por favor, informe o nome do almoxarifado.");
+      toast.warning("Por favor, informe o nome do almoxarifado.");
       return;
     }
     const slug = newBranchForm.name.toLowerCase()
@@ -1191,81 +1200,86 @@ export default function AdminConfiguracoes({
 
     // Check if branch ID already exists
     if (branches.some(b => b.id === slug)) {
-      alert("Já existe um almoxarifado com o mesmo nome ou ID.");
+      toast.warning("Já existe um almoxarifado com o mesmo nome ou ID.");
       return;
     }
 
-    const defaultCriteria = [
-      { id: "1", number: "01", name: "Inventário", recurrence: "Semestral" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "2", number: "02", name: "TOP 10", recurrence: "Mensal" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "3", number: "03", name: "Nota Fiscal", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "4", number: "04", name: "LayOut", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "5", number: "05", name: "Recebimento de Material", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "6", number: "06", name: "Curso Unimobin", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const, evidenceNotes: "Aguardando envio do relatório oficial de frotas pelo almoxarife." },
-      { id: "7", number: "07", name: "Nível de Serviço", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "8", number: "08", name: "Registro de Requisições", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "9", number: "09", name: "Controle de Garantia", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
-      { id: "10", number: "10", name: "Material Sem Movimentação", recurrence: "Semestral" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const }
-    ];
+    setIsSavingBranch(true);
+    try {
+      const defaultCriteria = [
+        { id: "1", number: "01", name: "Inventário", recurrence: "Semestral" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "2", number: "02", name: "TOP 10", recurrence: "Mensal" as const, pointsPossible: 20, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "3", number: "03", name: "Nota Fiscal", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "4", number: "04", name: "LayOut", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "5", number: "05", name: "Recebimento de Material", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "6", number: "06", name: "Curso Unimobin", recurrence: "Mensal" as const, pointsPossible: 10, pointsObtained: 0, status: "PENDENTE" as const, evidenceNotes: "Aguardando envio do relatório oficial de frotas pelo almoxarife." },
+        { id: "7", number: "07", name: "Nível de Serviço", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "8", number: "08", name: "Registro de Requisições", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "9", number: "09", name: "Controle de Garantia", recurrence: "Mensal" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const },
+        { id: "10", number: "10", name: "Material Sem Movimentação", recurrence: "Semestral" as const, pointsPossible: 5, pointsObtained: 0, status: "PENDENTE" as const }
+      ];
 
-    const bId = slug.toLowerCase();
-    const owner = newBranchForm.ownerName.toLowerCase();
-    // Audit mode calculation
-    const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
-    const criteria = defaultCriteria.map((c) => {
-      const auditMode = (isRobsonOrLucas && (c.id === "2" || c.id === "4")) ? ("Presencial" as const) : ("A_Distancia" as const);
-      return { ...c, auditMode };
-    });
+      const bId = slug.toLowerCase();
+      const owner = newBranchForm.ownerName.toLowerCase();
+      // Audit mode calculation
+      const isRobsonOrLucas = owner === "robson" || owner === "lucas" || bId.includes("unitrans") || bId.includes("santa-maria") || bId.includes("fretamento-pb");
+      const criteria = defaultCriteria.map((c) => {
+        const auditMode = (isRobsonOrLucas && (c.id === "2" || c.id === "4")) ? ("Presencial" as const) : ("A_Distancia" as const);
+        return { ...c, auditMode };
+      });
 
-    const newBranch: Branch = {
-      id: slug,
-      name: newBranchForm.name.toUpperCase().trim(),
-      location: newBranchForm.location.trim() || "Campina Grande, PB",
-      currentScore: 0,
-      meta: Number(newBranchForm.meta) || 100,
-      status: "PENDENTE",
-      scoreCategory: "Abaixo da Meta",
-      ownerName: newBranchForm.ownerName.trim() || "Paulo",
-      group: newBranchForm.group,
-      semestralScore: 0,
-      criteria
-    };
+      const newBranch: Branch = {
+        id: slug,
+        name: newBranchForm.name.toUpperCase().trim(),
+        location: newBranchForm.location.trim() || "Campina Grande, PB",
+        currentScore: 0,
+        meta: Number(newBranchForm.meta) || 100,
+        status: "PENDENTE",
+        scoreCategory: "Abaixo da Meta",
+        ownerName: newBranchForm.ownerName.trim() || "Paulo",
+        group: newBranchForm.group,
+        semestralScore: 0,
+        criteria
+      };
 
-    onUpdateBranchNames([...branches, newBranch]);
+      onUpdateBranchNames([...branches, newBranch]);
 
-    // Dynamic addition for calendar data
-    const calS1 = {
-      id: `cal-${slug}-2026-1-1`,
-      branchId: newBranch.id,
-      almoxarifado: newBranch.name,
-      ano: 2026,
-      semestre: 1,
-      indice: 1,
-      data_agendada: ""
-    };
-    const calS2 = {
-      id: `cal-${slug}-2026-2-1`,
-      branchId: newBranch.id,
-      almoxarifado: newBranch.name,
-      ano: 2026,
-      semestre: 2,
-      indice: 1,
-      data_agendada: ""
-    };
-    const updatedCalendar = [...calendarData, calS1, calS2];
-    setCalendarData(updatedCalendar);
-    await dbSaveSchedules(updatedCalendar);
+      // Dynamic addition for calendar data
+      const calS1 = {
+        id: `cal-${slug}-2026-1-1`,
+        branchId: newBranch.id,
+        almoxarifado: newBranch.name,
+        ano: 2026,
+        semestre: 1,
+        indice: 1,
+        data_agendada: ""
+      };
+      const calS2 = {
+        id: `cal-${slug}-2026-2-1`,
+        branchId: newBranch.id,
+        almoxarifado: newBranch.name,
+        ano: 2026,
+        semestre: 2,
+        indice: 1,
+        data_agendada: ""
+      };
+      const updatedCalendar = [...calendarData, calS1, calS2];
+      setCalendarData(updatedCalendar);
+      await dbSaveSchedules(updatedCalendar);
 
-    window.dispatchEvent(new Event("storage"));
-    alert(`Almoxarifado ${newBranch.name} adicionado com sucesso!`);
-    setShowAddBranchModal(false);
-    setNewBranchForm({
-      name: "",
-      location: "",
-      group: "A",
-      ownerName: "",
-      meta: 100
-    });
+      window.dispatchEvent(new Event("storage"));
+      toast.success(`Almoxarifado ${newBranch.name} adicionado com sucesso!`);
+      setShowAddBranchModal(false);
+      setNewBranchForm({
+        name: "",
+        location: "",
+        group: "A",
+        ownerName: "",
+        meta: 100
+      });
+    } finally {
+      setIsSavingBranch(false);
+    }
   };
 
   const handleSaveBranchName = async () => {
@@ -1274,98 +1288,103 @@ export default function AdminConfiguracoes({
     const oldName = editingBranch.name;
     const newName = branchFormName.trim().toUpperCase();
 
-    // 0. Update Supabase table 'almoxarifados'
-    if (isSupabaseReady()) {
-      await dbUpdateAlmoxarifadoNome(editingBranch.id, newName);
-    }
-
-    // 1. Update branches in parent state
-    const updated = branches.map((b) => {
-      if (b.id === editingBranch.id) {
-        return {
-          ...b,
-          name: newName
-        };
-      }
-      return b;
-    });
-
-    // Save custom names map in localStorage so it persists across reloads and getCleanDefaultBranches
+    setIsSavingBranch(true);
     try {
-      const customNamesMap = updated.reduce((acc, b) => {
-        acc[b.id] = b.name;
-        return acc;
-      }, {} as Record<string, string>);
-      localStorage.setItem("acandido_custom_branch_names", JSON.stringify(customNamesMap));
-    } catch (e) {
-      console.error("Failed to save custom branch names to localStorage", e);
-    }
-
-    onUpdateBranchNames(updated);
-
-    // 2. Cascade rename inside global Calendar inventories
-    const updatedCal = calendarData.map((c) => {
-      if (c.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
-        return { ...c, almoxarifado: newName };
+      // 0. Update Supabase table 'almoxarifados'
+      if (isSupabaseReady()) {
+        await dbUpdateAlmoxarifadoNome(editingBranch.id, newName);
       }
-      return c;
-    });
-    setCalendarData(updatedCal);
-    await dbSaveSchedules(updatedCal);
 
-    // 3. Cascade rename inside active registered warranties list
-    if (isSupabaseReady()) {
-      try {
-        const warranties = await dbFetchWarranties();
-        if (Array.isArray(warranties) && warranties.length > 0) {
-          const updatedW = warranties.map((w: any) => {
-            if (w.almoxarifado && w.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
-              return { ...w, almoxarifado: newName };
-            }
-            return w;
-          });
-          await dbSaveWarranties(updatedW);
+      // 1. Update branches in parent state
+      const updated = branches.map((b) => {
+        if (b.id === editingBranch.id) {
+          return {
+            ...b,
+            name: newName
+          };
         }
+        return b;
+      });
+
+      // Save custom names map in localStorage so it persists across reloads and getCleanDefaultBranches
+      try {
+        const customNamesMap = updated.reduce((acc, b) => {
+          acc[b.id] = b.name;
+          return acc;
+        }, {} as Record<string, string>);
+        localStorage.setItem("acandido_custom_branch_names", JSON.stringify(customNamesMap));
       } catch (e) {
-        console.error("Failed to update warranties on branch rename:", e);
+        console.error("Failed to save custom branch names to localStorage", e);
       }
-    }
 
-    // 4. Cascade rename inside supervisor occurrences list
-    if (isSupabaseReady()) {
-      try {
-        const occurrencesList = await dbFetchOccurrences();
-        if (Array.isArray(occurrencesList) && occurrencesList.length > 0) {
-          const updatedO = occurrencesList.map((o: any) => {
-            let updatedItem = { ...o };
-            if (o.branchName?.toLowerCase() === oldName.toLowerCase()) {
-              updatedItem.branchName = newName;
-            }
-            if (o.filial?.toLowerCase() === oldName.toLowerCase()) {
-              updatedItem.filial = newName;
-            }
-            if (o.branchId?.toLowerCase() === oldName.toLowerCase()) {
-              updatedItem.branchId = newName;
-            }
-            return updatedItem;
-          });
-          await dbSaveOccurrences(updatedO);
+      onUpdateBranchNames(updated);
+
+      // 2. Cascade rename inside global Calendar inventories
+      const updatedCal = calendarData.map((c) => {
+        if (c.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
+          return { ...c, almoxarifado: newName };
         }
-      } catch (err) {
-        console.error("Failed to update occurrences on branch rename:", err);
+        return c;
+      });
+      setCalendarData(updatedCal);
+      await dbSaveSchedules(updatedCal);
+
+      // 3. Cascade rename inside active registered warranties list
+      if (isSupabaseReady()) {
+        try {
+          const warranties = await dbFetchWarranties();
+          if (Array.isArray(warranties) && warranties.length > 0) {
+            const updatedW = warranties.map((w: any) => {
+              if (w.almoxarifado && w.almoxarifado.toLowerCase() === oldName.toLowerCase()) {
+                return { ...w, almoxarifado: newName };
+              }
+              return w;
+            });
+            await dbSaveWarranties(updatedW);
+          }
+        } catch (e) {
+          console.error("Failed to update warranties on branch rename:", e);
+        }
       }
+
+      // 4. Cascade rename inside supervisor occurrences list
+      if (isSupabaseReady()) {
+        try {
+          const occurrencesList = await dbFetchOccurrences();
+          if (Array.isArray(occurrencesList) && occurrencesList.length > 0) {
+            const updatedO = occurrencesList.map((o: any) => {
+              let updatedItem = { ...o };
+              if (o.branchName?.toLowerCase() === oldName.toLowerCase()) {
+                updatedItem.branchName = newName;
+              }
+              if (o.filial?.toLowerCase() === oldName.toLowerCase()) {
+                updatedItem.filial = newName;
+              }
+              if (o.branchId?.toLowerCase() === oldName.toLowerCase()) {
+                updatedItem.branchId = newName;
+              }
+              return updatedItem;
+            });
+            await dbSaveOccurrences(updatedO);
+          }
+        } catch (err) {
+          console.error("Failed to update occurrences on branch rename:", err);
+        }
+      }
+
+      // Notify all listeners
+      window.dispatchEvent(new Event("storage"));
+
+      toast.success("Nome de almoxarifado alterado com sucesso em todo o sistema!");
+      setEditingBranch(null);
+    } finally {
+      setIsSavingBranch(false);
     }
-
-    // Notify all listeners
-    window.dispatchEvent(new Event("storage"));
-
-    alert("Nome de almoxarifado alterador com sucesso em todo o sistema!");
-    setEditingBranch(null);
   };
 
   const handleDeleteBranch = async (branchId: string, branchName: string) => {
     if (branches.length <= 1) {
-      alert("Não é possível remover o último almoxarifado ativo do sistema corporativo.");
+      toast.error("Não é possível remover o último almoxarifado ativo do sistema corporativo.");
       return;
     }
     const yes = confirm(`Deseja realmente REMOVER o almoxarifado "${branchName}"? Esta ação removerá a unidade da lista do painel, do ranking e de seletores, mantendo históricos passados intactos.`);
@@ -1402,7 +1421,7 @@ export default function AdminConfiguracoes({
     setCalendarData(updatedCalendar);
 
     window.dispatchEvent(new Event("storage"));
-    alert(`Almoxarifado "${branchName}" removido com sucesso.`);
+    toast.success(`Almoxarifado "${branchName}" removido com sucesso.`);
   };
 
   // ================= COLABORADORES Unimobin =================
@@ -1417,10 +1436,10 @@ export default function AdminConfiguracoes({
       await dbSaveColaboradorUnimobin(branchToAdd, nameToAdd);
       setNewCollabName("");
       await loadCollabList();
-      alert("Colaborador cadastrado com sucesso para o curso Unimobin!");
+      toast.success("Colaborador cadastrado com sucesso para o curso Unimobin!");
     } catch (e: any) {
       console.error("Error adding collaborator:", e);
-      alert(`Erro ao cadastrar colaborador no Supabase: ${e?.message || e}`);
+      toast.error(`Erro ao cadastrar colaborador no Supabase: ${e?.message || e}`);
     } finally {
       setIsCollabLoading(false);
     }
@@ -1437,10 +1456,10 @@ export default function AdminConfiguracoes({
           await dbDeletarColaboradorUnimobin(id, selectedCollabBranchId, name);
           setCustomConfirm(null);
           await loadCollabList();
-          alert(`Colaborador ${name} removido com sucesso.`);
+          toast.success(`Colaborador ${name} removido com sucesso.`);
         } catch (e: any) {
           console.error("Error removing collaborator:", e);
-          alert(`Erro ao remover colaborador no Supabase: ${e?.message || e}`);
+          toast.error(`Erro ao remover colaborador no Supabase: ${e?.message || e}`);
         } finally {
           setIsCollabLoading(false);
         }
@@ -1451,17 +1470,17 @@ export default function AdminConfiguracoes({
   // ================= GARANTIAS ACTIONS =================
   const handleAddGItem = () => {
     if (!newGItem.code.trim() || !newGItem.description.trim()) {
-      alert("Por favor, preencha código e descrição.");
+      toast.warning("Por favor, preencha código e descrição.");
       return;
     }
     const exists = gItems.some(item => item.code.trim() === newGItem.code.trim());
     if (exists) {
-      alert("Um item com este código já está cadastrado.");
+      toast.warning("Um item com este código já está cadastrado.");
       return;
     }
     setGItems(prev => [...prev, { code: newGItem.code.trim(), description: newGItem.description.trim().toUpperCase() }]);
     setNewGItem({ code: "", description: "" });
-    alert("Material adicionado com sucesso!");
+    toast.success("Material adicionado com sucesso!");
   };
 
   const handleRemoveGItem = (code: string, description: string) => {
@@ -1472,7 +1491,7 @@ export default function AdminConfiguracoes({
       onConfirm: () => {
         setGItems(prev => prev.filter(item => item.code !== code));
         setCustomConfirm(null);
-        alert("Material removido com sucesso.");
+        toast.success("Material removido com sucesso.");
       }
     });
   };
@@ -1481,12 +1500,12 @@ export default function AdminConfiguracoes({
     if (!newGManufacturer.trim()) return;
     const cleanName = newGManufacturer.trim().toUpperCase();
     if (gManufacturers.includes(cleanName)) {
-      alert("Este fabricante já está cadastrado.");
+      toast.warning("Este fabricante já está cadastrado.");
       return;
     }
     setGManufacturers(prev => [...prev, cleanName].sort());
     setNewGManufacturer("");
-    alert("Fabricante adicionado.");
+    toast.success("Fabricante adicionado.");
   };
 
   const handleRemoveGManufacturer = (name: string) => {
@@ -1497,7 +1516,7 @@ export default function AdminConfiguracoes({
       onConfirm: () => {
         setGManufacturers(prev => prev.filter(m => m !== name));
         setCustomConfirm(null);
-        alert("Fabricante removido com sucesso.");
+        toast.success("Fabricante removido com sucesso.");
       }
     });
   };
@@ -2100,7 +2119,7 @@ export default function AdminConfiguracoes({
                         openedBy: user?.name || "Fernando Silva",
                         openedAt: new Date().toLocaleDateString("pt-BR")
                       });
-                      alert(`Novo ciclo aberto para ${cycleMonth}/${cycleYear}! Todos os almoxarifes passam a preencher este período.`);
+                      toast.success(`Novo ciclo aberto para ${cycleMonth}/${cycleYear}! Todos os almoxarifes passam a preencher este período.`);
                     }
                   }}
                   className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black uppercase text-xs rounded-xl tracking-wider shadow transition-all"
@@ -2145,7 +2164,7 @@ export default function AdminConfiguracoes({
                         ...cycleState,
                         status: "AGUARDANDO_FECHAMENTO"
                       });
-                      alert("Envios dos almoxarifes bloqueados para início das avaliações do auditor.");
+                      toast.info("Envios dos almoxarifes bloqueados para início das avaliações do auditor.");
                     }
                   }}
                   className="w-full py-2 border rounded-lg text-xs font-black uppercase tracking-wider text-amber-700 hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed justify-center flex items-center gap-1.5 transition-all font-sans"
@@ -2305,7 +2324,7 @@ export default function AdminConfiguracoes({
                 onAddField={(name, type, required, options) => {
                   const cleanedName = name.trim();
                   if (!cleanedName) {
-                    alert("Por favor, digite um nome de campo.");
+                    toast.warning("Por favor, digite um nome de campo.");
                     return;
                   }
                   const newField = {
@@ -2317,7 +2336,7 @@ export default function AdminConfiguracoes({
                     builtIn: false
                   };
                   setSupervisorFields([...supervisorFields, newField]);
-                  alert(`Campo "${cleanedName}" adicionado ao formulário com sucesso!`);
+                  toast.success(`Campo "${cleanedName}" adicionado ao formulário com sucesso!`);
                 }}
               />
             </div>
@@ -2868,15 +2887,24 @@ export default function AdminConfiguracoes({
                 <button
                   type="button"
                   onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 border rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50"
+                  disabled={isSavingUser}
+                  className="px-4 py-2 border rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1B2A4A] hover:bg-[#121C34] text-white rounded-lg text-xs font-black uppercase tracking-wider shadow"
+                  disabled={isSavingUser}
+                  className="px-4 py-2 bg-[#1B2A4A] hover:bg-[#121C34] text-white rounded-lg text-xs font-black uppercase tracking-wider shadow flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingUser ? "Salvar Alterações" : "Criar Usuário"}
+                  {isSavingUser ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>{editingUser ? "Salvar Alterações" : "Criar Usuário"}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -2908,15 +2936,24 @@ export default function AdminConfiguracoes({
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <button
                   onClick={() => setEditingBranch(null)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 border rounded"
+                  disabled={isSavingBranch}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 border rounded disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveBranchName}
-                  className="px-3 py-1.5 bg-[#1B2A4A] text-white text-xs font-black uppercase rounded shadow"
+                  disabled={isSavingBranch}
+                  className="px-3 py-1.5 bg-[#1B2A4A] text-white text-xs font-black uppercase rounded shadow flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Salvar
+                  {isSavingBranch ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>Salvar</span>
+                  )}
                 </button>
               </div>
             </div>
@@ -2995,15 +3032,24 @@ export default function AdminConfiguracoes({
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <button
                   onClick={() => setShowAddBranchModal(false)}
-                  className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 border rounded-lg transition-all"
+                  disabled={isSavingBranch}
+                  className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 border rounded-lg transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveNewBranch}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-750 text-white text-xs font-black uppercase rounded-lg shadow-sm transition-all active:scale-95"
+                  disabled={isSavingBranch}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-750 text-white text-xs font-black uppercase rounded-lg shadow-sm transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Criar Almoxarifado
+                  {isSavingBranch ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Criando...</span>
+                    </>
+                  ) : (
+                    <span>Criar Almoxarifado</span>
+                  )}
                 </button>
               </div>
             </div>
@@ -3226,7 +3272,7 @@ export default function AdminConfiguracoes({
                           status: "NENHUM"
                         });
                       }
-                      alert("Ciclo encerrado e arquivado permanentemente no Histórico!");
+                      toast.success("Ciclo encerrado e arquivado permanentemente no Histórico!");
                     }}
                     className={`px-4 py-2 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm font-sans ${
                       typedConfirmation.trim().toUpperCase() === `FECHAR ${cycleState?.activeMonth?.toUpperCase()}`
@@ -3340,7 +3386,7 @@ function AlmoxarifeCriteriaCustomFields({ config, onUpdateConfig }: { config: an
   const handleAdd = () => {
     const label = name.trim();
     if (!label) {
-      alert("Digite o nome do campo.");
+      toast.warning("Digite o nome do campo.");
       return;
     }
     const safeId = "alm_cust_" + Date.now();

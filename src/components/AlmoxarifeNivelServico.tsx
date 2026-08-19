@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, AppUser, Branch } from "../types";
 import { initialOccurrences } from "../mockData";
 import { dbFetchOccurrences, dbSaveOccurrences, isSupabaseReady, dbDeleteOccurrence, dbFetchSupervisorFieldConfig, getBranchIdByName, isSameBranch } from "../supabaseService";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface AlmoxarifeNivelServicoProps {
   onBack: () => void;
@@ -29,6 +31,7 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
 
   // Load occurrences from localStorage of the shared state
   const [occurrences, setOccurrences] = useState<MaterialOccurrence[]>(initialOccurrences);
+  const [isSavingTreatment, setIsSavingTreatment] = useState(false);
 
   const [fields, setFields] = useState<any[]>(() => {
     try {
@@ -236,24 +239,31 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
     e.preventDefault();
     if (!treatmentOcc) return;
 
-    const updated = occurrences.map((occ) => {
-      if (occ.id === treatmentOcc.id) {
-        return {
-          ...occ,
-          status: treatmentStatus,
-          codigoMaterial: treatmentCodigoMaterial.trim(),
-          obs: treatmentObs.trim() ? treatmentObs.trim() : occ.obs,
-          resolvedAt: treatmentStatus === "RESOLVIDO" ? selectedDate : undefined,
-        };
-      }
-      return occ;
-    });
+    setIsSavingTreatment(true);
+    try {
+      const updated = occurrences.map((occ) => {
+        if (occ.id === treatmentOcc.id) {
+          return {
+            ...occ,
+            status: treatmentStatus,
+            codigoMaterial: treatmentCodigoMaterial.trim(),
+            obs: treatmentObs.trim() ? treatmentObs.trim() : occ.obs,
+            resolvedAt: treatmentStatus === "RESOLVIDO" ? selectedDate : undefined,
+          };
+        }
+        return occ;
+      });
 
-    persistChange(updated);
-    setTreatmentOcc(null);
-    setTreatmentCodigoMaterial("");
-    setTreatmentObs("");
-    alert(`Ocorrência atualizada com sucesso para: ${treatmentStatus}`);
+      persistChange(updated);
+      setTreatmentOcc(null);
+      setTreatmentCodigoMaterial("");
+      setTreatmentObs("");
+      toast.success(`Ocorrência atualizada com sucesso para: ${treatmentStatus}`);
+    } catch (err: any) {
+      toast.error("Erro ao atualizar ocorrência: " + (err?.message || err));
+    } finally {
+      setIsSavingTreatment(false);
+    }
   };
 
   const handleDeleteOccurrence = (id: string) => {
@@ -636,9 +646,11 @@ export default function AlmoxarifeNivelServico({ onBack, branchId, branchName, u
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black shadow-md shadow-red-200 active:scale-95 transition-all text-center"
+                  disabled={isSavingTreatment}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black shadow-md shadow-red-200 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Salvar e Concluir
+                  {isSavingTreatment && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {isSavingTreatment ? "Salvando..." : "Salvar e Concluir"}
                 </button>
               </div>
             </form>

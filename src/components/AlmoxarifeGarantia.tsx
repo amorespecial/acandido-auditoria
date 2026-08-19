@@ -5,6 +5,8 @@ import { initialWarranties } from "../mockData";
 import { isSupabaseReady, dbFetchWarranties, dbSaveWarranties, dbSalvarGarantia, dbDeleteWarranty, dbFetchGarantiaFieldConfig, dbFetchPresetItems, dbFetchPresetManufacturers, syncLocalStorageGarantiasToSupabase, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_GARANTIA_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
 import { gerarMesesDisponiveis, getMesesDisponiveis } from "../utils/dateUtils";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface AlmoxarifeGarantiaProps {
   onBack: () => void;
@@ -532,7 +534,7 @@ export default function AlmoxarifeGarantia({
         window.dispatchEvent(new Event("realtime-garantias-update"));
       } catch (err: any) {
         console.error("Erro ao salvar garantia no Supabase:", err);
-        alert("Erro ao salvar garantia no Supabase: " + (err?.message || "Erro de conexão ao banco de dados"));
+        toast.error("Erro ao salvar garantia no Supabase: " + (err?.message || "Erro de conexão ao banco de dados"));
         return;
       }
     } else {
@@ -576,7 +578,7 @@ export default function AlmoxarifeGarantia({
     const isOverride = isAuditOverride && canFernandoSilvaEditHistory;
     const isPastMonth = item.monthYear !== activeBranchMonthFilter;
     if (isPastMonth && !isOverride) {
-      alert("Apenas leitura: Registros de meses anteriores no histórico não podem ser editados.");
+      toast.info("Apenas leitura: Registros de meses anteriores no histórico não podem ser editados.");
       return;
     }
     setEditingItem(item);
@@ -628,15 +630,15 @@ export default function AlmoxarifeGarantia({
       let hasError = false;
 
       if (!selectedItemCode) {
-        alert("O campo Item / Descrição da Peça é obrigatório.");
+        toast.warning("O campo Item / Descrição da Peça é obrigatório.");
         return;
       }
       if (!expiryDate) {
-        alert("O campo Garantia até é obrigatório.");
+        toast.warning("O campo Garantia até é obrigatório.");
         return;
       }
       if (!selectedAlmoxarifado) {
-        alert("O campo Almoxarifado é obrigatório.");
+        toast.warning("O campo Almoxarifado é obrigatório.");
         return;
       }
 
@@ -682,7 +684,7 @@ export default function AlmoxarifeGarantia({
         setFieldErrors(newErrors);
         const firstError = Object.values(newErrors)[0];
         if (firstError) {
-          alert(firstError);
+          toast.warning(firstError);
         }
         return;
       }
@@ -740,7 +742,7 @@ export default function AlmoxarifeGarantia({
 
           if (error) {
             console.error("Erro ao editar garantia no Supabase:", error);
-            alert("Erro ao salvar edição no Supabase: " + error.message);
+            toast.error("Erro ao salvar edição no Supabase: " + error.message);
             return;
           }
 
@@ -818,7 +820,7 @@ export default function AlmoxarifeGarantia({
             })
           );
         }
-        alert("Item de garantia atualizado com sucesso!");
+        toast.success("Item de garantia atualizado com sucesso!");
       } else {
         // Add mode - Single direct DB call without looping or extra SELECTs
         const newItem: WarrantyItem = {
@@ -880,14 +882,14 @@ export default function AlmoxarifeGarantia({
         } else {
           setWarranties((prev) => [newItem, ...prev]);
         }
-        alert("✅ Item de garantia registrado com sucesso!");
+        toast.success("Item de garantia registrado com sucesso!");
       }
 
       setEditingItem(null);
       setShowFormModal(false);
     } catch (err: any) {
       console.error("Erro ao salvar garantia:", err);
-      alert("❌ Erro ao salvar garantia: " + (err?.message || "Erro de conexão com o banco de dados"));
+      toast.error("Erro ao salvar garantia: " + (err?.message || "Erro de conexão com o banco de dados"));
     } finally {
       setIsSaving(false);
       submitEmAndamento = false;
@@ -1697,7 +1699,7 @@ export default function AlmoxarifeGarantia({
                 >
                   {isSaving ? (
                     <>
-                      <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       <span>Salvando...</span>
                     </>
                   ) : (

@@ -1353,15 +1353,26 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
       }
     }
 
+    const validNokLinks: string[] = Array.from(
+      new Set(
+        links
+          .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0)
+          .map((url: string) => url.trim())
+      )
+    );
+    const nokDesc = row.resultado === "NOK" ? (finalNotes || row.descricao_evidencia || undefined) : undefined;
+
     mapped[critId] = {
       status: displayStatus,
       pointsObtained: row.pontuacao ?? 0,
       pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
       notes: finalNotes,
       evidenceNotes: finalNotes,
+      nokEvidenceDescription: nokDesc,
+      nokEvidenceLinks: validNokLinks,
+      nokEvidenceLink: validNokLinks[0] || undefined,
       top10AlmoxarifeQuantities: finalAlmoxarifeQuantities,
       top10AuditorQuantities: finalAuditorQuantities,
-      nokEvidenceLinks: links,
       submittedPhotos: links,
       submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
       auditMode: finalAuditMode as "Presencial" | "A_Distancia"
@@ -1569,15 +1580,26 @@ export const dbFetchAllEvaluationsForPeriod = async (
         }
       }
 
+      const validNokLinks: string[] = Array.from(
+        new Set(
+          links
+            .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0)
+            .map((url: string) => url.trim())
+        )
+      );
+      const nokDesc = row.resultado === "NOK" ? (finalNotes || row.descricao_evidencia || undefined) : undefined;
+
       const evalObj: Partial<CriterionState> = {
         status: displayStatus,
         pointsObtained: row.pontuacao ?? 0,
         pointsPossible: ["7", "8", "9", "10"].includes(critId) ? 5 : 20,
         notes: finalNotes,
         evidenceNotes: finalNotes,
+        nokEvidenceDescription: nokDesc,
+        nokEvidenceLinks: validNokLinks,
+        nokEvidenceLink: validNokLinks[0] || undefined,
         top10AlmoxarifeQuantities: finalAlmoxarifeQuantities,
         top10AuditorQuantities: finalAuditorQuantities,
-        nokEvidenceLinks: links,
         submittedPhotos: links,
         submittedAt: row.avaliado_em ? new Date(row.avaliado_em).toLocaleDateString("pt-BR") : "",
         auditMode: finalAuditMode as "Presencial" | "A_Distancia"
@@ -1631,14 +1653,21 @@ export const dbSaveEvaluation = async (
     return;
   }
 
-  let finalLinks = evaluation.nokEvidenceLinks || [];
+  let finalLinks: string[] = Array.from(
+    new Set(
+      (evaluation.nokEvidenceLinks || (evaluation.nokEvidenceLink ? [evaluation.nokEvidenceLink] : []))
+        .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+        .map((url) => url.trim())
+    )
+  );
+
   if (evaluation.nokEvidenceFileData && evaluation.nokEvidenceFileData.trim().length > 0) {
     try {
       const ext = evaluation.nokEvidenceFileType?.split('/')?.[1] || 'jpg';
       const pathName = `evaluations/${almoxarifado}/${criterionId}_evidence_${Date.now()}.${ext}`;
       const signedUrl = await uploadFile('evidencias-auditor', pathName, evaluation.nokEvidenceFileData);
-      if (signedUrl) {
-        finalLinks = [...finalLinks, signedUrl];
+      if (signedUrl && !finalLinks.includes(signedUrl)) {
+        finalLinks.push(signedUrl);
       }
     } catch (e) {
       console.error("Failed to upload evaluation evidence file to Supabase Storage:", e);
@@ -1654,10 +1683,15 @@ export const dbSaveEvaluation = async (
       ? evaluation.status 
       : "PENDENTE";
 
-    let finalDescricao = evaluation.evidenceNotes || evaluation.notes || "";
+    let finalDescricao = (evaluation.status === "NOK" && evaluation.nokEvidenceDescription) 
+      ? evaluation.nokEvidenceDescription 
+      : (evaluation.evidenceNotes || evaluation.notes || "");
+
     if (criterionId === "2") {
       finalDescricao = JSON.stringify({
-        notes: evaluation.notes || evaluation.evidenceNotes || "",
+        notes: (evaluation.status === "NOK" && evaluation.nokEvidenceDescription) 
+          ? evaluation.nokEvidenceDescription 
+          : (evaluation.notes || evaluation.evidenceNotes || ""),
         top10AlmoxarifeQuantities: evaluation.top10AlmoxarifeQuantities || [],
         top10AuditorQuantities: evaluation.top10AuditorQuantities || []
       });

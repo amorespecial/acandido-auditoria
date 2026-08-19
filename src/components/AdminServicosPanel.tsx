@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { MaterialOccurrence, Branch } from "../types";
 import { dbFetchOccurrences, getBranchIdByName } from "../supabaseService";
 import { getAnosDisponiveis } from "../utils/dateUtils";
+import { toast } from "../utils/toast";
 
 interface AdminServicosPanelProps {
   branch?: Branch; // If provided, locks down to this specific branch!
@@ -191,7 +192,7 @@ export default function AdminServicosPanel({ branch, allBranches }: AdminServico
   // Export to CSV
   const exportToCSV = () => {
     if (filteredOccurrences.length === 0) {
-      alert("Nenhum registro encontrado para exportar.");
+      toast.warning("Nenhum registro encontrado para exportar.");
       return;
     }
 

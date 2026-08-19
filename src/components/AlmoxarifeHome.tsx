@@ -539,49 +539,54 @@ export default function AlmoxarifeHome({
                     </div>
                   )}
 
-                  {/* If NOK: Auditor notes, photo links and comments */}
+                  {/* If NOK: Auditor description of problem, photo links and feedback */}
                   {displayStatus === "NOK" && (
-                    <div className="bg-rose-50 border border-rose-200/50 p-3 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
-                      <div className="flex items-center gap-1 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
-                        <span className="material-symbols-outlined text-[13px]">report</span>
-                        <span>Feedback do Auditor</span>
+                    <div className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-[11px] leading-relaxed select-text space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
+                        <span className="material-symbols-outlined text-[14px] text-rose-700">report_problem</span>
+                        <span>Descrição do Problema (Auditor):</span>
                       </div>
                       
-                      {crit.notes ? (
-                        <p className="text-rose-900 font-black italic bg-white/60 p-2 rounded border border-rose-100">
-                          "{crit.notes}"
-                        </p>
+                      {(crit.nokEvidenceDescription || crit.notes) ? (
+                        <div className="text-rose-950 font-bold bg-white/90 p-2.5 rounded-md border border-rose-200 shadow-3xs leading-relaxed text-xs">
+                          {crit.nokEvidenceDescription || crit.notes}
+                        </div>
                       ) : (
-                        <p className="text-rose-800 font-medium italic">
-                          "Nenhuma justificativa detalhada inserida pelo auditor."
+                        <p className="text-rose-800 font-medium italic bg-white/60 p-2 rounded border border-rose-100">
+                          "Nenhuma descrição detalhada inserida pelo auditor."
                         </p>
                       )}
 
                       {/* ALWAYS RENDER THE EVIDENCE LINKS SECTION FOR NOK STATUS */}
                       {(() => {
-                        const links = [
-                          ...(crit.nokEvidenceLinks || []),
-                          ...(crit.submittedPhotos || [])
-                        ].filter(Boolean).slice(0, 3);
+                        const rawLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
+                        const validLinks = Array.from(
+                          new Set(
+                            rawLinks
+                              .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+                              .map((url) => url.trim())
+                          )
+                        );
 
-                        if (links.length > 0) {
+                        if (validLinks.length > 0) {
                           return (
                             <div className="space-y-1 pt-1.5 border-t border-rose-200/50 mt-1.5">
                               <span className="text-[10px] font-bold text-rose-800 block uppercase flex items-center gap-1 leading-none">
                                 <span className="material-symbols-outlined text-[14px] leading-none text-rose-700 font-bold">link</span>
-                                <span>🔗 EVIDÊNCIAS:</span>
+                                <span>🔗 Links de Evidência da Não Conformidade ({validLinks.length}):</span>
                               </span>
                               <div className="flex flex-col gap-1 pl-1">
-                                {links.map((link, idx) => (
-                                  <div key={idx} className="flex items-center gap-1">
+                                {validLinks.map((link, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5">
                                     <span className="text-rose-600 font-bold leading-none">•</span>
                                     <a
                                       href={link}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[10.5px] tracking-wide"
+                                      className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[11px] tracking-wide inline-flex items-center gap-1"
                                     >
-                                      [Ver evidência {idx + 1} ↗]
+                                      <span>[Ver Evidência {idx + 1} ↗]</span>
+                                      <span className="text-[9.5px] text-slate-500 font-mono font-normal max-w-[200px] truncate">({link})</span>
                                     </a>
                                   </div>
                                 ))}
@@ -730,45 +735,50 @@ export default function AlmoxarifeHome({
 
                 {/* ALWAYS RENDER THE EVIDENCE LINKS SECTION FOR NOK STATUS */}
                 {displayStatus === "NOK" && (
-                  <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200/50 rounded-lg text-[11px] leading-relaxed select-text space-y-2">
-                    <div className="flex items-center gap-1 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
-                      <span className="material-symbols-outlined text-[13px]">report</span>
-                      <span>Feedback do Auditor</span>
+                  <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 rounded-lg text-[11px] leading-relaxed select-text space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
+                      <span className="material-symbols-outlined text-[14px] text-rose-700">report_problem</span>
+                      <span>Descrição do Problema (Auditor):</span>
                     </div>
-                    {crit.notes ? (
-                      <p className="text-rose-900 font-black italic bg-white/60 p-2 rounded border border-rose-100">
-                        "{crit.notes}"
-                      </p>
+                    {(crit.nokEvidenceDescription || crit.notes) ? (
+                      <div className="text-rose-950 font-bold bg-white/90 p-2.5 rounded-md border border-rose-200 shadow-3xs leading-relaxed text-xs">
+                        {crit.nokEvidenceDescription || crit.notes}
+                      </div>
                     ) : (
-                      <p className="text-rose-800 font-medium italic">
-                        "Nenhuma justificativa detalhada inserida pelo auditor."
+                      <p className="text-rose-800 font-medium italic bg-white/60 p-2 rounded border border-rose-100">
+                        "Nenhuma descrição detalhada inserida pelo auditor."
                       </p>
                     )}
 
                     {(() => {
-                      const links = [
-                        ...(crit.nokEvidenceLinks || []),
-                        ...(crit.submittedPhotos || [])
-                      ].filter(Boolean).slice(0, 3);
+                      const rawLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
+                      const validLinks = Array.from(
+                        new Set(
+                          rawLinks
+                            .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+                            .map((url) => url.trim())
+                        )
+                      );
 
-                      if (links.length > 0) {
+                      if (validLinks.length > 0) {
                         return (
                           <div className="space-y-1 pt-1.5 border-t border-rose-200/50 mt-1.5">
                             <span className="text-[10px] font-bold text-rose-800 block uppercase flex items-center gap-1 leading-none">
                               <span className="material-symbols-outlined text-[14px] leading-none text-rose-700 font-bold">link</span>
-                              <span>🔗 EVIDÊNCIAS:</span>
+                              <span>🔗 Links de Evidência da Não Conformidade ({validLinks.length}):</span>
                             </span>
                             <div className="flex flex-col gap-1 pl-1">
-                              {links.map((link, idx) => (
-                                <div key={idx} className="flex items-center gap-1">
+                              {validLinks.map((link, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5">
                                   <span className="text-rose-600 font-bold leading-none">•</span>
                                   <a
                                     href={link}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[10.5px] tracking-wide"
+                                    className="text-indigo-600 hover:text-indigo-800 hover:underline font-black text-[11px] tracking-wide inline-flex items-center gap-1"
                                   >
-                                    [Ver evidência {idx + 1} ↗]
+                                    <span>[Ver Evidência {idx + 1} ↗]</span>
+                                    <span className="text-[9.5px] text-slate-500 font-mono font-normal max-w-[200px] truncate">({link})</span>
                                   </a>
                                 </div>
                               ))}

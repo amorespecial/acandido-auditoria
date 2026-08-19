@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { CriterionState } from "../types";
 import { dbFetchTop10Config, dbFetchTop10FieldConfig, isSupabaseReady, comprimirImagem, getPublicImageUrl } from "../supabaseService";
 import { getOrderedFields, BUILTIN_TOP10_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
+import { toast } from "../utils/toast";
 
 interface AlmoxarifeContagemProps {
   onBack: () => void;
@@ -253,7 +254,7 @@ export default function AlmoxarifeContagem({
   const handleFormSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSubmitBtnAllowed) {
-      alert("Por favor, preencha todos os campos obrigatórios e anexe as fotos antes de enviar.");
+      toast.warning("Por favor, preencha todos os campos obrigatórios e anexe as fotos antes de enviar.");
       return;
     }
     setIsSubmitting(true);
@@ -278,10 +279,11 @@ export default function AlmoxarifeContagem({
       );
 
       setIsSubmitting(false);
+      toast.success("Evidências do TOP 10 enviadas com sucesso!");
       onBack();
     } catch (err: any) {
       console.error("Erro ao transmitir TOP 10:", err);
-      alert(`Erro na transmissão do TOP 10: ${err?.message || "Erro de conexão. Tente novamente."}`);
+      toast.error(`Erro na transmissão do TOP 10: ${err?.message || "Erro de conexão. Tente novamente."}`);
       setIsSubmitting(false);
     }
   };

@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface InventoryItem {
   code: string;
@@ -27,6 +29,7 @@ export default function AdminConfigurarCiclo({
   onSaveConfig,
   currentConfig,
 }: AdminConfigurarCicloProps) {
+  const [isSaving, setIsSaving] = useState(false);
   // 9 initial prefilled items
   const defaultItems: InventoryItem[] = [
     { code: "1080571", name: "BATERIA 180 AMP" },
@@ -82,14 +85,21 @@ export default function AdminConfigurarCiclo({
     return true;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isFormValid()) return;
-    onSaveConfig({
-      top10,
-      layoutLocation,
-      materialParadoUploaded: !!pdfName,
-    });
-    alert(`O ciclo de ${selectedMonth}/${selectedYear} foi configurado e aberto com sucesso para todos os almoxarifes!`);
+    setIsSaving(true);
+    try {
+      await onSaveConfig({
+        top10,
+        layoutLocation,
+        materialParadoUploaded: !!pdfName,
+      });
+      toast.success(`O ciclo de ${selectedMonth}/${selectedYear} foi configurado e aberto com sucesso para todos os almoxarifes!`);
+    } catch (err: any) {
+      toast.error(`Erro ao salvar configuração do ciclo: ${err?.message || err}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -219,15 +229,24 @@ export default function AdminConfigurarCiclo({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!isFormValid()}
+            disabled={!isFormValid() || isSaving}
             className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow active:scale-95 flex items-center justify-center gap-2 ${
-              isFormValid()
+              isFormValid() && !isSaving
                 ? "bg-[#1B2A4A] text-white hover:brightness-110"
                 : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
             }`}
           >
-            <span className="material-symbols-outlined text-[16px]">how_to_reg</span>
-            Salvar e Abrir Ciclo de {selectedMonth}
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Salvando e Abrindo Ciclo...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-[16px]">how_to_reg</span>
+                <span>Salvar e Abrir Ciclo de {selectedMonth}</span>
+              </>
+            )}
           </button>
         </div>
       </div>

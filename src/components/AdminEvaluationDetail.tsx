@@ -177,7 +177,20 @@ export default function AdminEvaluationDetail({
   }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
 
   const [activeLightboxImg, setActiveLightboxImg] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [subTab, setSubTab] = useState<"AUDITORIA" | "GARANTIAS" | "SERVICOS">("AUDITORIA");
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (selectedImage) setSelectedImage(null);
+        if (activeLightboxImg) setActiveLightboxImg(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedImage, activeLightboxImg]);
 
   // Synchronically load remote configuration on branch/cycle change
   useEffect(() => {
@@ -211,9 +224,15 @@ export default function AdminEvaluationDetail({
       setStatusInput(latestMatched.status);
       setPtsInput(latestMatched.pointsObtained);
       setNotesInput(latestMatched.notes || latestMatched.evidenceNotes || "");
+      const nokLinks = latestMatched.nokEvidenceLinks || (latestMatched.nokEvidenceLink ? [latestMatched.nokEvidenceLink] : []);
       if (latestMatched.nokEvidenceLink) {
         setNokEvidenceLinkInput(latestMatched.nokEvidenceLink);
       }
+      setNokLink1Input(nokLinks[0] || "");
+      setNokLink2Input(nokLinks[1] || "");
+      setNokLink3Input(nokLinks[2] || "");
+      setNokLink4Input(nokLinks[3] || "");
+      setNokEvidenceDescriptionInput(latestMatched.nokEvidenceDescription || (latestMatched.status === "NOK" ? latestMatched.notes : "") || "");
     }
   }, [branch.criteria]);
 
@@ -481,6 +500,7 @@ export default function AdminEvaluationDetail({
   const [nokLink1Input, setNokLink1Input] = useState("");
   const [nokLink2Input, setNokLink2Input] = useState("");
   const [nokLink3Input, setNokLink3Input] = useState("");
+  const [nokLink4Input, setNokLink4Input] = useState("");
   const [nokEvidenceDescriptionInput, setNokEvidenceDescriptionInput] = useState("");
   const [branchCalendar, setBranchCalendar] = useState<any[]>([]);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
@@ -899,11 +919,13 @@ export default function AdminEvaluationDetail({
       });
     }
     setTop10AuditorQuantitiesInput(initialAuditorQ);
-    setNokEvidenceLinkInput(crit.nokEvidenceLink || "");
-    setNokLink1Input(crit.nokEvidenceLinks?.[0] || "");
-    setNokLink2Input(crit.nokEvidenceLinks?.[1] || "");
-    setNokLink3Input(crit.nokEvidenceLinks?.[2] || "");
-    setNokEvidenceDescriptionInput(crit.nokEvidenceDescription || "");
+    const nokLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
+    setNokEvidenceLinkInput(crit.nokEvidenceLink || (nokLinks[0] || ""));
+    setNokLink1Input(nokLinks[0] || "");
+    setNokLink2Input(nokLinks[1] || "");
+    setNokLink3Input(nokLinks[2] || "");
+    setNokLink4Input(nokLinks[3] || "");
+    setNokEvidenceDescriptionInput(crit.nokEvidenceDescription || (crit.status === "NOK" ? crit.notes : "") || "");
     setNokEvidenceFileName(crit.nokEvidenceFileName || "");
     setNokEvidenceFileType(crit.nokEvidenceFileType || "");
     setNokEvidenceFileData(crit.nokEvidenceFileData || "");
@@ -992,6 +1014,15 @@ export default function AdminEvaluationDetail({
           return Number(top10AuditorQuantitiesInput[item.code]) || 0;
         });
 
+        const cleanNokLinksTop10 = Array.from(
+          new Set(
+            [nokLink1Input, nokLink2Input, nokLink3Input, nokLink4Input]
+              .map(l => (typeof l === "string" ? l.trim() : ""))
+              .filter(l => l.length > 0)
+          )
+        );
+        const cleanNokDescTop10 = nokEvidenceDescriptionInput.trim();
+
         const updated = branch.criteria.map((c) => {
           if (c.id === "2") {
             return {
@@ -999,13 +1030,13 @@ export default function AdminEvaluationDetail({
               status: computedStatus as EvaluationStatus,
               pointsObtained: computedStatus === "OK" ? c.pointsPossible : 0,
               top10AuditorQuantities: finalQuantitiesList,
-              notes: notesInput,
-              nokEvidenceLink: computedStatus === "NOK" ? nokLink1Input.trim() : undefined,
-              nokEvidenceDescription: computedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+              notes: computedStatus === "NOK" ? (cleanNokDescTop10 || notesInput) : notesInput,
+              nokEvidenceLink: computedStatus === "NOK" ? (cleanNokLinksTop10[0] || undefined) : undefined,
+              nokEvidenceDescription: computedStatus === "NOK" ? (cleanNokDescTop10 || undefined) : undefined,
               nokEvidenceFileName: computedStatus === "NOK" ? "Link" : undefined,
               nokEvidenceFileType: computedStatus === "NOK" ? "url" : undefined,
               nokEvidenceFileData: computedStatus === "NOK" ? "" : undefined,
-              nokEvidenceLinks: computedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+              nokEvidenceLinks: computedStatus === "NOK" ? cleanNokLinksTop10 : undefined
             };
           }
           return c;
@@ -1139,24 +1170,33 @@ export default function AdminEvaluationDetail({
         }
       }
 
+      const cleanNokLinks = Array.from(
+        new Set(
+          [nokLink1Input, nokLink2Input, nokLink3Input, nokLink4Input]
+            .map(l => (typeof l === "string" ? l.trim() : ""))
+            .filter(l => l.length > 0)
+        )
+      );
+      const cleanNokDesc = nokEvidenceDescriptionInput.trim();
+
       const updated = branch.criteria.map((c) => {
         if (c.id === selectedCriterion.id) {
           return {
             ...c,
             status: enforcedStatus,
             pointsObtained: enforcedStatus === "OK" ? selectedCriterion.pointsPossible : 0,
-            notes: notesInput,
+            notes: enforcedStatus === "NOK" ? (cleanNokDesc || notesInput) : notesInput,
             evidenceNotes: selectedCriterion.auditMode === "Presencial" ? evidenceNotesInput : c.evidenceNotes,
             submittedPhotos: selectedCriterion.auditMode === "Presencial" 
               ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
               : c.submittedPhotos,
             submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
-            nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
-            nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+            nokEvidenceLink: enforcedStatus === "NOK" ? (cleanNokLinks[0] || undefined) : undefined,
+            nokEvidenceDescription: enforcedStatus === "NOK" ? (cleanNokDesc || undefined) : undefined,
             nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
             nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
             nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
-            nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+            nokEvidenceLinks: enforcedStatus === "NOK" ? cleanNokLinks : undefined
           };
         }
         return c;
@@ -1178,12 +1218,12 @@ export default function AdminEvaluationDetail({
                 ? photosInput.split(",").map(p => p.trim()).filter(Boolean)
                 : c.submittedPhotos,
               submittedAt: selectedCriterion.auditMode === "Presencial" ? new Date().toLocaleDateString("pt-BR") : c.submittedAt,
-              nokEvidenceLink: enforcedStatus === "NOK" ? nokLink1Input.trim() : undefined,
-              nokEvidenceDescription: enforcedStatus === "NOK" ? nokEvidenceDescriptionInput.trim() : undefined,
+              nokEvidenceLink: enforcedStatus === "NOK" ? (cleanNokLinks[0] || undefined) : undefined,
+              nokEvidenceDescription: enforcedStatus === "NOK" ? (cleanNokDesc || undefined) : undefined,
               nokEvidenceFileName: enforcedStatus === "NOK" ? "Link" : undefined,
               nokEvidenceFileType: enforcedStatus === "NOK" ? "url" : undefined,
               nokEvidenceFileData: enforcedStatus === "NOK" ? "" : undefined,
-              nokEvidenceLinks: enforcedStatus === "NOK" ? [nokLink1Input, nokLink2Input, nokLink3Input].map(l => l.trim()).filter(Boolean) : undefined
+              nokEvidenceLinks: enforcedStatus === "NOK" ? cleanNokLinks : undefined
             };
           }
           return c;
@@ -1771,57 +1811,65 @@ export default function AdminEvaluationDetail({
                           </p>
                         ) : null}
 
-                        {crit.status === "NOK" && (crit.nokEvidenceLink || crit.nokEvidenceFileData) && (
-                          <div className="mt-2.5 flex flex-wrap gap-2 items-center">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (crit.nokEvidenceFileData) {
-                                  const newTab = window.open();
-                                  if (newTab) {
-                                    newTab.document.write(
-                                      `<html><head><title>Visualizar Evidência - NOK</title></head>` +
-                                      `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
-                                      `${crit.nokEvidenceFileType?.startsWith("image/") 
-                                          ? `<img src="${crit.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
-                                          : `<iframe src="${crit.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
-                                       }` +
-                                      `</body></html>`
-                                    );
-                                    newTab.document.close();
-                                  }
-                                } else if (crit.nokEvidenceLink) {
-                                  window.open(crit.nokEvidenceLink, "_blank", "noopener,noreferrer");
-                                }
-                              }}
-                              className="inline-flex items-center gap-1.5 text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded font-black transition-all shadow-2xs hover:scale-102"
-                            >
-                              <span>📎 Ver evidência</span>
-                            </button>
-                            {crit.nokEvidenceDescription && (
-                              <span className="text-[10px] text-slate-500 italic max-w-xs truncate" title={crit.nokEvidenceDescription}>
-                                "{crit.nokEvidenceDescription}"
-                              </span>
-                            )}
-                            {crit.nokEvidenceLinks && crit.nokEvidenceLinks.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 items-center ml-2 border-l border-rose-200/50 pl-2 font-sans">
-                                {crit.nokEvidenceLinks.map((link, lIdx) => (
-                                  <a
-                                    key={lIdx}
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1.5 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-black transition-all shadow-2xs hover:scale-102"
-                                  >
-                                    <span>🔗 Ver evidência {lIdx + 1}</span>
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        {crit.status === "NOK" && (() => {
+                          const rawLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
+                          const validLinks = Array.from(
+                            new Set(
+                              rawLinks
+                                .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+                                .map((url) => url.trim())
+                            )
+                          );
+                          const desc = crit.nokEvidenceDescription || (crit.status === "NOK" ? crit.notes : "");
+
+                          if (validLinks.length === 0 && !crit.nokEvidenceFileData && !desc) return null;
+
+                          return (
+                            <div className="mt-2.5 flex flex-wrap gap-2 items-center">
+                              {validLinks.map((link, lIdx) => (
+                                <a
+                                  key={lIdx}
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-0.5 rounded font-black transition-all shadow-2xs hover:scale-102"
+                                >
+                                  <span>🔗 Link {lIdx + 1}</span>
+                                </a>
+                              ))}
+                              {crit.nokEvidenceFileData && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newTab = window.open();
+                                    if (newTab) {
+                                      newTab.document.write(
+                                        `<html><head><title>Visualizar Evidência - NOK</title></head>` +
+                                        `<body style="margin: 0; display: flex; align-items: center; justify-content: center; background: #333; font-family: sans-serif;">` +
+                                        `${crit.nokEvidenceFileType?.startsWith("image/") 
+                                            ? `<img src="${crit.nokEvidenceFileData}" style="max-width: 100%; max-height: 100vh; object-fit: contain;" />`
+                                            : `<iframe src="${crit.nokEvidenceFileData}" width="100%" height="100%" style="border: none;"></iframe>`
+                                         }` +
+                                        `</body></html>`
+                                      );
+                                      newTab.document.close();
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded font-black transition-all shadow-2xs hover:scale-102"
+                                >
+                                  <span>📎 Arquivo Anexo</span>
+                                </button>
+                              )}
+                              {desc && (
+                                <span className="text-[10px] text-rose-800 font-medium italic max-w-xs truncate" title={desc}>
+                                  "{desc}"
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -2253,45 +2301,70 @@ export default function AdminEvaluationDetail({
               })()}
 
               {/* Evidence from Almoxarife */}
-              {selectedCriterion.status === "ENVIADO" && (
-                <div className="p-4 bg-violet-50 border border-violet-100 rounded-xl space-y-2">
-                  <div className="flex items-center gap-1 text-violet-700 text-xs font-bold">
-                    <span className="material-symbols-outlined text-[16px]">cloud_done</span>
-                    Evidência Enviada por {branch.ownerName}
+              {(selectedCriterion.status === "ENVIADO" || (selectedCriterion.submittedPhotos && selectedCriterion.submittedPhotos.length > 0) || selectedCriterion.evidenceNotes) && (
+                <div className="p-4 bg-violet-50 border border-violet-100 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between text-violet-700 text-xs font-bold">
+                    <div className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px]">cloud_done</span>
+                      <span>Evidência Enviada por {branch.ownerName}</span>
+                    </div>
+                    {selectedCriterion.submittedAt && (
+                      <span className="text-[10px] text-violet-500 font-mono font-normal">
+                        📅 {selectedCriterion.submittedAt}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-[11px] text-[#1B2A4A] leading-relaxed">
-                    <p className="font-bold">Comentários de {branch.ownerName}:</p>
-                    <p className="italic text-slate-600 mt-1">
-                      {selectedCriterion.evidenceNotes || "Nenhum comentário enviado"}
-                    </p>
-                  </div>
+                  
+                  {selectedCriterion.evidenceNotes && (
+                    <div className="text-[11px] text-[#1B2A4A] leading-relaxed bg-white/70 p-2.5 rounded-lg border border-violet-100/80">
+                      <p className="font-bold text-violet-900">Comentários de {branch.ownerName}:</p>
+                      <p className="italic text-slate-600 mt-0.5">
+                        {selectedCriterion.evidenceNotes}
+                      </p>
+                    </div>
+                  )}
 
                   {(() => {
-                    const validPhotos = (selectedCriterion.submittedPhotos || [])
+                    const rawPhotos = selectedCriterion.submittedPhotos || [];
+                    const validPhotos = rawPhotos
                       .map((p) => getPublicImageUrl(p))
                       .filter((p) => p && typeof p === "string" && p.trim().length > 0);
 
                     return validPhotos.length > 0 ? (
-                      <div className="grid grid-cols-4 gap-2 mt-2">
-                        {validPhotos.map((photo, i) => (
-                          <div key={i} className="relative aspect-square bg-[#1B2A4A]/5 rounded-lg overflow-hidden border border-violet-200">
-                            <img
-                              src={photo}
-                              referrerPolicy="no-referrer"
-                              alt="Evidência"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const parent = (e.target as HTMLElement).parentElement;
-                                if (parent) parent.style.display = "none";
-                              }}
-                            />
-                          </div>
-                        ))}
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-violet-800 uppercase tracking-wider">
+                          Fotos de Evidência ({validPhotos.length}):
+                        </p>
+                        <div className="grid grid-cols-4 gap-2">
+                          {validPhotos.map((photo, i) => (
+                            <div
+                              key={i}
+                              onClick={() => setSelectedImage(photo)}
+                              className="group relative w-24 h-24 max-w-full aspect-square bg-[#1B2A4A]/5 rounded-lg overflow-hidden border border-violet-200 cursor-pointer hover:scale-105 transition shadow-sm flex items-center justify-center"
+                              title="Clique para visualizar ampliado"
+                            >
+                              <img
+                                src={photo}
+                                referrerPolicy="no-referrer"
+                                alt={`Evidência ${i + 1}`}
+                                className="w-24 h-24 w-full h-full object-cover rounded-lg border cursor-pointer hover:scale-105 transition"
+                                onError={(e) => {
+                                  const parent = (e.target as HTMLElement).parentElement;
+                                  if (parent) parent.style.display = "none";
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold uppercase gap-0.5 rounded-lg pointer-events-none">
+                                <span className="material-symbols-outlined text-[16px]">zoom_in</span>
+                                <span>Ver</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ) : (
-                      <div className="border border-dashed border-violet-200 bg-white p-2 text-center text-[10px] text-violet-600 rounded font-semibold flex items-center justify-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">photo_library</span>
-                        Dados digitados integrados
+                      <div className="border border-dashed border-violet-200 bg-white/80 p-3 text-center text-xs text-slate-500 rounded-lg font-medium flex items-center justify-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-slate-400">photo_library</span>
+                        Nenhuma evidência fotográfica anexada neste ciclo.
                       </div>
                     );
                   })()}
@@ -2613,7 +2686,7 @@ export default function AdminEvaluationDetail({
                                     const file = e.target.files?.[0];
                                     if (file) {
                                       if (file.size > 10 * 1024 * 1024) {
-                                        alert("Erro: O arquivo excede o limite máximo de 10 MB.");
+                                        toast.warning("Erro: O arquivo excede o limite máximo de 10 MB.");
                                         return;
                                       }
                                       try {
@@ -2858,6 +2931,20 @@ export default function AdminEvaluationDetail({
                       />
                     </div>
 
+                    {/* Link 4 - OPCIONAL */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
+                        LINK 4 (OPCIONAL)
+                      </label>
+                      <input
+                        type="url"
+                        value={nokLink4Input}
+                        onChange={(e) => setNokLink4Input(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="w-full bg-white border border-[#F7C1C1] rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
+
                     {/* Descrição do problema - OPCIONAL */}
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-red-800 uppercase tracking-wide block font-sans">
@@ -2970,15 +3057,16 @@ export default function AdminEvaluationDetail({
                   return (
                     <button
                       type="button"
-                      disabled={!isNokLinkValid}
+                      disabled={!isNokLinkValid || isSavingEvaluation}
                       onClick={handleSaveClick}
-                      className={`px-5 py-2 text-white rounded-md text-xs font-extrabold shadow transition-all ${
-                        !isNokLinkValid
+                      className={`px-5 py-2 text-white rounded-md text-xs font-extrabold shadow transition-all flex items-center gap-1.5 ${
+                        !isNokLinkValid || isSavingEvaluation
                           ? "bg-slate-300 text-slate-500 cursor-not-allowed"
                           : "bg-red-600 hover:bg-red-700 active:scale-95"
                       }`}
                     >
-                      Salvar Avaliação (NOK)
+                      {isSavingEvaluation && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {isSavingEvaluation ? "Salvando..." : "Salvar Avaliação (NOK)"}
                     </button>
                   );
                 }
@@ -2986,10 +3074,12 @@ export default function AdminEvaluationDetail({
                 return (
                   <button
                     type="button"
+                    disabled={isSavingEvaluation}
                     onClick={handleSaveClick}
-                    className="px-5 py-2 bg-[#1B2A4A] text-white rounded-md text-xs font-extrabold shadow hover:brightness-110 active:scale-95 transition-all"
+                    className="px-5 py-2 bg-[#1B2A4A] text-white rounded-md text-xs font-extrabold shadow hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Salvar Avaliação
+                    {isSavingEvaluation && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {isSavingEvaluation ? "Salvando..." : "Salvar Avaliação"}
                   </button>
                 );
               })()}
@@ -3065,10 +3155,12 @@ export default function AdminEvaluationDetail({
               </button>
               <button
                 type="button"
+                disabled={isSavingLayout}
                 onClick={handleSaveLayoutConfig}
-                className="px-5 py-2 bg-[#1B2A4A] hover:bg-opacity-90 text-white rounded-md text-xs font-extrabold shadow active:scale-95 transition-all"
+                className="px-5 py-2 bg-[#1B2A4A] hover:bg-opacity-90 text-white rounded-md text-xs font-extrabold shadow active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Salvar Configuração
+                {isSavingLayout && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isSavingLayout ? "Salvando..." : "Salvar Configuração"}
               </button>
             </div>
           </div>
@@ -3194,10 +3286,12 @@ export default function AdminEvaluationDetail({
               </button>
               <button
                 type="button"
+                disabled={isSavingTop10}
                 onClick={handleSaveTop10Config}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-black uppercase shadow transition active:scale-95"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-black uppercase shadow transition active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Salvar Configuração
+                {isSavingTop10 && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isSavingTop10 ? "Salvando..." : "Salvar Configuração"}
               </button>
             </div>
           </div>
@@ -3206,20 +3300,38 @@ export default function AdminEvaluationDetail({
     </>
   )}
 
-      {/* FULL SCALE IMAGE AUDIT LIGHTBOX */}
-      {activeLightboxImg && (
-        <div className="fixed inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 z-[99999] transition-all">
-          <div className="relative max-w-xl w-full max-h-[80vh] flex items-center justify-center">
-            <img src={activeLightboxImg} alt="Evidência ampliada" className="max-w-full max-h-[80vh] object-contain rounded-xl border border-slate-800 shadow-2xl" />
+      {/* FULL SCALE IMAGE AUDIT LIGHTBOX / PREVIEW AMPLIADO */}
+      {(selectedImage || activeLightboxImg) && (
+        <div
+          className="fixed inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 z-[99999] transition-all backdrop-blur-xs"
+          onClick={() => {
+            setSelectedImage(null);
+            setActiveLightboxImg(null);
+          }}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[85vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={selectedImage || activeLightboxImg || ""}
+              alt="Evidência ampliada"
+              className="max-w-full max-h-[80vh] object-contain rounded-xl border border-slate-800 shadow-2xl"
+              referrerPolicy="no-referrer"
+            />
             <button
-              onClick={() => setActiveLightboxImg(null)}
-              className="absolute -top-12 right-0 bg-white text-[#1B2A4A] hover:bg-slate-100 font-extrabold w-10 h-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer"
+              onClick={() => {
+                setSelectedImage(null);
+                setActiveLightboxImg(null);
+              }}
+              className="absolute -top-12 right-0 bg-white text-[#1B2A4A] hover:bg-slate-100 font-extrabold w-10 h-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-transform hover:scale-105"
               type="button"
+              title="Fechar (ESC)"
             >
-              ✖
+              <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
-          <p className="text-white/60 text-xs mt-3 font-mono font-bold">Clique no ✖ acima para fechar a visualização</p>
+          <p className="text-white/60 text-xs mt-3 font-mono font-bold">Clique no X ou fora da imagem para fechar</p>
         </div>
       )}
     </div>

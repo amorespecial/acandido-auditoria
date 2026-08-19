@@ -1720,7 +1720,13 @@ export default function AlmoxarifeHistorico({
 
                               {(c.nokEvidenceLink || (c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0) || c.nokEvidenceFileData) ? (
                                 <div className="flex flex-wrap gap-2 items-center">
-                                  {((c.nokEvidenceLinks && c.nokEvidenceLinks.length > 0) ? c.nokEvidenceLinks : [c.nokEvidenceLink!].filter(Boolean)).map((link, lIdx) => (
+                                  {Array.from(
+                                    new Set(
+                                      (c.nokEvidenceLinks || (c.nokEvidenceLink ? [c.nokEvidenceLink] : []))
+                                        .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+                                        .map((url) => url.trim())
+                                    )
+                                  ).map((link, lIdx) => (
                                     <a
                                       key={lIdx}
                                       href={link}

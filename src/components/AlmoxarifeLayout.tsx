@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { CriterionState } from "../types";
 import { dbFetchLayoutConfig, dbFetchLayoutFieldConfig, isSupabaseReady, comprimirImagem } from "../supabaseService";
 import { getOrderedFields, BUILTIN_LAYOUT_FIELDS, isFieldRequired } from "../utils/fieldOrdering";
+import { toast } from "../utils/toast";
+import { Loader2 } from "lucide-react";
 
 interface AlmoxarifeLayoutProps {
   onBack: () => void;
@@ -97,7 +99,7 @@ export default function AlmoxarifeLayout({
 
   const handleSimulatePreset = () => {
     if (photos.length >= 5) {
-      alert("Limite de 5 fotos atingido.");
+      toast.warning("Limite de 5 fotos atingido.");
       return;
     }
     const nextPhoto = presetPhotosList[photos.length % presetPhotosList.length];
@@ -189,10 +191,11 @@ export default function AlmoxarifeLayout({
       );
 
       setIsSending(false);
+      toast.success("Evidência de LayOut enviada com sucesso!");
       onBack();
     } catch (err: any) {
       console.error("Erro ao enviar evidência do LayOut:", err);
-      alert(`Erro na transmissão do LayOut: ${err?.message || "Erro de conexão. Tente novamente."}`);
+      toast.error(`Erro na transmissão do LayOut: ${err?.message || "Erro de conexão. Tente novamente."}`);
       setIsSending(false);
     }
   };
@@ -430,10 +433,7 @@ export default function AlmoxarifeLayout({
         >
           {isSending ? (
             <>
-              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Loader2 className="animate-spin h-4 w-4 text-white" />
               <span>Transmitindo Fotos...</span>
             </>
           ) : (
