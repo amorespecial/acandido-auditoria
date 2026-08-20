@@ -154,19 +154,27 @@ export default function AlmoxarifeLayout({
     e.preventDefault();
     setShowFieldErrors(true);
 
+    if (!photos || photos.length === 0) {
+      toast.warning("É obrigatório anexar ao menos 1 foto como evidência para o LayOut.");
+      return;
+    }
+
     const isFotosReq = isFieldRequired({ id: "fotos", name: "Evidência Fotográfica", builtIn: true }, layoutFieldsConfig);
     if (isFotosReq && photos.length === 0) {
+      toast.warning("É obrigatório anexar ao menos 1 foto como evidência para o LayOut.");
       return;
     }
 
     const isComentarioReq = isFieldRequired({ id: "comentario", name: "Comentários do Almoxarife", builtIn: true }, layoutFieldsConfig);
     if (isComentarioReq && !commentInput.trim()) {
+      toast.warning("Por favor, preencha o campo de comentários.");
       return;
     }
 
     if (layoutFieldsConfig.customFields && layoutFieldsConfig.customFields.length > 0) {
       const missingReq = layoutFieldsConfig.customFields.find((cf: any) => isFieldRequired(cf, layoutFieldsConfig) && !customFormValues[cf.id]?.trim());
       if (missingReq) {
+        toast.warning(`Por favor, preencha o campo obrigatório: ${missingReq.name}`);
         return;
       }
     }
@@ -200,8 +208,7 @@ export default function AlmoxarifeLayout({
     }
   };
 
-  const isPhotoRequired = layoutFieldsConfig.fotos !== false;
-  const isSubmitDisabled = (isPhotoRequired && photos.length === 0) || isSending;
+  const isSubmitDisabled = isSending;
 
   return (
     <div className="max-w-md mx-auto space-y-6">

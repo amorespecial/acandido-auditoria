@@ -333,6 +333,40 @@ export const getPublicImageUrl = (
   return trimmed;
 };
 
+/**
+ * Universal extractor for evidence links / photos from any evaluation row or object
+ */
+export const parseEvidenceUrls = (val: any): string[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val
+      .map(item => (typeof item === 'string' ? item.trim() : ''))
+      .filter(item => item.length > 0);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => (typeof item === 'string' ? item.trim() : ''))
+            .filter(item => item.length > 0);
+        }
+      } catch {}
+    }
+    if (trimmed.includes(',')) {
+      return trimmed
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    }
+    return [trimmed];
+  }
+  return [];
+};
+
 // Retry handler for uploads with progressive WebP compression
 export const uploadFotoWithRetry = async (
   bucket: string = 'evidencias-almoxarife',
@@ -1317,7 +1351,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
 
   const mapped: Record<string, Partial<CriterionState>> = {};
   data.forEach(row => {
-    const links = Array.isArray(row.links_evidencia) ? row.links_evidencia : [];
+    const links = parseEvidenceUrls(row.links_evidencia || (row as any).fotos || (row as any).evidencias || (row as any).evidencia_url);
     const critId = row.criterio_codigo;
     // Prefer audit mode from audit_modes table if available, fallback to evaluations values
     const finalAuditMode = auditModesMap[critId] || row.audit_mode || row.modo_auditoria || "A_Distancia";
@@ -1551,7 +1585,7 @@ export const dbFetchAllEvaluationsForPeriod = async (
       let finalAlmoxarifeQuantities: number[] | undefined = undefined;
       let finalAuditorQuantities: number[] | undefined = undefined;
 
-      const links = Array.isArray(row.links_evidencia) ? row.links_evidencia : [];
+      const links = parseEvidenceUrls(row.links_evidencia || (row as any).fotos || (row as any).evidencias || (row as any).evidencia_url);
 
       if (critId === "2" && row.descricao_evidencia) {
         try {

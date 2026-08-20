@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus, CollaboratorCertificate } fro
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, getPublicImageUrl, comprimirImagem } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, getPublicImageUrl, comprimirImagem, parseEvidenceUrls } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { getMesesDisponiveis } from "../utils/dateUtils";
@@ -2323,7 +2323,12 @@ export default function AdminEvaluationDetail({
               })()}
 
               {/* Evidence from Almoxarife */}
-              {(selectedCriterion.status === "ENVIADO" || (selectedCriterion.submittedPhotos && selectedCriterion.submittedPhotos.length > 0) || selectedCriterion.evidenceNotes) && (
+              {(selectedCriterion.status === "ENVIADO" || 
+                (selectedCriterion.submittedPhotos && selectedCriterion.submittedPhotos.length > 0) || 
+                ((selectedCriterion as any).links_evidencia && (selectedCriterion as any).links_evidencia.length > 0) ||
+                ((selectedCriterion as any).fotos && (selectedCriterion as any).fotos.length > 0) ||
+                (selectedCriterion as any).evidencia_url ||
+                selectedCriterion.evidenceNotes) && (
                 <div className="p-4 bg-violet-50 border border-violet-100 rounded-xl space-y-3">
                   <div className="flex items-center justify-between text-violet-700 text-xs font-bold">
                     <div className="flex items-center gap-1.5">
@@ -2347,7 +2352,17 @@ export default function AdminEvaluationDetail({
                   )}
 
                   {(() => {
-                    const rawPhotos = selectedCriterion.submittedPhotos || [];
+                    const rawPhotos = (() => {
+                      const combined = [
+                        ...parseEvidenceUrls(selectedCriterion.submittedPhotos),
+                        ...parseEvidenceUrls((selectedCriterion as any).links_evidencia),
+                        ...parseEvidenceUrls((selectedCriterion as any).fotos),
+                        ...parseEvidenceUrls((selectedCriterion as any).evidencias),
+                        ...parseEvidenceUrls((selectedCriterion as any).evidencia_url)
+                      ];
+                      return Array.from(new Set(combined));
+                    })();
+
                     const validPhotos = rawPhotos
                       .map((p) => getPublicImageUrl(p))
                       .filter((p) => p && typeof p === "string" && p.trim().length > 0);
@@ -2371,8 +2386,10 @@ export default function AdminEvaluationDetail({
                                 alt={`Evidência ${i + 1}`}
                                 className="w-24 h-24 w-full h-full object-cover rounded-lg border cursor-pointer hover:scale-105 transition"
                                 onError={(e) => {
-                                  const parent = (e.target as HTMLElement).parentElement;
-                                  if (parent) parent.style.display = "none";
+                                  const img = e.target as HTMLImageElement;
+                                  if (!img.dataset.retried && photo.includes("supabase.co/storage/v1/object/public/")) {
+                                    img.dataset.retried = "true";
+                                  }
                                 }}
                               />
                               <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold uppercase gap-0.5 rounded-lg pointer-events-none">
