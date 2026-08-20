@@ -224,10 +224,20 @@ export default function AdminEvaluationDetail({
       setStatusInput(latestMatched.status);
       setPtsInput(latestMatched.pointsObtained);
       setNotesInput(latestMatched.notes || latestMatched.evidenceNotes || "");
-      const nokLinks = latestMatched.nokEvidenceLinks || (latestMatched.nokEvidenceLink ? [latestMatched.nokEvidenceLink] : []);
-      if (latestMatched.nokEvidenceLink) {
-        setNokEvidenceLinkInput(latestMatched.nokEvidenceLink);
-      }
+      const sanitizeWebUrl = (url: any): string => {
+        if (typeof url !== "string") return "";
+        const trimmed = url.trim();
+        if (trimmed.startsWith("data:") || trimmed.startsWith("data:image")) return "";
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+          return trimmed;
+        }
+        return "";
+      };
+
+      const rawLinks = latestMatched.nokEvidenceLinks || (latestMatched.nokEvidenceLink ? [latestMatched.nokEvidenceLink] : []);
+      const nokLinks = rawLinks.map(sanitizeWebUrl).filter(Boolean);
+      const cleanSingleLink = sanitizeWebUrl(latestMatched.nokEvidenceLink);
+      setNokEvidenceLinkInput(cleanSingleLink || nokLinks[0] || "");
       setNokLink1Input(nokLinks[0] || "");
       setNokLink2Input(nokLinks[1] || "");
       setNokLink3Input(nokLinks[2] || "");
@@ -919,8 +929,20 @@ export default function AdminEvaluationDetail({
       });
     }
     setTop10AuditorQuantitiesInput(initialAuditorQ);
-    const nokLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
-    setNokEvidenceLinkInput(crit.nokEvidenceLink || (nokLinks[0] || ""));
+    const sanitizeWebUrl = (url: any): string => {
+      if (typeof url !== "string") return "";
+      const trimmed = url.trim();
+      if (trimmed.startsWith("data:") || trimmed.startsWith("data:image")) return "";
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return trimmed;
+      }
+      return "";
+    };
+
+    const rawLinks = crit.nokEvidenceLinks || (crit.nokEvidenceLink ? [crit.nokEvidenceLink] : []);
+    const nokLinks = rawLinks.map(sanitizeWebUrl).filter(Boolean);
+    const cleanSingleLink = sanitizeWebUrl(crit.nokEvidenceLink);
+    setNokEvidenceLinkInput(cleanSingleLink || nokLinks[0] || "");
     setNokLink1Input(nokLinks[0] || "");
     setNokLink2Input(nokLinks[1] || "");
     setNokLink3Input(nokLinks[2] || "");
@@ -1018,7 +1040,7 @@ export default function AdminEvaluationDetail({
           new Set(
             [nokLink1Input, nokLink2Input, nokLink3Input, nokLink4Input]
               .map(l => (typeof l === "string" ? l.trim() : ""))
-              .filter(l => l.length > 0)
+              .filter(l => (l.startsWith("http://") || l.startsWith("https://")) && !l.startsWith("data:"))
           )
         );
         const cleanNokDescTop10 = nokEvidenceDescriptionInput.trim();
@@ -1174,7 +1196,7 @@ export default function AdminEvaluationDetail({
         new Set(
           [nokLink1Input, nokLink2Input, nokLink3Input, nokLink4Input]
             .map(l => (typeof l === "string" ? l.trim() : ""))
-            .filter(l => l.length > 0)
+            .filter(l => (l.startsWith("http://") || l.startsWith("https://")) && !l.startsWith("data:"))
         )
       );
       const cleanNokDesc = nokEvidenceDescriptionInput.trim();

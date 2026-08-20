@@ -185,17 +185,15 @@ export default function AlmoxarifeContagem({
   const filledPhotosCount = items.filter((it: any) => !!uploadedPhotos[it.code]).length;
   const isSubmitBtnAllowed = totalItemsCount > 0 && 
     items.every((it: any) => {
-      const isPhotoReq = isFieldRequired({ id: "foto", name: "Anexar Foto de Evidência", builtIn: true }, top10Config);
-      const photoOk = !isPhotoReq || !!uploadedPhotos[it.code];
-      const isQtyReq = isFieldRequired({ id: "quantidade", name: "Quantidade Física Encontrada", builtIn: true }, top10Config);
-      const qtyOk = !isQtyReq || (quantities[it.code] !== undefined && quantities[it.code].trim() !== "");
+      const hasQty = quantities[it.code] !== undefined && String(quantities[it.code]).trim() !== "";
+      const hasPhoto = !!uploadedPhotos[it.code] && String(uploadedPhotos[it.code]).trim().length > 0;
       let customOk = true;
       if (top10Config.customFields && top10Config.customFields.length > 0) {
         const itemVals = customFormValues[it.code] || {};
         const missingReq = top10Config.customFields.find((cf: any) => isFieldRequired(cf, top10Config) && !itemVals[cf.id]?.trim());
         if (missingReq) customOk = false;
       }
-      return photoOk && qtyOk && customOk;
+      return hasQty && hasPhoto && customOk;
     });
 
   // Handle local File conversions with compression (Max 1280px width, image/webp 0.8)
@@ -253,10 +251,37 @@ export default function AlmoxarifeContagem({
   // Submit all photos back up to parent state
   const handleFormSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSubmitBtnAllowed) {
-      toast.warning("Por favor, preencha todos os campos obrigatórios e anexe as fotos antes de enviar.");
+    setShowFieldErrors(true);
+
+    if (totalItemsCount === 0) {
+      toast.warning("Nenhum item configurado no TOP 10 para este ciclo.");
       return;
     }
+
+    // Trava obrigatória: verificar se todos os itens da lista possuem quantidade inserida e foto anexada
+    const hasIncompleteItem = items.some((it: any) => {
+      const hasQty = quantities[it.code] !== undefined && String(quantities[it.code]).trim() !== "";
+      const hasPhoto = !!uploadedPhotos[it.code] && String(uploadedPhotos[it.code]).trim().length > 0;
+      return !hasQty || !hasPhoto;
+    });
+
+    if (hasIncompleteItem) {
+      toast.warning("Atenção: Todos os itens do TOP 10 devem ter quantidade digitada e foto anexada antes do envio.");
+      return;
+    }
+
+    // Validação de campos customizados adicionais se existirem
+    if (top10Config.customFields && top10Config.customFields.length > 0) {
+      const missingCustom = items.some((it: any) => {
+        const itemVals = customFormValues[it.code] || {};
+        return top10Config.customFields.some((cf: any) => isFieldRequired(cf, top10Config) && !itemVals[cf.id]?.trim());
+      });
+      if (missingCustom) {
+        toast.warning("Por favor, preencha todos os campos obrigatórios antes de enviar.");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setUploadProgressMsg("Iniciando envio...");
     setUploadProgressPct(5);

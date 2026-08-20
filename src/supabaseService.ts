@@ -1356,7 +1356,7 @@ export const dbFetchEvaluations = async (almoxarifado: string, mesName: string, 
     const validNokLinks: string[] = Array.from(
       new Set(
         links
-          .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0)
+          .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0 && (url.trim().startsWith("http://") || url.trim().startsWith("https://")) && !url.trim().startsWith("data:"))
           .map((url: string) => url.trim())
       )
     );
@@ -1583,7 +1583,7 @@ export const dbFetchAllEvaluationsForPeriod = async (
       const validNokLinks: string[] = Array.from(
         new Set(
           links
-            .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0)
+            .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0 && (url.trim().startsWith("http://") || url.trim().startsWith("https://")) && !url.trim().startsWith("data:"))
             .map((url: string) => url.trim())
         )
       );
