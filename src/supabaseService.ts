@@ -72,35 +72,39 @@ export const base64ToBlob = (base64: string): Blob => {
 export function safeSetLocalStorage(key: string, data: any): boolean {
   if (typeof window === "undefined" || !window.localStorage) return false;
 
-  const sanitizeHistoryData = (items: any[]) => {
-    if (!Array.isArray(items)) return items;
-    return items.map((item: any) => {
-      if (!item || typeof item !== 'object') return item;
-      const newItem = { ...item };
-      if (Array.isArray(newItem.criterios)) {
-        newItem.criterios = newItem.criterios.map((c: any) => {
-          if (!c || typeof c !== 'object') return c;
-          const copy = { ...c };
-          if (typeof copy.links_evidencia === 'string' && copy.links_evidencia.startsWith('data:')) {
-            delete copy.links_evidencia;
-          } else if (Array.isArray(copy.links_evidencia)) {
-            copy.links_evidencia = copy.links_evidencia.filter((l: any) => typeof l !== 'string' || !l.startsWith('data:'));
-          }
-          if (typeof copy.descricao_evidencia === 'string' && copy.descricao_evidencia.length > 300) {
-            copy.descricao_evidencia = copy.descricao_evidencia.slice(0, 300) + '...';
-          }
-          return copy;
-        });
+  const sanitizeData = (itemOrItems: any): any => {
+    if (!itemOrItems) return itemOrItems;
+    if (typeof itemOrItems === 'string') {
+      if (itemOrItems.startsWith('data:image') || itemOrItems.startsWith('data:application') || (itemOrItems.startsWith('data:') && itemOrItems.length > 500)) {
+        return '';
       }
-      return newItem;
-    });
+      return itemOrItems;
+    }
+    if (Array.isArray(itemOrItems)) {
+      return itemOrItems.map(sanitizeData);
+    }
+    if (typeof itemOrItems === 'object') {
+      const copy: any = {};
+      for (const k of Object.keys(itemOrItems)) {
+        const v = itemOrItems[k];
+        // Strip heavy base64 strings or file payload buffers from localStorage
+        if (k === 'fileData' || k === 'file_data' || k === 'base64' || k === 'blob' || k === 'nokEvidenceFileData') {
+          if (typeof v === 'string' && (v.startsWith('data:') || v.length > 1000)) {
+            continue;
+          }
+        }
+        if (typeof v === 'string' && (v.startsWith('data:image') || v.startsWith('data:application') || (v.startsWith('data:') && v.length > 500))) {
+          continue;
+        }
+        copy[k] = sanitizeData(v);
+      }
+      return copy;
+    }
+    return itemOrItems;
   };
 
   try {
-    let payload = data;
-    if (key === "acandido_history" && Array.isArray(data)) {
-      payload = sanitizeHistoryData(data);
-    }
+    let payload = sanitizeData(data);
     const valStr = typeof payload === "string" ? payload : JSON.stringify(payload);
     localStorage.setItem(key, valStr);
     return true;
@@ -123,10 +127,7 @@ export function safeSetLocalStorage(key: string, data: any): boolean {
 
     // Retry setItem with sanitized/minimal payload
     try {
-      let payload = data;
-      if (Array.isArray(data)) {
-        payload = sanitizeHistoryData(data);
-      }
+      let payload = sanitizeData(data);
       const valStr = typeof payload === "string" ? payload : JSON.stringify(payload);
       localStorage.setItem(key, valStr);
       return true;
@@ -3150,6 +3151,8 @@ export async function dbSalvarCertificado(almoxarifado_id: string, mes: string, 
       console.error("[twin sync certificates] Error:", twinError);
     }
   }
+
+  return fileUrl;
 }
 
 export async function dbBuscarCertificados(almoxarifado_id: string, mes: string, ano: string) {

@@ -3,7 +3,7 @@ import { Branch, CriterionState, EvaluationStatus, CollaboratorCertificate } fro
 import { initialCertificates, getCollaboratorsForBranch } from "../mockData";
 import AdminGarantiasPanel from "./AdminGarantiasPanel";
 import AdminServicosPanel from "./AdminServicosPanel";
-import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, getPublicImageUrl, comprimirImagem, parseEvidenceUrls } from "../supabaseService";
+import { dbSaveTop10Config, dbFetchTop10Config, isSupabaseReady, dbSaveSchedules, dbFetchBranchSchedules, dbBuscarCertificados, dbSalvarCertificado, dbFetchLayoutConfig, dbSaveLayoutConfig, dbFetchNonMovingMaterials, dbSaveNonMovingMaterials, dbFetchWarranties, dbSaveAuditMode, dbFetchColaboradoresUnimobin, MONTH_NAME_TO_NUM, MONTH_NUM_TO_NAME, getPublicImageUrl, comprimirImagem, parseEvidenceUrls, safeSetLocalStorage } from "../supabaseService";
 import { useRealtimeSync } from "../useRealtimeSync";
 import { supabase, realtimeFlags } from "../supabaseClient";
 import { getMesesDisponiveis } from "../utils/dateUtils";
@@ -149,16 +149,13 @@ export default function AdminEvaluationDetail({
 
           const dbData = await dbFetchNonMovingMaterials(branch.id, activeYearNum, activeSemestre);
           if (dbData && dbData.materials) {
-            setBranchMaterials(dbData.materials.map((m: any) => ({
+            const mats = dbData.materials.map((m: any) => ({
               code: m.code,
               name: m.description,
               status: m.status
-            })));
-            localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(dbData.materials.map((m: any) => ({
-              code: m.code,
-              name: m.description,
-              status: m.status
-            }))));
+            }));
+            setBranchMaterials(mats);
+            safeSetLocalStorage(`acandido_materials_parados_${branch.id}`, mats);
           }
         } catch (e) {
           console.error("Error loading non moving materials in AdminEvaluationDetail:", e);
@@ -550,7 +547,7 @@ export default function AdminEvaluationDetail({
   const handleUpdateMaterialStatus = (code: string, newStatus: "OK" | "NOK") => {
     const updated = branchMaterials.map(m => m.code === code ? { ...m, status: newStatus } : m);
     setBranchMaterials(updated);
-    localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
+    safeSetLocalStorage(`acandido_materials_parados_${branch.id}`, updated);
     
     if (isSupabaseReady()) {
       try {
@@ -595,7 +592,7 @@ export default function AdminEvaluationDetail({
     const newMat = { code: newMaterialCode.trim(), name: newMaterialName.trim(), status: "OK" as const };
     const updated = [...branchMaterials, newMat];
     setBranchMaterials(updated);
-    localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
+    safeSetLocalStorage(`acandido_materials_parados_${branch.id}`, updated);
     setNewMaterialCode("");
     setNewMaterialName("");
 
@@ -633,7 +630,7 @@ export default function AdminEvaluationDetail({
     }
     const updated = branchMaterials.filter((m) => m.code !== code);
     setBranchMaterials(updated);
-    localStorage.setItem(`acandido_materials_parados_${branch.id}`, JSON.stringify(updated));
+    safeSetLocalStorage(`acandido_materials_parados_${branch.id}`, updated);
 
     if (isSupabaseReady()) {
       try {
@@ -1112,7 +1109,7 @@ export default function AdminEvaluationDetail({
             uploadedAt: c.uploadedAt || new Date().toLocaleDateString("pt-BR")
           }));
           setAuditorCerts(updatedCerts);
-          localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updatedCerts));
+          safeSetLocalStorage(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, updatedCerts);
 
           if (isSupabaseReady()) {
             try {
@@ -2605,7 +2602,7 @@ export default function AdminEvaluationDetail({
                                   return item;
                                 });
                                 setAuditorCerts(updated);
-                                localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
+                                safeSetLocalStorage(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, updated);
 
                                 if (isSupabaseReady()) {
                                   dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
@@ -2665,7 +2662,7 @@ export default function AdminEvaluationDetail({
                                       return item;
                                     });
                                     setAuditorCerts(updated);
-                                    localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
+                                    safeSetLocalStorage(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, updated);
 
                                     if (isSupabaseReady()) {
                                       dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
@@ -2722,6 +2719,23 @@ export default function AdminEvaluationDetail({
                                         }
 
                                         const uploadDate = new Date().toLocaleDateString("pt-BR");
+                                        
+                                        // Upload to Supabase Storage and get URL
+                                        let uploadedUrl = base64;
+                                        if (isSupabaseReady()) {
+                                          try {
+                                            uploadedUrl = (await dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+                                              status: "Certificado enviado",
+                                              fileName: finalFileName,
+                                              fileType: finalType,
+                                              fileData: base64,
+                                              uploadedAt: new Date().toISOString()
+                                            })) || base64;
+                                          } catch (upErr) {
+                                            console.error("Error uploading certificate to Supabase:", upErr);
+                                          }
+                                        }
+
                                         const updated = auditorCerts.map((item) => {
                                           if (item.id === c.id) {
                                             return {
@@ -2731,23 +2745,13 @@ export default function AdminEvaluationDetail({
                                               fileName: finalFileName,
                                               fileSize: file.size,
                                               fileType: finalType,
-                                              fileData: base64
+                                              fileData: uploadedUrl
                                             };
                                           }
                                           return item;
                                         });
                                         setAuditorCerts(updated);
-                                        localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
-
-                                        if (isSupabaseReady()) {
-                                          dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
-                                            status: "Certificado enviado",
-                                            fileName: finalFileName,
-                                            fileType: finalType,
-                                            fileData: base64,
-                                            uploadedAt: new Date().toISOString()
-                                          }).catch((err) => console.error("Error uploading certificate to Supabase:", err));
-                                        }
+                                        safeSetLocalStorage(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, updated);
                                       } catch (err) {
                                         console.error("Erro ao processar certificado:", err);
                                       }

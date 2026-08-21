@@ -134,6 +134,25 @@ export default function App() {
     }
   }
 
+  // Startup proactive storage cleanup to prevent QuotaExceededError
+  if (typeof window !== "undefined") {
+    try {
+      const keysToClean: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("acandido_certificates_") || k.startsWith("acandido_materials_parados_") || k.includes("_backup_"))) {
+          const val = localStorage.getItem(k);
+          if (val && (val.includes("data:image") || val.includes("data:application") || val.length > 50000)) {
+            keysToClean.push(k);
+          }
+        }
+      }
+      keysToClean.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn("Storage cleanup exception:", e);
+    }
+  }
+
   const [user, setUser] = useState<AppUser | null>(() => {
     const saved = sessionStorage.getItem("acandido_app_user");
     return saved ? JSON.parse(saved) : null;
@@ -1732,7 +1751,7 @@ export default function App() {
                   ...c,
                   status: "Certificado enviado" as const
                 }));
-                localStorage.setItem(twinKey, JSON.stringify(updatedCertificates));
+                safeSetLocalStorage(twinKey, updatedCertificates);
               }
             }
           } catch (e) {
