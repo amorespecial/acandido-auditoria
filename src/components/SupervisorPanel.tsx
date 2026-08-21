@@ -156,9 +156,7 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
     try {
       const simulatedDateStr = getTodayISO(); // System dynamic operational date
 
-      const targetBranch = targetBranchId === "fretamento-jaboatao"
-        ? { id: "fretamento-jaboatao", name: "FRETAMENTO JABOATÃO" }
-        : { id: "rodoviario-jaboatao", name: "RODOVIÁRIO JABOATÃO" };
+      const targetBranch = { id: "fretamento-jaboatao", name: "FRETAMENTO JABOATÃO" };
 
       const dynamicData: Record<string, string> = {};
       fields.forEach(f => {
@@ -331,7 +329,6 @@ export default function SupervisorPanel({ user, branches, onLogout }: Supervisor
                   className="w-full h-[40px] bg-white border-[1.5px] border-[#CBD5E1] rounded-[8px] px-3 text-[14px] text-[#00194C] font-medium focus:outline-none focus:border-[#00194C] focus:ring-2 focus:ring-[#00194C]/15 transition-all"
                 >
                   <option value="fretamento-jaboatao">FRETAMENTO JABOATÃO</option>
-                  <option value="rodoviario-jaboatao">RODOVIÁRIO JABOATÃO</option>
                 </select>
                 <p className="text-[12px] text-[#64748B] italic">Selecione para qual almoxarifado sob sua gestão este chamado será enviado.</p>
               </div>

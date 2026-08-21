@@ -470,20 +470,25 @@ export const seedDatabaseIfEmpty = async () => {
         { nome: "Fernando Silva", email: "estoque01jp@gmail.com", perfil: "auditor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Auditor Geral", group: "A", ownerName: "Fernando", almoxarifados: [] }), ativo: true },
         { nome: "Natalice Oliveira", email: "estoquejp@acandidotransportes.com.br", perfil: "auditor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Auditor Geral", group: "A", ownerName: "Natalice Oliveira", almoxarifados: [] }), ativo: true },
         { nome: "Robson", email: "almoxarifadojp@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Robson", almoxarifados: ["unitrans-jp", "santa-maria-jp"] }), ativo: true },
-        { nome: "Robson Jaboatão", email: "robson.almoxarife@acandidogrupo.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife Jaboatão", group: "A", ownerName: "Robson Jaboatão", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
-        { nome: "Muniz", email: "muniz.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Muniz", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
-        { nome: "Glebson", email: "glebson.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Glebson", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Robson Jaboatão", email: "robson.almoxarife@acandidogrupo.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife Jaboatão", group: "A", ownerName: "Robson Jaboatão", almoxarifados: ["fretamento-jaboatao"] }), ativo: true },
+        { nome: "Muniz", email: "muniz.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Muniz", almoxarifados: ["fretamento-jaboatao"] }), ativo: true },
+        { nome: "Glebson", email: "glebson.jabo@acandidotransportes.com.br", perfil: "supervisor", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Supervisor de Manutenção", group: "A", ownerName: "Glebson", almoxarifados: ["fretamento-jaboatao"] }), ativo: true },
         { nome: "Paulo", email: "comprascg@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Paulo", almoxarifados: ["expresso-nacional", "acandido-cg"] }), ativo: true },
         { nome: "Ezequiel", email: "almoxarifadogo@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Ezequiel", almoxarifados: ["fretamento-goiana"] }), ativo: true },
-        { nome: "Sérgio", email: "almoxarifadope01@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Sérgio", almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"] }), ativo: true },
+        { nome: "Sérgio", email: "almoxarifadope01@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "A", ownerName: "Sérgio", almoxarifados: ["fretamento-jaboatao"] }), ativo: true },
         { nome: "Raimundo", email: "almoxarifadorn@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Raimundo", almoxarifados: ["unissana-rn"] }), ativo: true },
         { nome: "Joel", email: "ti02rn@acandidotransportes.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Joel", almoxarifados: ["reunidas-nat"] }), ativo: true },
         { nome: "Lucas", email: "fretamentojoaopessoa@gmail.com", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Lucas", almoxarifados: ["fretamento-pb"] }), ativo: true },
-        { nome: "Matheus", email: "almoxarifadobayeux@rodoviarionordestino.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Matheus", almoxarifados: ["trans-cg-bayeux", "rodoviario-cabedelo"] }), ativo: true },
-        { nome: "Arline", email: "almoxarifadoce@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Arline", almoxarifados: ["fretamento-maracanau", "rodoviario-fortaleza"] }), ativo: true }
+        { nome: "Matheus", email: "almoxarifadobayeux@rodoviarionordestino.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Matheus", almoxarifados: ["trans-cg-bayeux"] }), ativo: true },
+        { nome: "Arline", email: "almoxarifadoce@transnacionalfretamento.com.br", perfil: "almoxarife", senha_hash: defaultHash, almoxarifado: JSON.stringify({ cargo: "Almoxarife", group: "B", ownerName: "Arline", almoxarifados: ["fretamento-maracanau"] }), ativo: true }
       ];
       await supabase.from('usuarios').upsert(INITIAL_SEED_USERS, { onConflict: 'email' });
     }
+
+    // Desvincular e inativar logicamente os almoxarifados vendidos sem afetar historico ou unidades parceiras
+    const deactivatedBranchIds = ["rodoviario-jaboatao", "rodoviario-fortaleza", "rodoviario-cabedelo"];
+    await supabase.from('almoxarifados').update({ ativo: false, garagem_dupla_com: null }).in('id', deactivatedBranchIds);
+    await supabase.from('almoxarifados').update({ garagem_dupla_com: null }).in('id', ["fretamento-jaboatao", "trans-cg-bayeux", "fretamento-maracanau"]);
 
     const { data: existingCal, error: calError } = await supabase.from('calendario_inventarios').select('id').limit(1);
     if (!calError && (!existingCal || existingCal.length === 0)) {
@@ -1281,10 +1286,7 @@ export const isSameBranch = (branchA: string, branchB: string): boolean => {
 
 const twinPairs = [
   ["unitrans-jp", "santa-maria-jp"],
-  ["expresso-nacional", "acandido-cg"],
-  ["fretamento-jaboatao", "rodoviario-jaboatao"],
-  ["trans-cg-bayeux", "rodoviario-cabedelo"],
-  ["fretamento-maracanau", "rodoviario-fortaleza"]
+  ["expresso-nacional", "acandido-cg"]
 ];
 
 export const getTwinBranchId = (branchId: string): string | null => {
@@ -3192,12 +3194,17 @@ export const dbFetchColaboradoresUnimobin = async (branchId?: string) => {
 
     if (data && data.length > 0) {
       collabs = data
-        .map((item: any) => ({
-          id: String(item.id || `collab-${item.almoxarifado_id || item.branch_id}-${Date.now()}`),
-          name: String(item.colaborador_nome || item.nome || item.name || "").trim(),
-          branchId: String(item.almoxarifado_id || item.branch_id || "").trim(),
-          cargo: item.cargo || "Motorista/Colaborador"
-        }))
+        .map((item: any) => {
+          const rawBranch = item.almoxarifado || item.almoxarifado_id || item.branch_id || item.unidade || item.filial || "";
+          const rawName = item.nome || item.colaborador_nome || item.name || "";
+          const rawId = item.id || `collab-${rawBranch}-${Date.now()}`;
+          return {
+            id: String(rawId),
+            name: String(rawName).trim(),
+            branchId: String(rawBranch).trim(),
+            cargo: item.cargo || "Motorista/Colaborador"
+          };
+        })
         .filter(c => c.name.length > 0);
     }
 
@@ -3227,11 +3234,8 @@ export const dbFetchColaboradoresUnimobin = async (branchId?: string) => {
           const rowId = `collab-${bId}-${i}-${Date.now()}`;
           seedRows.push({
             id: rowId,
-            almoxarifado_id: bId,
-            branch_id: bId,
-            colaborador_nome: name,
+            almoxarifado: bId,
             nome: name,
-            name: name,
             cargo: "Motorista/Colaborador"
           });
           collabs.push({
@@ -3270,13 +3274,11 @@ export const dbSaveColaboradorUnimobin = async (branchId: string, name: string, 
   const trimmedName = name.trim();
   const trimmedBranchId = branchId.trim();
 
+  // Primary payload using the exact schema column 'almoxarifado'
   const payload: any = {
     id: rowId,
-    almoxarifado_id: trimmedBranchId,
-    branch_id: trimmedBranchId,
-    colaborador_nome: trimmedName,
+    almoxarifado: trimmedBranchId,
     nome: trimmedName,
-    name: trimmedName,
     cargo: cargo || "Motorista/Colaborador"
   };
 
@@ -3288,18 +3290,45 @@ export const dbSaveColaboradorUnimobin = async (branchId: string, name: string, 
 
   if (error) {
     console.warn("[dbSaveColaboradorUnimobin First Attempt Warning]:", error.message);
-    const minimalPayload = {
-      id: rowId,
-      almoxarifado_id: trimmedBranchId,
-      colaborador_nome: trimmedName
-    };
-    const { error: minErr } = await supabase
-      .from('colaboradores_unimobin')
-      .upsert(minimalPayload);
 
-    if (minErr) {
-      console.error("[dbSaveColaboradorUnimobin Fatal Error]:", minErr);
-      throw new Error(`Erro ao cadastrar colaborador no Supabase: ${minErr.message}`);
+    // Fallback 1: Direct insert with almoxarifado and nome
+    const insertPayload = {
+      almoxarifado: trimmedBranchId,
+      nome: trimmedName,
+      cargo: cargo || "Motorista/Colaborador"
+    };
+    const { error: insertErr } = await supabase
+      .from('colaboradores_unimobin')
+      .insert(insertPayload);
+
+    if (insertErr) {
+      console.warn("[dbSaveColaboradorUnimobin Fallback 1 Warning]:", insertErr.message);
+
+      // Fallback 2: Check if column is colaborador_nome
+      const altPayload = {
+        almoxarifado: trimmedBranchId,
+        colaborador_nome: trimmedName,
+        cargo: cargo || "Motorista/Colaborador"
+      };
+      const { error: altErr } = await supabase
+        .from('colaboradores_unimobin')
+        .insert(altPayload);
+
+      if (altErr) {
+        // Fallback 3: Minimal payload with almoxarifado and nome
+        const minPayload = {
+          almoxarifado: trimmedBranchId,
+          nome: trimmedName
+        };
+        const { error: minErr } = await supabase
+          .from('colaboradores_unimobin')
+          .insert(minPayload);
+
+        if (minErr) {
+          console.error("[dbSaveColaboradorUnimobin Fatal Error]:", minErr);
+          throw new Error(`Erro ao cadastrar colaborador no Supabase: ${minErr.message}`);
+        }
+      }
     }
   }
 
@@ -3328,18 +3357,26 @@ export const dbDeletarColaboradorUnimobin = async (id: string, branchId?: string
     const trimmedBranch = branchId.trim();
     const trimmedName = name.trim();
 
-    await supabase
-      .from('colaboradores_unimobin')
-      .delete()
-      .or(`almoxarifado_id.eq.${trimmedBranch},branch_id.eq.${trimmedBranch}`)
-      .or(`colaborador_nome.ilike.${trimmedName},nome.ilike.${trimmedName},name.ilike.${trimmedName}`);
+    try {
+      await supabase
+        .from('colaboradores_unimobin')
+        .delete()
+        .eq('almoxarifado', trimmedBranch)
+        .eq('nome', trimmedName);
+    } catch (e) {
+      console.warn("[dbDeletarColaboradorUnimobin delete by branch+name warning]:", e);
+    }
 
-    await supabase
-      .from('unimobin_certificados')
-      .delete()
-      .eq('almoxarifado_id', trimmedBranch)
-      .ilike('colaborador_nome', trimmedName)
-      .neq('status', 'Certificado enviado');
+    try {
+      await supabase
+        .from('unimobin_certificados')
+        .delete()
+        .eq('almoxarifado_id', trimmedBranch)
+        .ilike('colaborador_nome', trimmedName)
+        .neq('status', 'Certificado enviado');
+    } catch (e) {
+      console.warn("[dbDeletarColaboradorUnimobin delete certificate warning]:", e);
+    }
   }
 
   if (typeof window !== "undefined") {
@@ -3664,7 +3701,10 @@ export async function dbFetchAlmoxarifados(): Promise<Branch[]> {
       return [];
     }
 
-    return data.map((row: any) => ({
+    const DEACTIVATED_BRANCH_IDS = new Set(["rodoviario-jaboatao", "rodoviario-fortaleza", "rodoviario-cabedelo"]);
+    const activeData = data.filter((row: any) => row.ativo !== false && !DEACTIVATED_BRANCH_IDS.has(row.id));
+
+    return activeData.map((row: any) => ({
       id: row.id,
       name: row.nome || row.id,
       location: row.cidade && row.estado ? `${row.cidade}, ${row.estado}` : row.cidade || row.estado || "Brasil",

@@ -1241,10 +1241,7 @@ export default function App() {
     // Stage 2: Link dual-branch garaged twins collaborating criteria
     const twinPairs = [
       ["unitrans-jp", "santa-maria-jp"],
-      ["expresso-nacional", "acandido-cg"],
-      ["fretamento-jaboatao", "rodoviario-jaboatao"],
-      ["trans-cg-bayeux", "rodoviario-cabedelo"],
-      ["fretamento-maracanau", "rodoviario-fortaleza"]
+      ["expresso-nacional", "acandido-cg"]
     ];
 
     return tempBranches.map((b) => {
@@ -1708,10 +1705,7 @@ export default function App() {
 
     const twinPairs = [
       ["unitrans-jp", "santa-maria-jp"],
-      ["expresso-nacional", "acandido-cg"],
-      ["fretamento-jaboatao", "rodoviario-jaboatao"],
-      ["trans-cg-bayeux", "rodoviario-cabedelo"],
-      ["fretamento-maracanau", "rodoviario-fortaleza"]
+      ["expresso-nacional", "acandido-cg"]
     ];
 
     const pair = twinPairs.find((p) => p.includes(activeBranchId));

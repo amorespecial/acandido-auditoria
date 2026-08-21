@@ -663,10 +663,7 @@ export default function AdminEvaluationDetail({
   // Determine twin branch linkage for double warehouse rules
   const twinPairs = [
     ["unitrans-jp", "santa-maria-jp"],
-    ["expresso-nacional", "acandido-cg"],
-    ["fretamento-jaboatao", "rodoviario-jaboatao"],
-    ["trans-cg-bayeux", "rodoviario-cabedelo"],
-    ["fretamento-maracanau", "rodoviario-fortaleza"]
+    ["expresso-nacional", "acandido-cg"]
   ];
   const pair = twinPairs.find((p) => p.includes(branch.id));
   const twinId = pair ? (pair[0] === branch.id ? pair[1] : pair[0]) : null;

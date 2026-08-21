@@ -672,7 +672,7 @@ export default function AdminConfiguracoes({
         group: "A" as const,
         cargo: "Almoxarife Jaboatão",
         status: "ATIVO" as const,
-        almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"]
+        almoxarifados: ["fretamento-jaboatao"]
       },
       {
         name: "Muniz",
@@ -683,7 +683,7 @@ export default function AdminConfiguracoes({
         group: "A" as const,
         cargo: "Supervisor de Manutenção",
         status: "ATIVO" as const,
-        almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"]
+        almoxarifados: ["fretamento-jaboatao"]
       },
       {
         name: "Glebson",
@@ -694,7 +694,7 @@ export default function AdminConfiguracoes({
         group: "A" as const,
         cargo: "Supervisor de Manutenção",
         status: "ATIVO" as const,
-        almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"]
+        almoxarifados: ["fretamento-jaboatao"]
       },
       {
         name: "Paulo",
@@ -727,7 +727,7 @@ export default function AdminConfiguracoes({
         group: "A" as const,
         cargo: "Almoxarife",
         status: "ATIVO" as const,
-        almoxarifados: ["fretamento-jaboatao", "rodoviario-jaboatao"]
+        almoxarifados: ["fretamento-jaboatao"]
       },
       {
         name: "Raimundo",
@@ -771,7 +771,7 @@ export default function AdminConfiguracoes({
         group: "B" as const,
         cargo: "Almoxarife",
         status: "ATIVO" as const,
-        almoxarifados: ["trans-cg-bayeux", "rodoviario-cabedelo"]
+        almoxarifados: ["trans-cg-bayeux"]
       },
       {
         name: "Arline",
@@ -782,7 +782,7 @@ export default function AdminConfiguracoes({
         group: "B" as const,
         cargo: "Almoxarife",
         status: "ATIVO" as const,
-        almoxarifados: ["fretamento-maracanau", "rodoviario-fortaleza"]
+        almoxarifados: ["fretamento-maracanau"]
       }
     ];
   });
@@ -882,6 +882,12 @@ export default function AdminConfiguracoes({
   const [selectedCollabBranchId, setSelectedCollabBranchId] = useState<string>(branches[0]?.id || "");
   const [collabList, setCollabList] = useState<MiniCollaborator[]>([]);
   const [isCollabLoading, setIsCollabLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedCollabBranchId && branches && branches.length > 0) {
+      setSelectedCollabBranchId(branches[0].id);
+    }
+  }, [branches, selectedCollabBranchId]);
 
   const loadCollabList = React.useCallback(async () => {
     setIsCollabLoading(true);
@@ -1426,17 +1432,16 @@ export default function AdminConfiguracoes({
 
   // ================= COLABORADORES Unimobin =================
   const handleAddCollab = async () => {
-    if (!newCollabName.trim() || !selectedCollabBranchId) return;
-
+    const branchToAdd = selectedCollabBranchId || branches[0]?.id;
     const nameToAdd = newCollabName.trim();
-    const branchToAdd = selectedCollabBranchId;
+    if (!nameToAdd || !branchToAdd) return;
 
     try {
       setIsCollabLoading(true);
       await dbSaveColaboradorUnimobin(branchToAdd, nameToAdd);
       setNewCollabName("");
       await loadCollabList();
-      toast.success("Colaborador cadastrado com sucesso para o curso Unimobin!");
+      toast.success("Colaborador cadastrado com sucesso!");
     } catch (e: any) {
       console.error("Error adding collaborator:", e);
       toast.error(`Erro ao cadastrar colaborador no Supabase: ${e?.message || e}`);

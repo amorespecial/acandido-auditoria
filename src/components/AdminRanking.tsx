@@ -223,7 +223,7 @@ function AdminRankingContent({
     return (b1Evaluated && !b2Evaluated) || (!b1Evaluated && b2Evaluated);
   };
 
-  // Define the owners map to consolidate the 14 branches into 9 unified entries
+  // Define the owners map to consolidate the active branches into unified ranking entries
   const getUnifiedEntries = (allBranches: Branch[]): UnifiedEntry[] => {
     const ownersMap: { [key: string]: { name: string; location: string; group: "A" | "B"; branches: Branch[] } } = {
       "Robson": {
@@ -239,7 +239,7 @@ function AdminRankingContent({
         branches: []
       },
       "Sérgio": {
-        name: "Fretamento Jaboatão / Rodoviário Jaboatão",
+        name: "Fretamento Jaboatão",
         location: "Jaboatão, PE",
         group: "A",
         branches: []
@@ -269,14 +269,14 @@ function AdminRankingContent({
         branches: []
       },
       "Matheus": {
-        name: "Trans CG Bayeux / Rodoviário Cabedelo",
-        location: "Bayeux / Cabedelo, PB",
+        name: "Trans CG Bayeux",
+        location: "Bayeux, PB",
         group: "B",
         branches: []
       },
       "Arline": {
-        name: "Fretamento Maracanau / Rodoviário Fortaleza",
-        location: "Maracanaú / Fortaleza, CE",
+        name: "Fretamento Maracanau",
+        location: "Maracanaú, CE",
         group: "B",
         branches: []
       }

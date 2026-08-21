@@ -620,7 +620,7 @@ export default function AdminPanel({
               </div>
 
               <div className="bg-emerald-50 text-emerald-900 rounded-xl p-3.5 text-xs inline-block leading-relaxed">
-                <strong>Atenção:</strong> Ao abrir este ciclo, as metas dos 14 almoxarifados do grupo serão iniciadas com o status <strong className="font-extrabold uppercase bg-emerald-100 px-1 rounded">PENDENTE</strong> e suas evidências zeradas para recebimento de novos envios técnicos do almoxarife.
+                <strong>Atenção:</strong> Ao abrir este ciclo, as metas dos {branches.length} almoxarifados do grupo serão iniciadas com o status <strong className="font-extrabold uppercase bg-emerald-100 px-1 rounded">PENDENTE</strong> e suas evidências zeradas para recebimento de novos envios técnicos do almoxarife.
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
@@ -705,7 +705,7 @@ export default function AdminPanel({
                   ) : (
                     <div className="p-3 bg-emerald-50 border border-emerald-150 text-emerald-800 rounded-lg font-bold text-xs flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-[18px]">verified</span>
-                      Todos os 14 almoxarifados estão 100% avaliados! Pronto para fechamento seguro.
+                      Todos os {branchesCount} almoxarifados estão 100% avaliados! Pronto para fechamento seguro.
                     </div>
                   )}
 

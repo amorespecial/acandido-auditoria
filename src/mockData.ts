@@ -124,19 +124,6 @@ export const initialBranches: Branch[] = [
     semestralScore: 0,
     criteria: getCriteriaForBranch(0)
   },
-  {
-    id: "rodoviario-jaboatao",
-    name: "RODOVIÁRIO JABOATÃO",
-    location: "Jaboatão, Pernambuco",
-    currentScore: 0,
-    meta: 100,
-    status: "PENDENTE",
-    scoreCategory: "Abaixo da Meta",
-    ownerName: "Sérgio",
-    group: "A",
-    semestralScore: 0,
-    criteria: getCriteriaForBranch(0)
-  },
 
   // --- GRUPO B ---
   {
@@ -192,35 +179,9 @@ export const initialBranches: Branch[] = [
     criteria: getCriteriaForBranch(0)
   },
   {
-    id: "rodoviario-cabedelo",
-    name: "RODOVIÁRIO CABEDELO",
-    location: "Cabedelo, Paraíba",
-    currentScore: 0,
-    meta: 100,
-    status: "PENDENTE",
-    scoreCategory: "Abaixo da Meta",
-    ownerName: "Matheus",
-    group: "B",
-    semestralScore: 0,
-    criteria: getCriteriaForBranch(0)
-  },
-  {
     id: "fretamento-maracanau",
     name: "FRETAMENTO MARACANAU",
     location: "Maracanaú, Ceará",
-    currentScore: 0,
-    meta: 100,
-    status: "PENDENTE",
-    scoreCategory: "Abaixo da Meta",
-    ownerName: "Arline",
-    group: "B",
-    semestralScore: 0,
-    criteria: getCriteriaForBranch(0)
-  },
-  {
-    id: "rodoviario-fortaleza",
-    name: "RODOVIÁRIO FORTALEZA",
-    location: "Fortaleza, Ceará",
     currentScore: 0,
     meta: 100,
     status: "PENDENTE",
