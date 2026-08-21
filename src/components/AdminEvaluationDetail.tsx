@@ -215,54 +215,8 @@ export default function AdminEvaluationDetail({
     loadConfig();
   }, [branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
 
-  // Synchronize the currently selected criterion with reactive props changes (Supabase Realtime)
-  useEffect(() => {
-    if (!selectedCriterion) return;
-    const latestMatched = branch.criteria.find(c => c.id === selectedCriterion.id);
-    if (latestMatched) {
-      setSelectedCriterion(latestMatched);
-      setStatusInput(latestMatched.status);
-      setPtsInput(latestMatched.pointsObtained);
-      setNotesInput(latestMatched.notes || latestMatched.evidenceNotes || "");
-      const sanitizeWebUrl = (url: any): string => {
-        if (typeof url !== "string") return "";
-        const trimmed = url.trim();
-        if (trimmed.startsWith("data:") || trimmed.startsWith("data:image")) return "";
-        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-          return trimmed;
-        }
-        return "";
-      };
-
-      const rawLinks = latestMatched.nokEvidenceLinks || (latestMatched.nokEvidenceLink ? [latestMatched.nokEvidenceLink] : []);
-      const nokLinks = rawLinks.map(sanitizeWebUrl).filter(Boolean);
-      const cleanSingleLink = sanitizeWebUrl(latestMatched.nokEvidenceLink);
-      setNokEvidenceLinkInput(cleanSingleLink || nokLinks[0] || "");
-      setNokLink1Input(nokLinks[0] || "");
-      setNokLink2Input(nokLinks[1] || "");
-      setNokLink3Input(nokLinks[2] || "");
-      setNokLink4Input(nokLinks[3] || "");
-      setNokEvidenceDescriptionInput(latestMatched.nokEvidenceDescription || (latestMatched.status === "NOK" ? latestMatched.notes : "") || "");
-    }
-  }, [branch.criteria]);
-
-  // Synchronize auditorCerts to Supabase in real-time!
-  React.useEffect(() => {
-    if (!auditorCerts || auditorCerts.length === 0 || !branch?.id || !isSupabaseReady()) return;
-    try {
-      auditorCerts.forEach((c) => {
-        dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
-          status: c.status,
-          fileName: c.fileName || null,
-          fileType: c.fileType || null,
-          fileData: c.fileData || null,
-          uploadedAt: c.uploadedAt || new Date().toISOString()
-        }).catch((err) => console.error("Error saving auditor certificate from effect:", err));
-      });
-    } catch (e) {
-      console.error("Error in auditorCerts sync effect:", e);
-    }
-  }, [auditorCerts, branch?.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear]);
+  // Note: Local evaluation state is initialized when opening modal in handleOpenEvaluate
+  // and preserved during editing without being overwritten by background updates.
 
   React.useEffect(() => {
     const handleRealtime = async () => {
@@ -959,7 +913,7 @@ export default function AdminEvaluationDetail({
     if (selectedCriterion) {
       if (status === "OK") {
         setPtsInput(selectedCriterion.pointsPossible);
-      } else if (status === "NOK") {
+      } else {
         setPtsInput(0);
       }
     }
@@ -1175,12 +1129,10 @@ export default function AdminEvaluationDetail({
               );
             } catch (err) {
               console.error("Error updating certificates to approved in Supabase:", err);
-              throw new Error("Erro ao salvar os certificados no Supabase: " + (err instanceof Error ? err.message : String(err)));
             }
           }
         } else {
-          const hasAnyNokCollab = auditorCerts.some(c => c.status === "Aguardando envio");
-          enforcedStatus = hasAnyNokCollab ? "NOK" : statusInput;
+          enforcedStatus = statusInput;
         }
       }
 
@@ -2638,19 +2590,32 @@ export default function AdminEvaluationDetail({
                             <button
                               type="button"
                               onClick={() => {
+                                const isSent = c.status === "Certificado enviado";
+                                const newStatus = isSent ? ("Aguardando envio" as const) : ("Certificado enviado" as const);
+                                const newUploadedAt = isSent ? undefined : new Date().toLocaleDateString("pt-BR");
+
                                 const updated = auditorCerts.map(item => {
                                   if (item.id === c.id) {
-                                    const isSent = item.status === "Certificado enviado";
                                     return {
                                       ...item,
-                                      status: isSent ? "Aguardando envio" as const : "Certificado enviado" as const,
-                                      uploadedAt: isSent ? undefined : new Date().toLocaleDateString("pt-BR")
+                                      status: newStatus,
+                                      uploadedAt: newUploadedAt
                                     };
                                   }
                                   return item;
                                 });
                                 setAuditorCerts(updated);
                                 localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
+
+                                if (isSupabaseReady()) {
+                                  dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+                                    status: newStatus,
+                                    fileName: c.fileName || null,
+                                    fileType: c.fileType || null,
+                                    fileData: c.fileData || null,
+                                    uploadedAt: newUploadedAt || new Date().toISOString()
+                                  }).catch((err) => console.error("Error updating certificate status:", err));
+                                }
                               }}
                               className={`py-1 px-2 rounded text-[9px] font-black border transition-all active:scale-95 flex items-center gap-0.5 uppercase tracking-wider ${
                                 c.status === "Certificado enviado"
@@ -2701,6 +2666,16 @@ export default function AdminEvaluationDetail({
                                     });
                                     setAuditorCerts(updated);
                                     localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
+
+                                    if (isSupabaseReady()) {
+                                      dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+                                        status: "Aguardando envio",
+                                        fileName: null,
+                                        fileType: null,
+                                        fileData: null,
+                                        uploadedAt: null
+                                      }).catch((err) => console.error("Error removing certificate in Supabase:", err));
+                                    }
                                   }}
                                   className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                                 >
@@ -2746,12 +2721,13 @@ export default function AdminEvaluationDetail({
                                           });
                                         }
 
+                                        const uploadDate = new Date().toLocaleDateString("pt-BR");
                                         const updated = auditorCerts.map((item) => {
                                           if (item.id === c.id) {
                                             return {
                                               ...item,
                                               status: "Certificado enviado" as const,
-                                              uploadedAt: new Date().toLocaleDateString("pt-BR"),
+                                              uploadedAt: uploadDate,
                                               fileName: finalFileName,
                                               fileSize: file.size,
                                               fileType: finalType,
@@ -2762,6 +2738,16 @@ export default function AdminEvaluationDetail({
                                         });
                                         setAuditorCerts(updated);
                                         localStorage.setItem(`acandido_certificates_${branch.id}_${cycleStateParsed.activeMonth}_${cycleStateParsed.activeYear}`, JSON.stringify(updated));
+
+                                        if (isSupabaseReady()) {
+                                          dbSalvarCertificado(branch.id, cycleStateParsed.activeMonth, cycleStateParsed.activeYear, c.name, {
+                                            status: "Certificado enviado",
+                                            fileName: finalFileName,
+                                            fileType: finalType,
+                                            fileData: base64,
+                                            uploadedAt: new Date().toISOString()
+                                          }).catch((err) => console.error("Error uploading certificate to Supabase:", err));
+                                        }
                                       } catch (err) {
                                         console.error("Erro ao processar certificado:", err);
                                       }
@@ -2867,11 +2853,11 @@ export default function AdminEvaluationDetail({
                     {(["OK", "PENDENTE", "NOK"] as const).map((status) => {
                       let activeClass = "";
                       if (statusInput === status) {
-                        if (status === "OK") activeClass = "bg-emerald-500 text-white border-emerald-500";
-                        if (status === "PENDENTE") activeClass = "bg-amber-500 text-white border-amber-500";
-                        if (status === "NOK") activeClass = "bg-red-500 text-white border-red-500";
+                        if (status === "OK") activeClass = "bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-300 ring-offset-1";
+                        if (status === "PENDENTE") activeClass = "bg-amber-500 text-white border-amber-500 shadow-sm ring-2 ring-amber-300 ring-offset-1";
+                        if (status === "NOK") activeClass = "bg-red-600 text-white border-red-600 shadow-sm ring-2 ring-red-300 ring-offset-1";
                       } else {
-                        activeClass = "bg-white text-slate-650 hover:bg-slate-50 border-slate-200";
+                        activeClass = "bg-white text-slate-700 hover:bg-slate-50 border-slate-200";
                       }
 
                       return (
@@ -2879,7 +2865,7 @@ export default function AdminEvaluationDetail({
                           key={status}
                           type="button"
                           onClick={() => handleStatusChange(status)}
-                          className={`py-3 rounded-lg border text-xs font-black transition-all ${activeClass}`}
+                          className={`py-3 rounded-lg border text-xs font-black transition-all cursor-pointer ${activeClass}`}
                         >
                           {status}
                         </button>
@@ -2919,8 +2905,8 @@ export default function AdminEvaluationDetail({
                 </div>
               )}
 
-              {/* NOK Evidence Block with Links Only */}
-              {(statusInput === "NOK" || (selectedCriterion?.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio"))) && (
+              {/* NOK Evidence Block with Links Only - Only shown when statusInput is NOK */}
+              {statusInput === "NOK" && (
                 <div className="p-4 border border-[#F7C1C1] bg-[#FCEBEB] rounded-xl space-y-4 shadow-2xs animate-fade-in duration-300">
                   <div className="flex items-center gap-1.5 text-red-900 font-extrabold text-xs">
                     <span className="material-symbols-outlined text-[16px] text-red-700">warning</span>
@@ -3076,8 +3062,7 @@ export default function AdminEvaluationDetail({
               </button>
               {(() => {
                 const isInventario = selectedCriterion?.id === "1";
-                const hasAnyNokCollab = selectedCriterion?.id === "6" && auditorCerts.some(c => c.status === "Aguardando envio");
-                const isNok = !isInventario && (statusInput === "NOK" || hasAnyNokCollab);
+                const isNok = !isInventario && statusInput === "NOK";
                 const isNokLinkValid = nokLink1Input.trim().toLowerCase().startsWith("https://");
 
                 const handleSaveClick = () => {
